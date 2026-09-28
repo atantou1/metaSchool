@@ -21,8 +21,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="el" className={`${manrope.variable} antialiased`}>
-      <body className="min-h-screen bg-zinc-50/50 text-zinc-900 font-sans selection:bg-zinc-200 selection:text-zinc-900">
+    <html lang="el" className={`${manrope.variable} antialiased`} suppressHydrationWarning>
+      <body
+        className="min-h-screen bg-zinc-50/50 text-zinc-900 font-sans selection:bg-zinc-200 selection:text-zinc-900"
+        suppressHydrationWarning
+      >
         <TooltipProvider>
           {children}
           <Toaster richColors position="top-right" theme="light" />

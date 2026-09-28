@@ -91,14 +91,21 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Είστε σίγουροι ότι θέλετε να διαγράψετε το μάθημα;")) return;
+  const [subjectToDelete, setSubjectToDelete] = useState<Subject | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const confirmDelete = async () => {
+    if (!subjectToDelete) return;
+    setIsDeleting(true);
     try {
-      await fetch(`/api/subjects?id=${id}`, { method: "DELETE" });
-      toast.info("Το μάθημα διαγράφηκε.");
+      await fetch(`/api/subjects?id=${subjectToDelete.id}`, { method: "DELETE" });
+      toast.info(`Το μάθημα «${subjectToDelete.title}» διαγράφηκε.`);
+      setSubjectToDelete(null);
       onRefresh();
     } catch (err: any) {
       toast.error(err.message);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -152,8 +159,9 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={() => handleDelete(subj.id)}
+                onClick={() => setSubjectToDelete(subj)}
                 className="h-7 w-7 p-0 text-zinc-400 hover:text-red-600"
+                title="Διαγραφή μαθήματος"
               >
                 <Trash2 className="w-3 h-3" />
               </Button>
@@ -223,6 +231,59 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
               className="bg-zinc-900 hover:bg-zinc-800 text-white font-semibold"
             >
               Αποθήκευση
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Subject Dialog */}
+      <Dialog
+        open={Boolean(subjectToDelete)}
+        onOpenChange={(open) => {
+          if (!open && !isDeleting) setSubjectToDelete(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-[420px] p-0 overflow-hidden border-zinc-200 z-[60]">
+          <div className="p-6 pb-4">
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-full bg-red-100/80 flex items-center justify-center shrink-0 text-red-600">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div className="flex-1">
+                <DialogTitle className="text-base font-bold text-zinc-900">
+                  Διαγραφή Μαθήματος
+                </DialogTitle>
+                <p className="mt-1.5 text-xs text-zinc-600 leading-relaxed">
+                  Είστε βέβαιοι ότι θέλετε να διαγράψετε το μάθημα{" "}
+                  <span className="font-semibold text-zinc-900">
+                    «{subjectToDelete?.title}» ({subjectToDelete?.code})
+                  </span>
+                  ;
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="bg-zinc-50 px-6 py-3 border-t border-zinc-100 flex items-center justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={isDeleting}
+              onClick={() => setSubjectToDelete(null)}
+              className="h-8 text-xs font-medium"
+            >
+              Ακύρωση
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              disabled={isDeleting}
+              onClick={confirmDelete}
+              className="h-8 text-xs bg-red-600 hover:bg-red-700 text-white font-medium gap-1.5 shadow-xs"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>{isDeleting ? "Διαγραφή..." : "Οριστική Διαγραφή"}</span>
             </Button>
           </DialogFooter>
         </DialogContent>
