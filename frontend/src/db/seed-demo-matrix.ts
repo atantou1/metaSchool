@@ -14,17 +14,17 @@ export const DEMO_CLASSES = [
 ];
 
 export const DEMO_TEACHERS = [
-  { id: "tch-pap", lastName: "Παπαδάκης", firstName: "Εμμανουήλ", specialty: "ΠΕ70 - Δάσκαλος", isSupport: false, color: "#fef08a" },
-  { id: "tch-nik", lastName: "Νικολάου", firstName: "Νικόλαος", specialty: "ΠΕ70 - Δάσκαλος", isSupport: false, color: "#fed7aa" },
-  { id: "tch-dhm", lastName: "Δημητρίου", firstName: "Δημήτριος", specialty: "ΠΕ70 - Δάσκαλος", isSupport: false, color: "#bae6fd" },
-  { id: "tch-kar", lastName: "Καραγιάννη", firstName: "Μαρία", specialty: "ΠΕ70 - Δασκάλα", isSupport: false, color: "#a7f3d0" },
-  { id: "tch-spy", lastName: "Σπυρόπουλος", firstName: "Σπυρίδων", specialty: "ΠΕ86 - Πληροφορική", isSupport: false, color: "#ddd6fe" },
-  { id: "tch-mix", lastName: "Μιχαηλίδης", firstName: "Μιχαήλ", specialty: "ΠΕ11 - Φυσική Αγωγή", isSupport: false, color: "#fecdd3" },
-  { id: "tch-kwn", lastName: "Κωνσταντίνου", firstName: "Κωνσταντίνος", specialty: "ΠΕ06 - Αγγλικά", isSupport: false, color: "#99f6e4" },
-  { id: "tch-ale", lastName: "Αλεξίου", firstName: "Αλέξανδρος", specialty: "ΠΕ08 - Εικαστικά", isSupport: false, color: "#d9f99d" },
-  { id: "tch-zer", lastName: "Ζέρβας", firstName: "Ζήσης", specialty: "ΠΕ79 - Μουσική", isSupport: false, color: "#c7d2fe" },
-  { id: "tch-vas", lastName: "Βασιλείου", firstName: "Βασιλική", specialty: "ΠΕ91 - Θεατρική Αγωγή", isSupport: false, color: "#fbcfe8" },
-  { id: "tch-swt", lastName: "Σωτηρίου", firstName: "Σωτήριος", specialty: "ΠΕ71 - Ειδική Αγωγή / Παράλληλη", isSupport: true, color: "#f3e8ff" },
+  { id: "tch-pap", lastName: "Παπαδάκης", firstName: "Εμμανουήλ", shortName: "ΠΑΠ", specialty: "ΠΕ70 - Δάσκαλος", isSupport: false, isTeaching: true, isOnCall: false, isMorning: true, isAllDay: false, isActive: true, maxWeeklyHours: 24, color: "#fef08a" },
+  { id: "tch-nik", lastName: "Νικολάου", firstName: "Νικόλαος", shortName: "ΝΙΚ", specialty: "ΠΕ70 - Δάσκαλος", isSupport: false, isTeaching: true, isOnCall: false, isMorning: true, isAllDay: false, isActive: true, maxWeeklyHours: 24, color: "#fed7aa" },
+  { id: "tch-dhm", lastName: "Δημητρίου", firstName: "Δημήτριος", shortName: "ΔΗΜ", specialty: "ΠΕ70 - Δάσκαλος", isSupport: false, isTeaching: true, isOnCall: false, isMorning: true, isAllDay: true, isActive: true, maxWeeklyHours: 24, color: "#bae6fd" },
+  { id: "tch-kar", lastName: "Καραγιάννη", firstName: "Μαρία", shortName: "ΚΑΡ", specialty: "ΠΕ70 - Δασκάλα", isSupport: false, isTeaching: true, isOnCall: true, isMorning: true, isAllDay: true, isActive: true, maxWeeklyHours: 24, color: "#a7f3d0" },
+  { id: "tch-spy", lastName: "Σπυρόπουλος", firstName: "Σπυρίδων", shortName: "ΣΠΥ", specialty: "ΠΕ86 - Πληροφορική", isSupport: false, isTeaching: true, isOnCall: false, isMorning: true, isAllDay: false, isActive: true, maxWeeklyHours: 20, color: "#ddd6fe" },
+  { id: "tch-mix", lastName: "Μιχαηλίδης", firstName: "Μιχαήλ", shortName: "ΜΙΧ", specialty: "ΠΕ11 - Φυσική Αγωγή", isSupport: false, isTeaching: true, isOnCall: false, isMorning: true, isAllDay: false, isActive: true, maxWeeklyHours: 20, color: "#fecdd3" },
+  { id: "tch-kwn", lastName: "Κωνσταντίνου", firstName: "Κωνσταντίνος", shortName: "ΚΩΝ", specialty: "ΠΕ06 - Αγγλικά", isSupport: false, isTeaching: true, isOnCall: false, isMorning: true, isAllDay: false, isActive: true, maxWeeklyHours: 20, color: "#99f6e4" },
+  { id: "tch-ale", lastName: "Αλεξίου", firstName: "Αλέξανδρος", shortName: "ΑΛΕ", specialty: "ΠΕ08 - Εικαστικά", isSupport: false, isTeaching: true, isOnCall: false, isMorning: true, isAllDay: false, isActive: true, maxWeeklyHours: 16, color: "#d9f99d" },
+  { id: "tch-zer", lastName: "Ζέρβας", firstName: "Ζήσης", shortName: "ΖΕΡ", specialty: "ΠΕ79 - Μουσική", isSupport: false, isTeaching: true, isOnCall: false, isMorning: true, isAllDay: false, isActive: true, maxWeeklyHours: 16, color: "#c7d2fe" },
+  { id: "tch-vas", lastName: "Βασιλείου", firstName: "Βασιλική", shortName: "ΒΑΣ", specialty: "ΠΕ91 - Θεατρική Αγωγή", isSupport: false, isTeaching: true, isOnCall: false, isMorning: true, isAllDay: false, isActive: true, maxWeeklyHours: 16, color: "#fbcfe8" },
+  { id: "tch-swt", lastName: "Σωτηρίου", firstName: "Σωτήριος", shortName: "ΣΩΤ", specialty: "ΠΕ71 - Ειδική Αγωγή / Παράλληλη", isSupport: true, isTeaching: true, isOnCall: false, isMorning: true, isAllDay: false, isActive: true, maxWeeklyHours: 25, color: "#f3e8ff" },
 ];
 
 export interface RawMatrixSlot {

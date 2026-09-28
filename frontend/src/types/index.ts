@@ -1,5 +1,6 @@
 export interface TeacherConstraints {
   availability?: Record<string, boolean[]>; // "0" -> [true, true, ...]
+  availableDays?: number[]; // [0, 1, 2, 3, 4] where 0=Monday, 4=Friday
   maxHoursPerDay?: number | null;
   minHoursPerDay?: number | null;
   maxConsecutiveHours?: number | null;
@@ -13,6 +14,13 @@ export interface Teacher {
   firstName: string;
   lastName: string;
   specialty: string;
+  shortName?: string | null;
+  isTeaching?: boolean;
+  isOnCall?: boolean;
+  isMorning?: boolean;
+  isAllDay?: boolean;
+  isActive?: boolean;
+  maxWeeklyHours?: number;
   isSupport: boolean;
   color: string;
   constraints?: TeacherConstraints | null;

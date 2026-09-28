@@ -43,6 +43,11 @@ export async function GET() {
         teachers: allTeachers.map((t) => ({
           ...t,
           isSupport: Boolean(t.isSupport),
+          isTeaching: Boolean(t.isTeaching),
+          isOnCall: Boolean(t.isOnCall),
+          isMorning: Boolean(t.isMorning),
+          isAllDay: Boolean(t.isAllDay),
+          isActive: Boolean(t.isActive),
           constraints: t.constraints ? JSON.parse(t.constraints) : null,
         })),
         subjects: allSubjects,

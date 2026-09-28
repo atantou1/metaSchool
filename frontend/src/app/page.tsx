@@ -333,7 +333,11 @@ export default function Home() {
       >
         <SheetContent
           side="right"
-          className="w-full sm:max-w-2xl lg:max-w-3xl overflow-y-auto p-6"
+          className={`overflow-y-auto p-6 ${
+            activeSheet === "teachers"
+              ? "!w-screen sm:!w-screen !max-w-none inset-0 rounded-none"
+              : "w-full sm:max-w-2xl lg:max-w-3xl"
+          }`}
         >
           <SheetHeader className="pb-4 border-b border-zinc-200">
             <SheetTitle className="text-base font-bold flex items-center gap-2">

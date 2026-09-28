@@ -7,6 +7,13 @@ export const teachers = sqliteTable("teachers", {
   lastName: text("last_name").notNull(),
   specialty: text("specialty").notNull(),
   isSupport: integer("is_support", { mode: "boolean" }).default(false).notNull(),
+  shortName: text("short_name"),
+  isTeaching: integer("is_teaching", { mode: "boolean" }).default(true).notNull(),
+  isOnCall: integer("is_on_call", { mode: "boolean" }).default(false).notNull(),
+  isMorning: integer("is_morning", { mode: "boolean" }).default(true).notNull(),
+  isAllDay: integer("is_all_day", { mode: "boolean" }).default(false).notNull(),
+  isActive: integer("is_active", { mode: "boolean" }).default(true).notNull(),
+  maxWeeklyHours: integer("max_weekly_hours").default(24).notNull(),
   color: text("color").default("#71717a").notNull(),
   constraints: text("constraints"), // JSON: availability, maxHoursPerDay, minHoursPerDay, maxConsecutiveHours, maxConsecutiveGaps, maxTotalGaps
   createdAt: text("created_at").$defaultFn(() => new Date().toISOString()).notNull(),
