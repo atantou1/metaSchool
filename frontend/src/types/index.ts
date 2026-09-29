@@ -37,6 +37,14 @@ export interface ClassEntity {
   id: string;
   name: string;
   grade: string;
+  color?: string;
+  shortName?: string | null;
+  studentsCount?: number;
+  headTeacherId?: string | null;
+  room?: string | null;
+  isAllDay?: boolean;
+  supportSpecialties?: string[]; // Array of specialty codes e.g. ["ΠΕ26", "ΠΕ29"]
+  weeklyHoursTarget?: number;
   supportHoursMin: number;
   supportHoursMax: number;
   orderIndex: number;
@@ -97,3 +105,6 @@ export interface TimetableData {
   slots: TimetableSlot[];
   schoolConfig: SchoolConfig | null;
 }
+
+export type { Specialty, SpecialtyType } from "@/lib/specialties";
+

@@ -6,9 +6,42 @@ import { eq } from "drizzle-orm";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { id, name, grade, supportHoursMin, supportHoursMax, orderIndex } = body;
+    const {
+      id,
+      name,
+      grade,
+      color,
+      shortName,
+      studentsCount,
+      headTeacherId,
+      room,
+      isAllDay,
+      supportSpecialties,
+      weeklyHoursTarget,
+      supportHoursMin,
+      supportHoursMax,
+      orderIndex,
+    } = body;
 
     const classId = id || `cls-${crypto.randomUUID().slice(0, 8)}`;
+
+    const classData = {
+      name: name.trim(),
+      grade: grade.trim(),
+      color: color || "#3b82f6",
+      shortName: shortName ? shortName.trim() : null,
+      studentsCount: studentsCount !== undefined && studentsCount !== "" ? Number(studentsCount) : 20,
+      headTeacherId: headTeacherId || null,
+      room: room ? room.trim() : null,
+      isAllDay: Boolean(isAllDay),
+      supportSpecialties: Array.isArray(supportSpecialties)
+        ? JSON.stringify(supportSpecialties)
+        : null,
+      weeklyHoursTarget: weeklyHoursTarget !== undefined && weeklyHoursTarget !== "" ? Number(weeklyHoursTarget) : 30,
+      supportHoursMin: Number(supportHoursMin) || 0,
+      supportHoursMax: Number(supportHoursMax) || 0,
+      orderIndex: Number(orderIndex) || 0,
+    };
 
     const existing = await db
       .select()
@@ -19,22 +52,12 @@ export async function POST(req: Request) {
     if (existing.length > 0) {
       await db
         .update(schema.classes)
-        .set({
-          name,
-          grade,
-          supportHoursMin: Number(supportHoursMin) || 0,
-          supportHoursMax: Number(supportHoursMax) || 0,
-          orderIndex: Number(orderIndex) || 0,
-        })
+        .set(classData)
         .where(eq(schema.classes.id, classId));
     } else {
       await db.insert(schema.classes).values({
         id: classId,
-        name,
-        grade,
-        supportHoursMin: Number(supportHoursMin) || 0,
-        supportHoursMax: Number(supportHoursMax) || 0,
-        orderIndex: Number(orderIndex) || 0,
+        ...classData,
       });
 
       // Automatically create the default "Ολομέλεια" SubGroup for the class!

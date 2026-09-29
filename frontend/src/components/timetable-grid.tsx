@@ -27,6 +27,7 @@ import {
   UserCheck,
 } from "lucide-react";
 import { toast } from "sonner";
+import { formatSpecialtyLabel } from "@/lib/specialties";
 
 interface TimetableGridProps {
   data: TimetableData;
@@ -210,7 +211,7 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
               <SelectContent className="bg-white border-zinc-200 text-zinc-800">
                 {data.teachers.map((tch) => (
                   <SelectItem key={tch.id} value={tch.id}>
-                    {tch.lastName} {tch.firstName} ({tch.specialty})
+                    {tch.lastName} {tch.firstName} ({formatSpecialtyLabel(tch.specialty)})
                   </SelectItem>
                 ))}
               </SelectContent>

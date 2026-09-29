@@ -19,7 +19,8 @@ import {
   ContextMenuSubContent,
   ContextMenuLabel,
 } from "@/components/ui/context-menu";
-import { getTeacherAbbr, getTeacherStyleClass } from "@/lib/teacher-utils";
+import { getTeacherAbbr, getTeacherStyleClass, getTeacherTileInlineStyle } from "@/lib/teacher-utils";
+import { formatSpecialtyLabel } from "@/lib/specialties";
 import {
   ArrowRightLeft,
   UserCheck,
@@ -161,7 +162,7 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const teacher = teacherMap.get(slot.teacherId);
     const teacherName = teacher
-      ? `${teacher.lastName} ${teacher.firstName} (${teacher.specialty})`
+      ? `${teacher.lastName} ${teacher.firstName} (${formatSpecialtyLabel(teacher.specialty)})`
       : "Χωρίς Ανάθεση";
 
     setFocusedTile({
@@ -373,6 +374,7 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
           <div
             onClick={(e) => handleTileClick(e, slot)}
             onMouseLeave={handleTileMouseLeave}
+            style={isUnassigned ? undefined : getTeacherTileInlineStyle(teacher)}
             className={`relative ${
               isSubTile ? "sub-tile" : "tile-single"
             } ${styleClass} ${
@@ -419,9 +421,8 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
                     className="gap-2 font-mono text-[11px]"
                   >
                     <span
-                      className={`px-1 py-0.2 rounded text-[10px] font-bold ${getTeacherStyleClass(
-                        getTeacherAbbr(t)
-                      )}`}
+                      className="px-1.5 py-0.2 rounded text-[10px] font-bold border"
+                      style={getTeacherTileInlineStyle(t)}
                     >
                       {getTeacherAbbr(t)}
                     </span>

@@ -1,16 +1,10 @@
 "use client";
 
-import React, { useState } from "react";
-import {
-  TimetableData,
-  ClassEntity,
-  SubGroup,
-  LessonAssignment,
-} from "@/types";
+import React, { useState, useMemo, useEffect, useRef } from "react";
+import { TimetableData, ClassEntity, Teacher } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -23,591 +17,1008 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
   Plus,
   Trash2,
-  Users,
-  BookOpen,
-  Sparkles,
-  Link2,
+  Edit2,
+  Copy,
+  Check,
+  X,
+  Search,
+  Filter,
   GraduationCap,
+  Users,
+  AlertTriangle,
+  Loader2,
+  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
+import { normalizeGreekUpper } from "./teachers-manager";
+import {
+  getSupportSpecialties,
+  getSpecialtyByCode,
+  findSpecialty,
+} from "@/lib/specialties";
 
 interface ClassesManagerProps {
   data: TimetableData;
   onRefresh: () => void;
 }
 
+const CLASS_PALETTE = [
+  "#3b82f6", "#10b981", "#6366f1", "#ec4899", "#f59e0b",
+  "#8b5cf6", "#14b8a6", "#f97316", "#0284c7", "#059669",
+  "#d97706", "#dc2626", "#71717a",
+];
+
+export const SUPPORT_SPECIALTIES_LIST = getSupportSpecialties("primary").map((s) => ({
+  code: s.code,
+  short: s.shortCode || s.code,
+  name: s.name,
+  color: s.color || "bg-zinc-100 text-zinc-800 border-zinc-300",
+}));
+
+const GRADES_LIST = ["Α", "Β", "Γ", "Δ", "Ε", "ΣΤ", "Ολοήμερο", "Ειδικό"];
+
+interface InlineClassEditState {
+  id?: string;
+  name: string;
+  shortName: string;
+  grade: string;
+  color: string;
+  studentsCount: number | "";
+  headTeacherId: string;
+  room: string;
+  isAllDay: boolean;
+  supportSpecialties: string[];
+  weeklyHoursTarget: number | "";
+}
+
 export const ClassesManager: React.FC<ClassesManagerProps> = ({
   data,
   onRefresh,
 }) => {
-  const [selectedClassId, setSelectedClassId] = useState<string>(
-    data.classes[0]?.id || ""
-  );
+  const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
 
-  // Assignment Modal
-  const [isAddAsgOpen, setIsAddAsgOpen] = useState(false);
-  const [asgTeacherId, setAsgTeacherId] = useState("");
-  const [asgSubjectId, setAsgSubjectId] = useState("");
-  const [asgSubGroupId, setAsgSubGroupId] = useState("");
-  const [asgHours, setAsgHours] = useState(2);
-  const [asgConcurrentId, setAsgConcurrentId] = useState("");
+  // Search & Filters
+  const [searchQuery, setSearchQuery] = useState("");
+  const [gradeFilter, setGradeFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
 
-  // Subgroup Modal
-  const [isAddSgOpen, setIsAddSgOpen] = useState(false);
-  const [sgName, setSgName] = useState("");
+  // Inline row edit state ("__new__" for new draft row, or existing class.id)
+  const [editingRowId, setEditingRowId] = useState<string | null>(null);
+  const [inlineData, setInlineData] = useState<InlineClassEditState | null>(null);
+  const [isSavingInline, setIsSavingInline] = useState(false);
 
-  // Edit Support Hours
-  const [supportMin, setSupportMin] = useState(0);
-  const [supportMax, setSupportMax] = useState(0);
+  // Delete modal state
+  const [classToDelete, setClassToDelete] = useState<ClassEntity | null>(null);
+  const [isDeletingClass, setIsDeletingClass] = useState(false);
 
-  const selectedClass = data.classes.find((c) => c.id === selectedClassId);
+  // Ref to focus on first input (name)
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
-  // Sync state when selected class changes
-  React.useEffect(() => {
-    if (selectedClass) {
-      setSupportMin(selectedClass.supportHoursMin);
-      setSupportMax(selectedClass.supportHoursMax);
+  // Map subGroups to classId
+  const subGroupToClassMap = useMemo(() => {
+    const map = new Map<string, string>();
+    data.subGroups.forEach((sg) => {
+      map.set(sg.id, sg.classId);
+    });
+    return map;
+  }, [data.subGroups]);
+
+  // Calculate assigned hours per class
+  const classHoursMap = useMemo(() => {
+    const map = new Map<string, number>();
+    data.assignments.forEach((asg) => {
+      const clsId = subGroupToClassMap.get(asg.subGroupId);
+      if (clsId) {
+        map.set(clsId, (map.get(clsId) || 0) + (asg.hours || 0));
+      }
+    });
+    return map;
+  }, [data.assignments, subGroupToClassMap]);
+
+  // Calculate assignments count per class
+  const classAssignmentsCountMap = useMemo(() => {
+    const map = new Map<string, number>();
+    data.assignments.forEach((asg) => {
+      const clsId = subGroupToClassMap.get(asg.subGroupId);
+      if (clsId) {
+        map.set(clsId, (map.get(clsId) || 0) + 1);
+      }
+    });
+    return map;
+  }, [data.assignments, subGroupToClassMap]);
+
+  // Teachers map for quick lookup
+  const teachersMap = useMemo(() => {
+    const map = new Map<string, Teacher>();
+    data.teachers.forEach((t) => map.set(t.id, t));
+    return map;
+  }, [data.teachers]);
+
+  // Filtered classes
+  const filteredClasses = useMemo(() => {
+    return data.classes.filter((cls) => {
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const name = (cls.name || "").toLowerCase();
+        const sName = (cls.shortName || "").toLowerCase();
+        const room = (cls.room || "").toLowerCase();
+        const headTch = cls.headTeacherId ? teachersMap.get(cls.headTeacherId) : null;
+        const tchName = headTch ? `${headTch.lastName} ${headTch.firstName}`.toLowerCase() : "";
+        if (
+          !name.includes(q) &&
+          !sName.includes(q) &&
+          !room.includes(q) &&
+          !tchName.includes(q)
+        ) {
+          return false;
+        }
+      }
+
+      if (gradeFilter !== "all" && cls.grade !== gradeFilter) {
+        return false;
+      }
+
+      if (typeFilter === "morning" && cls.isAllDay) return false;
+      if (typeFilter === "allDay" && !cls.isAllDay) return false;
+
+      return true;
+    });
+  }, [data.classes, searchQuery, gradeFilter, typeFilter, teachersMap]);
+
+  // Auto focus input when editingRowId changes
+  useEffect(() => {
+    if (editingRowId) {
+      setTimeout(() => {
+        nameInputRef.current?.focus();
+      }, 50);
     }
-  }, [selectedClass]);
+  }, [editingRowId]);
 
-  const classSubGroups = data.subGroups.filter(
-    (sg) => sg.classId === selectedClassId
-  );
-  const defaultSubGroup = classSubGroups.find((sg) => sg.isDefault);
+  // Start creating new class draft in row 1
+  const handleStartNew = () => {
+    const nextColor = CLASS_PALETTE[data.classes.length % CLASS_PALETTE.length];
+    setInlineData({
+      name: "",
+      shortName: "",
+      grade: "Α",
+      color: nextColor,
+      studentsCount: 20,
+      headTeacherId: "",
+      room: `Αίθουσα ${data.classes.length + 1}`,
+      isAllDay: false,
+      supportSpecialties: [],
+      weeklyHoursTarget: 30,
+    });
+    setEditingRowId("__new__");
+    setSelectedClassId(null);
+  };
 
-  const classAssignments = data.assignments.filter((asg) =>
-    classSubGroups.some((sg) => sg.id === asg.subGroupId)
-  );
+  // Start copying from selected class into row 1 draft
+  const handleStartCopy = () => {
+    const target = data.classes.find((c) => c.id === selectedTeacherOrClass);
+    if (!target) {
+      toast.warning("Επιλέξτε ένα τμήμα από τον πίνακα για αντιγραφή.");
+      return;
+    }
 
-  const coreHours = classAssignments
-    .filter((a) => {
-      const tch = data.teachers.find((t) => t.id === a.teacherId);
-      return tch && !tch.isSupport;
-    })
-    .reduce((sum, a) => sum + a.hours, 0);
+    setInlineData({
+      name: "",
+      shortName: "",
+      grade: target.grade,
+      color: target.color || "#3b82f6",
+      studentsCount: target.studentsCount || 20,
+      headTeacherId: target.headTeacherId || "",
+      room: target.room || "",
+      isAllDay: target.isAllDay || false,
+      supportSpecialties: target.supportSpecialties || [],
+      weeklyHoursTarget: target.weeklyHoursTarget || 30,
+    });
+    setEditingRowId("__new__");
+    setSelectedClassId(null);
+    toast.info(`Αντιγράφηκαν οι ρυθμίσεις του τμήματος «${target.name}». Πληκτρολογήστε το νέο όνομα.`);
+  };
 
-  // Save support hours changes
-  const handleSaveSupportHours = async () => {
-    if (!selectedClass) return;
+  const selectedTeacherOrClass = selectedClassId;
+
+  // Start editing existing class row
+  const startInlineEdit = (cls: ClassEntity) => {
+    setInlineData({
+      id: cls.id,
+      name: cls.name,
+      shortName: normalizeGreekUpper(cls.shortName || cls.name),
+      grade: cls.grade,
+      color: cls.color || "#3b82f6",
+      studentsCount: cls.studentsCount !== undefined ? cls.studentsCount : 20,
+      headTeacherId: cls.headTeacherId || "",
+      room: cls.room || "",
+      isAllDay: cls.isAllDay || false,
+      supportSpecialties: cls.supportSpecialties || [],
+      weeklyHoursTarget: cls.weeklyHoursTarget !== undefined ? cls.weeklyHoursTarget : 30,
+    });
+    setEditingRowId(cls.id);
+    setSelectedClassId(cls.id);
+  };
+
+  const cancelInlineEdit = () => {
+    setEditingRowId(null);
+    setInlineData(null);
+  };
+
+  // Save inline edit
+  const saveInlineEdit = async () => {
+    if (!inlineData) return;
+    if (!inlineData.name.trim()) {
+      toast.error("Συμπληρώστε το όνομα του τμήματος.");
+      return;
+    }
+
+    setIsSavingInline(true);
+    const finalShortName = normalizeGreekUpper(inlineData.shortName || inlineData.name.trim());
+
+    const payload = {
+      id: inlineData.id || undefined,
+      name: inlineData.name.trim(),
+      shortName: finalShortName,
+      grade: inlineData.grade.trim(),
+      color: inlineData.color,
+      studentsCount: inlineData.studentsCount === "" ? 20 : Number(inlineData.studentsCount),
+      headTeacherId: inlineData.headTeacherId || null,
+      room: inlineData.room.trim() || null,
+      isAllDay: inlineData.isAllDay,
+      supportSpecialties: inlineData.supportSpecialties,
+      weeklyHoursTarget: inlineData.weeklyHoursTarget === "" ? 30 : Number(inlineData.weeklyHoursTarget),
+    };
+
     try {
       const res = await fetch("/api/classes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...selectedClass,
-          supportHoursMin: Number(supportMin),
-          supportHoursMax: Number(supportMax),
-        }),
+        body: JSON.stringify(payload),
       });
 
-      if (res.ok) {
-        toast.success("Οι ώρες υποστήριξης ενημερώθηκαν!");
-        onRefresh();
-      }
-    } catch (err: any) {
-      toast.error(err.message);
-    }
-  };
+      if (!res.ok) throw new Error("Αποτυχία αποθήκευσης τμήματος");
 
-  // Add Assignment
-  const handleCreateAssignment = async () => {
-    if (!asgTeacherId || !asgSubjectId || !asgSubGroupId) {
-      toast.error("Συμπληρώστε όλα τα απαιτούμενα πεδία.");
-      return;
-    }
-
-    try {
-      const res = await fetch("/api/assignments", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          teacherId: asgTeacherId,
-          subjectId: asgSubjectId,
-          subGroupId: asgSubGroupId,
-          hours: Number(asgHours),
-          concurrentGroupId: asgConcurrentId.trim() || null,
-        }),
-      });
-
-      if (res.ok) {
-        toast.success("Η ανάθεση προστέθηκε!");
-        setIsAddAsgOpen(false);
-        setAsgConcurrentId("");
-        onRefresh();
-      }
-    } catch (err: any) {
-      toast.error(err.message);
-    }
-  };
-
-  // Delete Assignment
-  const handleDeleteAssignment = async (id: string) => {
-    try {
-      await fetch(`/api/assignments?id=${id}`, { method: "DELETE" });
-      toast.info("Η ανάθεση διαγράφηκε.");
+      toast.success(
+        inlineData.id
+          ? `Το τμήμα «${inlineData.name}» ενημερώθηκε επιτυχώς!`
+          : `Το νέο τμήμα «${inlineData.name}» δημιουργήθηκε επιτυχώς!`
+      );
+      setEditingRowId(null);
+      setInlineData(null);
       onRefresh();
     } catch (err: any) {
       toast.error(err.message);
+    } finally {
+      setIsSavingInline(false);
     }
   };
 
-  // Add Subgroup
-  const handleCreateSubGroup = async () => {
-    if (!sgName.trim() || !selectedClassId) return;
-    try {
-      const res = await fetch("/api/subgroups", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          classId: selectedClassId,
-          name: sgName.trim(),
-          isDefault: false,
-        }),
-      });
+  // Keyboard shortcut: Enter to save, Escape to cancel (Capture Phase to avoid closing Sheet)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!editingRowId) return;
 
-      if (res.ok) {
-        toast.success("Η υπο-ομάδα δημιουργήθηκε!");
-        setIsAddSgOpen(false);
-        setSgName("");
-        onRefresh();
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        cancelInlineEdit();
+      } else if (e.key === "Enter" && !e.shiftKey) {
+        const target = e.target as HTMLElement;
+        if (
+          target.tagName === "INPUT" ||
+          target.tagName === "SELECT" ||
+          target.closest("tr")
+        ) {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          saveInlineEdit();
+        }
       }
-    } catch (err: any) {
-      toast.error(err.message);
-    }
-  };
+    };
 
-  // Delete Subgroup
-  const handleDeleteSubGroup = async (id: string) => {
-    try {
-      const res = await fetch(`/api/subgroups?id=${id}`, { method: "DELETE" });
-      const resData = await res.json();
-      if (!res.ok || !resData.success) {
-        toast.error(resData.error || "Αδύνατη η διαγραφή.");
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
+  }, [editingRowId, inlineData]);
+
+  // Toggle supportive specialty for inline edit
+  const toggleInlineSpecialty = (code: string) => {
+    if (!inlineData) return;
+    setInlineData((prev) => {
+      if (!prev) return prev;
+      const list = prev.supportSpecialties;
+      if (list.includes(code)) {
+        return { ...prev, supportSpecialties: list.filter((c) => c !== code) };
       } else {
-        toast.info("Η υπο-ομάδα διαγράφηκε.");
-        onRefresh();
+        return { ...prev, supportSpecialties: [...list, code] };
       }
+    });
+  };
+
+  // Prompt delete modal
+  const promptDeleteClass = () => {
+    const target = data.classes.find((c) => c.id === selectedClassId);
+    if (!target) {
+      toast.warning("Επιλέξτε ένα τμήμα για διαγραφή.");
+      return;
+    }
+    setClassToDelete(target);
+  };
+
+  // Perform actual deletion
+  const confirmDeleteClass = async () => {
+    if (!classToDelete) return;
+    setIsDeletingClass(true);
+    try {
+      const res = await fetch(`/api/classes?id=${classToDelete.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Αποτυχία διαγραφής τμήματος");
+      toast.info(`Το τμήμα «${classToDelete.name}» διαγράφηκε.`);
+      if (selectedClassId === classToDelete.id) setSelectedClassId(null);
+      if (editingRowId === classToDelete.id) cancelInlineEdit();
+      setClassToDelete(null);
+      onRefresh();
     } catch (err: any) {
       toast.error(err.message);
+    } finally {
+      setIsDeletingClass(false);
     }
+  };
+
+  // Render an editable row (both for __new__ and existing class)
+  const renderEditRow = (isNewDraft: boolean) => {
+    if (!inlineData) return null;
+
+    return (
+      <tr
+        key={isNewDraft ? "__new__" : inlineData.id}
+        className={`${
+          isNewDraft
+            ? "bg-emerald-50/60 border-y-2 border-emerald-500 ring-2 ring-emerald-400/40"
+            : "bg-sky-50/70 border-y-2 border-sky-400 ring-2 ring-sky-400/50"
+        } transition-colors`}
+      >
+        {/* Color Picker */}
+        <td className="py-2 px-2 text-center">
+          <input
+            type="color"
+            value={inlineData.color}
+            onChange={(e) => setInlineData({ ...inlineData, color: e.target.value })}
+            className="w-5 h-5 rounded-full border border-black/20 cursor-pointer p-0 bg-transparent mx-auto"
+            title="Χρώμα τμήματος (για το ατομικό πρόγραμμα εκπαιδευτικού)"
+          />
+        </td>
+
+        {/* Name Input */}
+        <td className="py-1.5 px-2">
+          <Input
+            ref={nameInputRef}
+            value={inlineData.name}
+            onChange={(e) => {
+              const val = e.target.value;
+              const updated = { ...inlineData, name: val };
+              if (isNewDraft && (!inlineData.shortName || inlineData.shortName.length <= 3)) {
+                updated.shortName = normalizeGreekUpper(val);
+              }
+              setInlineData(updated);
+            }}
+            placeholder="π.χ. Α1 *"
+            className={`h-7 text-xs bg-white ${isNewDraft ? "border-emerald-400" : "border-sky-300"} font-semibold px-2 w-full`}
+          />
+        </td>
+
+        {/* Short Name */}
+        <td className="py-1.5 px-1.5 text-center">
+          <Input
+            value={inlineData.shortName}
+            onChange={(e) =>
+              setInlineData({
+                ...inlineData,
+                shortName: normalizeGreekUpper(e.target.value),
+              })
+            }
+            maxLength={4}
+            placeholder="ΣΥΝΤ"
+            className={`h-7 text-xs w-16 bg-white ${isNewDraft ? "border-emerald-400" : "border-sky-300"} font-mono font-bold text-center px-1 mx-auto`}
+          />
+        </td>
+
+        {/* Grade / Level Select */}
+        <td className="py-1.5 px-2">
+          <Select
+            value={inlineData.grade}
+            onValueChange={(val) => val && setInlineData({ ...inlineData, grade: val })}
+          >
+            <SelectTrigger
+              size="sm"
+              className={`h-7 text-xs bg-white ${
+                isNewDraft ? "border-emerald-400" : "border-sky-300"
+              } w-24 text-zinc-800 font-medium px-2 py-0 justify-between`}
+            >
+              <SelectValue placeholder="Τάξη" />
+            </SelectTrigger>
+            <SelectContent className="bg-white border-zinc-200 text-zinc-800 z-[70] max-h-56 min-w-[120px]">
+              {GRADES_LIST.map((g) => (
+                <SelectItem key={g} value={g} className="text-xs py-1.5 cursor-pointer">
+                  Τάξη {g}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </td>
+
+        {/* Students Count Input */}
+        <td className="py-1.5 px-1.5 text-center border-r border-zinc-200">
+          <Input
+            type="number"
+            min={1}
+            max={40}
+            value={inlineData.studentsCount}
+            onChange={(e) =>
+              setInlineData({
+                ...inlineData,
+                studentsCount: e.target.value === "" ? "" : Number(e.target.value),
+              })
+            }
+            className={`h-7 text-xs w-16 bg-white ${isNewDraft ? "border-emerald-400" : "border-sky-300"} font-mono text-center px-1 mx-auto`}
+          />
+        </td>
+
+        {/* Head Teacher Select */}
+        <td className="py-1.5 px-2">
+          <Select
+            value={inlineData.headTeacherId || "none"}
+            onValueChange={(val) =>
+              setInlineData({
+                ...inlineData,
+                headTeacherId: val === "none" ? "" : val || "",
+              })
+            }
+          >
+            <SelectTrigger
+              size="sm"
+              className={`h-7 text-xs bg-white ${
+                isNewDraft ? "border-emerald-400" : "border-sky-300"
+              } w-full text-zinc-800 font-medium px-2 py-0 justify-between min-w-[170px]`}
+            >
+              <SelectValue placeholder="Επιλέξτε Υπεύθυνο" />
+            </SelectTrigger>
+            <SelectContent className="bg-white border-zinc-200 text-zinc-800 z-[70] max-h-[360px] min-w-[240px]">
+              <SelectItem value="none" className="text-xs py-1.5 text-zinc-500">
+                — Χωρίς Ορισμό —
+              </SelectItem>
+              {data.teachers.map((t) => (
+                <SelectItem key={t.id} value={t.id} className="text-xs py-1.5 cursor-pointer">
+                  {t.lastName} {t.firstName} ({t.shortName || t.specialty})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </td>
+
+        {/* Program Type (Morning vs All-Day) */}
+        <td className="py-2 px-2 text-center">
+          <button
+            type="button"
+            onClick={() => setInlineData({ ...inlineData, isAllDay: !inlineData.isAllDay })}
+            className={`px-2.5 py-0.5 rounded text-[11px] font-semibold border transition-all ${
+              inlineData.isAllDay
+                ? "bg-indigo-100 border-indigo-300 text-indigo-800 shadow-2xs"
+                : "bg-amber-50 border-amber-300 text-amber-800"
+            }`}
+            title="Κλικ για αλλαγή (Πρωινό / Ολοήμερο Πρόγραμμα)"
+          >
+            {inlineData.isAllDay ? "Ολοήμερο" : "Πρωινό"}
+          </button>
+        </td>
+
+        {/* Room Input */}
+        <td className="py-1.5 px-2 border-r border-zinc-200">
+          <Input
+            value={inlineData.room}
+            onChange={(e) => setInlineData({ ...inlineData, room: e.target.value })}
+            placeholder="π.χ. Αίθουσα 1"
+            className={`h-7 text-xs bg-white ${isNewDraft ? "border-emerald-400" : "border-sky-300"} px-2 w-28`}
+          />
+        </td>
+
+        {/* Supportive Specialties Multi-toggle Chips */}
+        <td className="py-1.5 px-2 border-r border-zinc-200">
+          <div className="flex items-center gap-1 flex-wrap">
+            {SUPPORT_SPECIALTIES_LIST.map((spec) => {
+              const isActive = inlineData.supportSpecialties.includes(spec.code);
+              return (
+                <button
+                  key={spec.code}
+                  type="button"
+                  onClick={() => toggleInlineSpecialty(spec.code)}
+                  title={`${spec.name} (${spec.code}): Κλικ για ενεργοποίηση στο τμήμα`}
+                  className={`px-1.5 py-0.5 rounded text-[10px] font-bold border transition-all ${
+                    isActive
+                      ? `${spec.color} shadow-2xs scale-105 ring-1 ring-black/10`
+                      : "bg-white border-zinc-200 text-zinc-300 hover:border-zinc-400"
+                  }`}
+                >
+                  {spec.short}
+                </button>
+              );
+            })}
+          </div>
+        </td>
+
+        {/* Weekly Hours Target */}
+        <td className="py-1.5 px-2 text-center">
+          <Input
+            type="number"
+            min={1}
+            max={40}
+            value={inlineData.weeklyHoursTarget}
+            onChange={(e) =>
+              setInlineData({
+                ...inlineData,
+                weeklyHoursTarget: e.target.value === "" ? "" : Number(e.target.value),
+              })
+            }
+            className={`h-7 text-xs w-16 bg-white ${isNewDraft ? "border-emerald-400" : "border-sky-300"} font-mono font-bold text-center px-1 mx-auto`}
+          />
+        </td>
+
+        {/* Assigned Hours Display (Read-only during edit) */}
+        <td className="py-1.5 px-2 text-center text-zinc-400 font-mono text-xs">
+          —
+        </td>
+      </tr>
+    );
   };
 
   return (
-    <div className="space-y-6">
-      {/* Classes Bar */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-zinc-200">
-        {data.classes.map((cls) => {
-          const isSelected = cls.id === selectedClassId;
-          return (
-            <button
-              key={cls.id}
-              onClick={() => setSelectedClassId(cls.id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium transition-all flex-shrink-0 ${
-                isSelected
-                  ? "bg-zinc-900 text-white font-semibold shadow-xs"
-                  : "bg-white text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 border border-zinc-200 shadow-xs"
-              }`}
-            >
-              <GraduationCap className="w-3.5 h-3.5" />
-              <span>Τμήμα {cls.name}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      {selectedClass && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Column: Subgroups & Support Settings */}
-          <div className="space-y-6">
-            {/* Class Details Card */}
-            <div className="p-4 rounded-xl bg-white border border-zinc-200 shadow-xs space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-semibold text-zinc-900">
-                    Τμήμα {selectedClass.name}
-                  </h3>
-                  <p className="text-xs text-zinc-500">
-                    Τάξη {selectedClass.grade} • Βασικό 30ωρο
-                  </p>
-                </div>
-                <Badge
-                  variant="outline"
-                  className="font-mono text-xs border-zinc-200 bg-zinc-50 text-zinc-700"
-                >
-                  {coreHours} / 30 Ώρες
-                </Badge>
-              </div>
-
-              {/* Flexible Support Hours Settings */}
-              <div className="p-3.5 rounded-lg bg-zinc-50 border border-zinc-200 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 text-xs font-medium text-sky-800">
-                    <Sparkles className="w-3.5 h-3.5 text-sky-600" />
-                    <span>Ευέλικτες Ώρες Υποστήριξης</span>
-                  </div>
-                  <Badge className="text-[10px] bg-sky-100 text-sky-800 border-sky-200">
-                    Pull-out
-                  </Badge>
-                </div>
-                <p className="text-[11px] text-zinc-600">
-                  Καθορίστε το εύρος ωρών (π.χ. 2-4 ώρες) που δικαιούται το τμήμα για ειδικότητες όπως Λογοθεραπεία / Ψυχολόγος.
-                </p>
-
-                <div className="grid grid-cols-2 gap-3 pt-1">
-                  <div>
-                    <Label className="text-[11px] text-zinc-600">Ελάχιστες (Min)</Label>
-                    <Input
-                      type="number"
-                      min={0}
-                      max={10}
-                      value={supportMin}
-                      onChange={(e) => setSupportMin(Number(e.target.value))}
-                      className="h-8 text-xs bg-white border-zinc-200 text-zinc-900 mt-1 shadow-xs"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-[11px] text-zinc-600">Μέγιστες (Max)</Label>
-                    <Input
-                      type="number"
-                      min={0}
-                      max={10}
-                      value={supportMax}
-                      onChange={(e) => setSupportMax(Number(e.target.value))}
-                      className="h-8 text-xs bg-white border-zinc-200 text-zinc-900 mt-1 shadow-xs"
-                    />
-                  </div>
-                </div>
-
-                <Button
-                  size="sm"
-                  onClick={handleSaveSupportHours}
-                  className="w-full h-7 text-xs bg-zinc-900 hover:bg-zinc-800 text-white shadow-xs"
-                >
-                  Αποθήκευση Εύρους
-                </Button>
-              </div>
-            </div>
-
-            {/* Sub-groups Card */}
-            <div className="p-4 rounded-xl bg-white border border-zinc-200 shadow-xs space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Users className="w-4 h-4 text-zinc-500" />
-                  <h4 className="text-xs font-semibold text-zinc-800 uppercase tracking-wider">
-                    Υπο-ομάδες Τμήματος
-                  </h4>
-                </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setIsAddSgOpen(true)}
-                  className="h-7 text-xs border-zinc-200 text-zinc-700 hover:bg-zinc-50 shadow-xs"
-                >
-                  <Plus className="w-3 h-3 mr-1" />
-                  Νέα Ομάδα
-                </Button>
-              </div>
-
-              <div className="space-y-2">
-                {classSubGroups.map((sg) => (
-                  <div
-                    key={sg.id}
-                    className="flex items-center justify-between p-2.5 rounded-lg bg-zinc-50 border border-zinc-200 text-xs"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-zinc-800">{sg.name}</span>
-                      {sg.isDefault ? (
-                        <Badge variant="outline" className="text-[10px] border-zinc-200 bg-white text-zinc-600">
-                          Ολομέλεια (Προεπιλογή)
-                        </Badge>
-                      ) : (
-                        <Badge className="text-[10px] bg-amber-50 text-amber-800 border-amber-200 font-medium">
-                          Σπάσιμο (Split)
-                        </Badge>
-                      )}
-                    </div>
-
-                    {!sg.isDefault && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handleDeleteSubGroup(sg.id)}
-                        className="h-6 w-6 p-0 text-zinc-400 hover:text-red-600"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
+    <div className="flex flex-col h-[calc(100vh-6.5rem)] gap-3 p-1">
+      {/* Top Header Toolbar */}
+      <div className="bg-white border border-zinc-200 rounded-xl p-3 shadow-xs flex flex-wrap items-center justify-between gap-3 shrink-0">
+        {/* Left: Search & Filters */}
+        <div className="flex items-center flex-wrap gap-2 flex-1 min-w-[300px]">
+          <div className="relative w-64 max-w-full">
+            <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Αναζήτηση τμήματος, υπεύθυνου, αίθουσας..."
+              className="pl-8.5 pr-7 h-8.5 text-xs bg-zinc-50 border-zinc-200 focus-visible:ring-1"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
 
-          {/* Right Column: Lesson Assignments */}
-          <div className="lg:col-span-2 p-4 rounded-xl bg-white border border-zinc-200 shadow-xs space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <BookOpen className="w-4 h-4 text-zinc-500" />
-                <h4 className="text-xs font-semibold text-zinc-800 uppercase tracking-wider">
-                  Αναθέσεις Μαθημάτων Τμήματος
-                </h4>
-              </div>
+          <div className="flex items-center gap-1.5">
+            <Filter className="w-3.5 h-3.5 text-zinc-400" />
+            <Select value={gradeFilter} onValueChange={(val) => val && setGradeFilter(val)}>
+              <SelectTrigger size="sm" className="h-8.5 text-xs bg-zinc-50 border-zinc-200 text-zinc-700 min-w-[130px]">
+                <SelectValue placeholder="Τάξη" />
+              </SelectTrigger>
+              <SelectContent className="bg-white border-zinc-200 text-zinc-800 z-[70] max-h-60">
+                <SelectItem value="all" className="text-xs">Όλες οι τάξεις</SelectItem>
+                {GRADES_LIST.map((g) => (
+                  <SelectItem key={g} value={g} className="text-xs">
+                    Τάξη {g}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
+            <Select value={typeFilter} onValueChange={(val) => val && setTypeFilter(val)}>
+              <SelectTrigger size="sm" className="h-8.5 text-xs bg-zinc-50 border-zinc-200 text-zinc-700 min-w-[140px]">
+                <SelectValue placeholder="Πρόγραμμα" />
+              </SelectTrigger>
+              <SelectContent className="bg-white border-zinc-200 text-zinc-800 z-[70]">
+                <SelectItem value="all" className="text-xs">Όλα τα προγράμματα</SelectItem>
+                <SelectItem value="morning" className="text-xs">Μόνο Πρωινά</SelectItem>
+                <SelectItem value="allDay" className="text-xs">Μόνο Ολοήμερα</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <Badge variant="secondary" className="text-[11px] font-normal text-zinc-600 ml-1 py-1">
+            {filteredClasses.length} / {data.classes.length} τμήματα
+          </Badge>
+        </div>
+
+        {/* Right: Actions */}
+        <div className="flex items-center gap-2 shrink-0">
+          {editingRowId && inlineData ? (
+            /* Active Inline Editing Controls */
+            <div className="flex items-center gap-2 bg-emerald-50/80 border border-emerald-300 px-3 py-1.5 rounded-lg animate-in fade-in">
+              <span className="text-xs font-semibold text-emerald-950 flex items-center gap-1.5">
+                {editingRowId === "__new__" ? (
+                  <>
+                    <GraduationCap className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Νέο Τμήμα στη γραμμή</span>
+                  </>
+                ) : (
+                  <>
+                    <Edit2 className="w-3.5 h-3.5 text-sky-600" />
+                    <span>Επεξεργασία: {inlineData.name}</span>
+                  </>
+                )}
+              </span>
+              <div className="h-4 w-px bg-emerald-200 mx-1" />
               <Button
+                onClick={saveInlineEdit}
+                disabled={isSavingInline}
                 size="sm"
-                onClick={() => {
-                  setAsgSubGroupId(defaultSubGroup?.id || "");
-                  setIsAddAsgOpen(true);
-                }}
-                className="h-8 text-xs bg-zinc-900 hover:bg-zinc-800 text-white font-semibold shadow-xs"
+                className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-3 shadow-2xs gap-1"
+                title="Αποθήκευση αλλαγών (Enter)"
               >
-                <Plus className="w-3.5 h-3.5 mr-1.5" />
-                Νέα Ανάθεση
+                <Check className="w-3.5 h-3.5" />
+                Αποθήκευση
+              </Button>
+              <Button
+                onClick={cancelInlineEdit}
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs text-zinc-600 hover:text-zinc-900 px-2"
+                title="Ακύρωση (Esc)"
+              >
+                <X className="w-3.5 h-3.5 mr-1" />
+                Ακύρωση
               </Button>
             </div>
-
-            {/* Assignments Table */}
-            <div className="rounded-lg border border-zinc-200 overflow-hidden">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-zinc-50 border-b border-zinc-200 text-zinc-600 uppercase">
-                  <tr>
-                    <th className="p-3 font-semibold">Μάθημα</th>
-                    <th className="p-3 font-semibold">Εκπαιδευτικός</th>
-                    <th className="p-3 font-semibold">Ομάδα</th>
-                    <th className="p-3 font-semibold">Ώρες</th>
-                    <th className="p-3 font-semibold">Συγχρονισμός</th>
-                    <th className="p-3 font-semibold text-right">Ενέργεια</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-200">
-                  {classAssignments.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="p-6 text-center text-zinc-400">
-                        Δεν υπάρχουν ακόμη αναθέσεις για το τμήμα.
-                      </td>
-                    </tr>
-                  ) : (
-                    classAssignments.map((asg) => {
-                      const tch = data.teachers.find((t) => t.id === asg.teacherId);
-                      const subj = data.subjects.find((s) => s.id === asg.subjectId);
-                      const sg = classSubGroups.find((g) => g.id === asg.subGroupId);
-
-                      return (
-                        <tr key={asg.id} className="hover:bg-zinc-50/70 transition-colors">
-                          <td className="p-3 font-medium text-zinc-900">
-                            <div className="flex items-center gap-2">
-                              <span
-                                className="w-2.5 h-2.5 rounded-full"
-                                style={{ backgroundColor: subj?.color || "#71717a" }}
-                              />
-                              <span>{subj?.title || asg.subjectId}</span>
-                            </div>
-                          </td>
-                          <td className="p-3 text-zinc-700">
-                            {tch ? `${tch.lastName} ${tch.firstName}` : asg.teacherId}
-                            {tch?.isSupport && (
-                              <Badge className="ml-1.5 text-[9px] px-1.5 py-0 bg-sky-50 text-sky-800 border-sky-200">
-                                Support
-                              </Badge>
-                            )}
-                          </td>
-                          <td className="p-3 text-zinc-600">
-                            {sg?.isDefault ? (
-                              <span className="text-zinc-500">Ολομέλεια</span>
-                            ) : (
-                              <Badge className="text-[10px] bg-amber-50 text-amber-800 border-amber-200 font-medium">
-                                {sg?.name}
-                              </Badge>
-                            )}
-                          </td>
-                          <td className="p-3 font-mono font-semibold text-zinc-900">
-                            {asg.hours} ώρες
-                          </td>
-                          <td className="p-3">
-                            {asg.concurrentGroupId ? (
-                              <Badge className="text-[10px] bg-zinc-100 text-zinc-700 border-zinc-200 flex items-center gap-1 w-fit font-mono">
-                                <Link2 className="w-2.5 h-2.5" />
-                                {asg.concurrentGroupId}
-                              </Badge>
-                            ) : (
-                              <span className="text-zinc-400">—</span>
-                            )}
-                          </td>
-                          <td className="p-3 text-right">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => handleDeleteAssignment(asg.id)}
-                              className="h-7 w-7 p-0 text-zinc-400 hover:text-red-600"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </Button>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
+          ) : (
+            /* Standard Action Buttons */
+            <div className="flex items-center gap-1 bg-zinc-100/80 p-1 rounded-lg border border-zinc-200/80">
+              <Button
+                onClick={() => {
+                  const target = data.classes.find((c) => c.id === selectedClassId);
+                  if (target) startInlineEdit(target);
+                  else toast.warning("Επιλέξτε ένα τμήμα από τον πίνακα.");
+                }}
+                disabled={!selectedClassId}
+                variant="ghost"
+                size="sm"
+                className="h-7.5 text-xs px-2.5 text-zinc-700 hover:text-zinc-900 disabled:opacity-40"
+                title="Επεξεργασία στη γραμμή (ή διπλό κλικ)"
+              >
+                <Edit2 className="w-3.5 h-3.5 mr-1.5 text-zinc-600" />
+                Επεξεργασία
+              </Button>
+              <Button
+                onClick={handleStartCopy}
+                disabled={!selectedClassId}
+                variant="ghost"
+                size="sm"
+                className="h-7.5 text-xs px-2.5 text-zinc-700 hover:text-zinc-900 disabled:opacity-40"
+                title="Αντιγραφή ρυθμίσεων σε νέα γραμμή"
+              >
+                <Copy className="w-3.5 h-3.5 mr-1.5 text-zinc-600" />
+                Αντιγραφή
+              </Button>
+              <Button
+                onClick={promptDeleteClass}
+                disabled={!selectedClassId}
+                variant="ghost"
+                size="sm"
+                className="h-7.5 text-xs px-2.5 text-red-600 hover:bg-red-50 hover:text-red-700 disabled:opacity-40"
+                title="Διαγραφή επιλεγμένου τμήματος"
+              >
+                <Trash2 className="w-3.5 h-3.5 mr-1 text-red-500" />
+                Διαγραφή
+              </Button>
             </div>
-          </div>
+          )}
+
+          <div className="h-6 w-px bg-zinc-200 mx-1" />
+
+          {/* Add Class Primary Button */}
+          <Button
+            onClick={handleStartNew}
+            size="sm"
+            className="h-8.5 px-3.5 bg-zinc-900 hover:bg-zinc-800 text-white font-medium text-xs shadow-xs rounded-lg flex items-center gap-1.5"
+            title="Προσθήκη νέου τμήματος απευθείας στην 1η σειρά του πίνακα"
+          >
+            <Plus className="w-4 h-4" />
+            <span>+ Νέο Τμήμα</span>
+          </Button>
         </div>
-      )}
+      </div>
 
-      {/* Add Subgroup Modal */}
-      <Dialog open={isAddSgOpen} onOpenChange={setIsAddSgOpen}>
-        <DialogContent className="sm:max-w-md bg-white border-zinc-200 text-zinc-900 shadow-lg">
-          <DialogHeader>
-            <DialogTitle className="text-base text-zinc-900 flex items-center gap-2">
-              <Users className="w-4 h-4 text-zinc-500" />
-              Δημιουργία Υπο-ομάδας (Split Group)
-            </DialogTitle>
-          </DialogHeader>
+      {/* Main Full-Width Data Table */}
+      <div className="flex-1 bg-white border border-zinc-200 rounded-xl shadow-xs overflow-hidden flex flex-col">
+        <div className="flex-1 overflow-auto">
+          <table className="w-full text-left text-xs border-collapse">
+            {/* Super Headers & Sub Headers */}
+            <thead className="sticky top-0 z-20 bg-zinc-50 border-b border-zinc-200 text-zinc-600 shadow-2xs select-none">
+              {/* Row 1: Super Headers Grouping */}
+              <tr className="border-b border-zinc-200 text-[10px] uppercase font-bold tracking-wider text-zinc-500">
+                <th colSpan={5} className="py-2 px-3 border-r border-zinc-200 bg-zinc-100/80 text-left">
+                  ΒΑΣΙΚΑ ΣΤΟΙΧΕΙΑ ΤΜΗΜΑΤΟΣ
+                </th>
+                <th colSpan={3} className="py-2 px-3 border-r border-zinc-200 bg-zinc-100/80 text-center">
+                  ΡΟΛΟΙ & ΧΩΡΟΣ
+                </th>
+                <th colSpan={1} className="py-2 px-3 border-r border-zinc-200 bg-zinc-100/80 text-center">
+                  ΣΥΜΠΛΗΡΩΜΑΤΙΚΕΣ ΕΙΔΙΚΟΤΗΤΕΣ
+                </th>
+                <th colSpan={2} className="py-2 px-3 bg-zinc-100/80 text-center">
+                  ΩΡΟΛΟΓΙΟ ΠΡΟΓΡΑΜΜΑ & ΚΑΛΥΨΗ
+                </th>
+              </tr>
 
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label className="text-xs text-zinc-600">Όνομα Υπο-ομάδας</Label>
-              <Input
-                placeholder="π.χ. Ομάδα Α (Πληροφορική)"
-                value={sgName}
-                onChange={(e) => setSgName(e.target.value)}
-                className="bg-white border-zinc-200 text-zinc-900"
-              />
+              {/* Row 2: Detailed Column Headers */}
+              <tr className="bg-zinc-50 text-[11px] font-semibold text-zinc-700">
+                <th className="py-2.5 px-3 w-12 text-center" title="Χρώμα τμήματος για το ατομικό πρόγραμμα εκπαιδευτικού">Χρώμα</th>
+                <th className="py-2.5 px-3 min-w-[130px]" title="Όνομα τμήματος (π.χ. Α1)">Όνομα Τμήματος</th>
+                <th className="py-2.5 px-2 w-16 text-center" title="Συντομογραφία (π.χ. Α1)">Συντ.</th>
+                <th className="py-2.5 px-2.5 w-24 text-center" title="Τάξη / Βαθμίδα">Τάξη</th>
+                <th className="py-2.5 px-2 w-20 text-center border-r border-zinc-200" title="Αριθμός μαθητών">Μαθητές</th>
+
+                <th className="py-2.5 px-3 min-w-[190px]" title="Υπεύθυνος εκπαιδευτικός του τμήματος">Υπεύθυνος Τάξης</th>
+                <th className="py-2.5 px-2 w-24 text-center" title="Πρόγραμμα (Πρωινό / Ολοήμερο)">Πρόγραμμα</th>
+                <th className="py-2.5 px-2.5 w-32 border-r border-zinc-200" title="Αίθουσα αναφοράς">Αίθουσα</th>
+
+                <th className="py-2.5 px-3 min-w-[200px] border-r border-zinc-200 text-center" title="Υποστηρικτικές ειδικότητες που δικαιούται το τμήμα (Λογοθεραπεία, Εργοθεραπεία, κ.λπ.)">
+                  Ειδικότητες Στήριξης
+                </th>
+
+                <th className="py-2.5 px-2.5 w-24 text-center" title="Εβδομαδιαίο διδακτικό ωράριο τμήματος">Στόχος Ωρών</th>
+                <th className="py-2.5 px-2.5 w-28 text-center" title="Ανατεθειμένες ώρες / Σύνολο">Κάλυψη</th>
+              </tr>
+            </thead>
+
+            {/* Table Body */}
+            <tbody className="divide-y divide-zinc-100">
+              {/* If creating a brand new class inline, render it as 1st row */}
+              {editingRowId === "__new__" && renderEditRow(true)}
+
+              {filteredClasses.map((cls) => {
+                const isSelected = selectedClassId === cls.id;
+                const isEditing = editingRowId === cls.id && inlineData !== null;
+                const assignedHours = classHoursMap.get(cls.id) || 0;
+                const targetHours = cls.weeklyHoursTarget || 30;
+                const isFullyCovered = assignedHours >= targetHours;
+                const headTeacher = cls.headTeacherId ? teachersMap.get(cls.headTeacherId) : null;
+                const displayShortName = normalizeGreekUpper(cls.shortName || cls.name);
+                const specialtiesList = cls.supportSpecialties || [];
+
+                /* 1. ROW IN EDIT MODE */
+                if (isEditing) {
+                  return renderEditRow(false);
+                }
+
+                /* 2. NORMAL DISPLAY ROW */
+                return (
+                  <tr
+                    key={cls.id}
+                    onClick={() => {
+                      if (!editingRowId) setSelectedClassId(cls.id);
+                    }}
+                    onDoubleClick={() => startInlineEdit(cls)}
+                    className={`transition-colors cursor-pointer select-none ${
+                      isSelected
+                        ? "bg-sky-50/90 hover:bg-sky-50"
+                        : "hover:bg-zinc-50/80"
+                    }`}
+                  >
+                    {/* Color */}
+                    <td className="py-2.5 px-3 text-center">
+                      <div
+                        className="w-4 h-4 rounded-full border border-black/10 mx-auto shadow-2xs"
+                        style={{ backgroundColor: cls.color || "#3b82f6" }}
+                        title="Χρώμα τμήματος"
+                      />
+                    </td>
+
+                    {/* Name */}
+                    <td className="py-2.5 px-3 font-semibold text-zinc-900">
+                      <span>{cls.name}</span>
+                    </td>
+
+                    {/* Short Name */}
+                    <td className="py-2.5 px-2 text-center font-mono font-semibold text-zinc-700">
+                      <span className="bg-zinc-100 px-1.5 py-0.5 rounded text-[11px] border border-zinc-200/60">
+                        {displayShortName}
+                      </span>
+                    </td>
+
+                    {/* Grade */}
+                    <td className="py-2.5 px-2.5 text-center">
+                      <Badge variant="outline" className="text-[11px] font-medium border-zinc-200 bg-zinc-50 text-zinc-700">
+                        Τάξη {cls.grade}
+                      </Badge>
+                    </td>
+
+                    {/* Students Count */}
+                    <td className="py-2.5 px-2 text-center font-mono text-zinc-700 border-r border-zinc-100">
+                      {cls.studentsCount || 20}
+                    </td>
+
+                    {/* Head Teacher */}
+                    <td className="py-2.5 px-3 text-zinc-700">
+                      {headTeacher ? (
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className="w-2.5 h-2.5 rounded-full shrink-0"
+                            style={{ backgroundColor: headTeacher.color || "#71717a" }}
+                          />
+                          <span className="font-medium text-zinc-900">
+                            {headTeacher.lastName} {headTeacher.firstName}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-zinc-400 italic text-[11px]">— Χωρίς ορισμό —</span>
+                      )}
+                    </td>
+
+                    {/* Program Type */}
+                    <td className="py-2.5 px-2 text-center">
+                      {cls.isAllDay ? (
+                        <Badge variant="outline" className="border-indigo-200 bg-indigo-50 text-indigo-700 text-[10px] font-semibold">
+                          Ολοήμερο
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-800 text-[10px] font-semibold">
+                          Πρωινό
+                        </Badge>
+                      )}
+                    </td>
+
+                    {/* Room */}
+                    <td className="py-2.5 px-2.5 text-zinc-600 border-r border-zinc-100">
+                      {cls.room || "—"}
+                    </td>
+
+                    {/* Supportive Specialties */}
+                    <td className="py-2.5 px-3 border-r border-zinc-100 text-center">
+                      {specialtiesList.length > 0 ? (
+                        <div className="flex items-center justify-center gap-1 flex-wrap">
+                          {specialtiesList.map((code) => {
+                            const spec =
+                              SUPPORT_SPECIALTIES_LIST.find((s) => s.code === code) ||
+                              getSpecialtyByCode(code) ||
+                              findSpecialty(code);
+                            const shortLabel =
+                              (spec && "short" in spec ? spec.short : undefined) ||
+                              (spec && "shortCode" in spec ? spec.shortCode : undefined) ||
+                              code;
+                            return (
+                              <span
+                                key={code}
+                                title={`${spec?.name || code}`}
+                                className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${
+                                  spec?.color || "bg-zinc-100 text-zinc-700 border-zinc-200"
+                                }`}
+                              >
+                                {shortLabel}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <span className="text-zinc-300 text-[11px]">—</span>
+                      )}
+                    </td>
+
+                    {/* Target Hours */}
+                    <td className="py-2.5 px-2.5 text-center font-mono text-zinc-700 font-semibold bg-zinc-50/50">
+                      {targetHours}ω
+                    </td>
+
+                    {/* Coverage / Assigned Hours */}
+                    <td className="py-2.5 px-2.5 text-center font-mono">
+                      <span
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold ${
+                          isFullyCovered
+                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                            : assignedHours > 0
+                            ? "bg-amber-50 text-amber-700 border border-amber-200"
+                            : "bg-zinc-100 text-zinc-500 border border-zinc-200"
+                        }`}
+                      >
+                        {assignedHours} / {targetHours}ω
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+
+              {filteredClasses.length === 0 && editingRowId !== "__new__" && (
+                <tr>
+                  <td colSpan={11} className="py-12 text-center text-zinc-500">
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <Search className="w-8 h-8 text-zinc-300" />
+                      <p className="font-medium text-sm text-zinc-700">Δεν βρέθηκαν τμήματα</p>
+                      <p className="text-xs text-zinc-400">
+                        {searchQuery || gradeFilter !== "all" || typeFilter !== "all"
+                          ? "Δοκιμάστε να αλλάξετε τα φίλτρα ή την αναζήτηση."
+                          : "Προσθέστε το πρώτο τμήμα κάνοντας κλικ στο «+ Νέο Τμήμα»."}
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Custom Styled Delete Confirmation Dialog */}
+      <Dialog
+        open={Boolean(classToDelete)}
+        onOpenChange={(open) => {
+          if (!open && !isDeletingClass) setClassToDelete(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-[440px] p-0 overflow-hidden border-zinc-200 z-[60]">
+          <div className="p-6 pb-4">
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-full bg-red-100/80 flex items-center justify-center shrink-0 text-red-600">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div className="flex-1">
+                <DialogTitle className="text-base font-bold text-zinc-900">
+                  Διαγραφή Τμήματος
+                </DialogTitle>
+                <DialogDescription className="mt-1.5 text-xs text-zinc-600 leading-relaxed">
+                  Είστε βέβαιοι ότι θέλετε να διαγράψετε οριστικά το τμήμα{" "}
+                  <span className="font-semibold text-zinc-900">
+                    «{classToDelete?.name}» (Τάξη {classToDelete?.grade})
+                  </span>
+                  ;
+                </DialogDescription>
+              </div>
             </div>
+
+            {classToDelete && (classAssignmentsCountMap.get(classToDelete.id) || 0) > 0 && (
+              <div className="mt-4 p-3 bg-amber-50 border border-amber-200/80 rounded-lg text-amber-800 text-xs flex items-start gap-2.5">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-semibold">Ενεργές Αναθέσεις:</span> Το τμήμα έχει{" "}
+                  <strong>{classAssignmentsCountMap.get(classToDelete.id)}</strong> ενεργές αναθέσεις μαθημάτων.
+                  Η διαγραφή του θα διαγράψει και τις αναθέσεις αυτές.
+                </div>
+              </div>
+            )}
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="bg-zinc-50 px-6 py-3 border-t border-zinc-100 flex items-center justify-end gap-2">
             <Button
+              type="button"
               variant="outline"
-              onClick={() => setIsAddSgOpen(false)}
-              className="border-zinc-200 text-zinc-700 hover:bg-zinc-50"
+              size="sm"
+              disabled={isDeletingClass}
+              onClick={() => setClassToDelete(null)}
+              className="h-8 text-xs font-medium"
             >
               Ακύρωση
             </Button>
             <Button
-              onClick={handleCreateSubGroup}
-              className="bg-zinc-900 hover:bg-zinc-800 text-white font-semibold"
+              type="button"
+              size="sm"
+              disabled={isDeletingClass}
+              onClick={confirmDeleteClass}
+              className="h-8 text-xs bg-red-600 hover:bg-red-700 text-white font-medium gap-1.5 shadow-xs"
             >
-              Δημιουργία
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Add Assignment Modal */}
-      <Dialog open={isAddAsgOpen} onOpenChange={setIsAddAsgOpen}>
-        <DialogContent className="sm:max-w-md bg-white border-zinc-200 text-zinc-900 shadow-lg">
-          <DialogHeader>
-            <DialogTitle className="text-base text-zinc-900 flex items-center gap-2">
-              <BookOpen className="w-4 h-4 text-zinc-500" />
-              Νέα Ανάθεση Μαθήματος στο Τμήμα {selectedClass?.name}
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-3 py-2 text-xs">
-            <div className="space-y-1.5">
-              <Label className="text-zinc-600">Μάθημα</Label>
-              <Select
-                value={asgSubjectId}
-                onValueChange={(val) => setAsgSubjectId(val || "")}
-              >
-                <SelectTrigger className="bg-white border-zinc-200 text-zinc-800">
-                  <SelectValue placeholder="Επιλέξτε μάθημα" />
-                </SelectTrigger>
-                <SelectContent className="bg-white border-zinc-200 text-zinc-800">
-                  {data.subjects.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.title} ({s.code})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-zinc-600">Εκπαιδευτικός</Label>
-              <Select
-                value={asgTeacherId}
-                onValueChange={(val) => setAsgTeacherId(val || "")}
-              >
-                <SelectTrigger className="bg-white border-zinc-200 text-zinc-800">
-                  <SelectValue placeholder="Επιλέξτε εκπαιδευτικό" />
-                </SelectTrigger>
-                <SelectContent className="bg-white border-zinc-200 text-zinc-800">
-                  {data.teachers.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>
-                      {t.lastName} {t.firstName} ({t.specialty})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-zinc-600">Υπο-ομάδα</Label>
-              <Select
-                value={asgSubGroupId}
-                onValueChange={(val) => setAsgSubGroupId(val || "")}
-              >
-                <SelectTrigger className="bg-white border-zinc-200 text-zinc-800">
-                  <SelectValue placeholder="Επιλέξτε ομάδα" />
-                </SelectTrigger>
-                <SelectContent className="bg-white border-zinc-200 text-zinc-800">
-                  {classSubGroups.map((sg) => (
-                    <SelectItem key={sg.id} value={sg.id}>
-                      {sg.name} {sg.isDefault ? "(Ολομέλεια)" : "(Υπο-ομάδα)"}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-zinc-600">Ώρες / Εβδομάδα</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={15}
-                  value={asgHours}
-                  onChange={(e) => setAsgHours(Number(e.target.value))}
-                  className="bg-white border-zinc-200 text-zinc-900"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-zinc-600">ID Συγχρονισμού (Προαιρετικό)</Label>
-                <Input
-                  placeholder="π.χ. split-tpe-lang-1"
-                  value={asgConcurrentId}
-                  onChange={(e) => setAsgConcurrentId(e.target.value)}
-                  className="bg-white border-zinc-200 text-zinc-900 font-mono text-[11px]"
-                />
-              </div>
-            </div>
-            <p className="text-[10px] text-zinc-500">
-              * Αν δύο αναθέσεις έχουν το ίδιο ID Συγχρονισμού, ο αλγόριθμος θα τις τοποθετήσει υποχρεωτικά την ίδια ώρα (ταυτόχρονη διδασκαλία).
-            </p>
-          </div>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsAddAsgOpen(false)}
-              className="border-zinc-200 text-zinc-700 hover:bg-zinc-50"
-            >
-              Ακύρωση
-            </Button>
-            <Button
-              onClick={handleCreateAssignment}
-              className="bg-zinc-900 hover:bg-zinc-800 text-white font-semibold"
-            >
-              Προσθήκη Ανάθεσης
+              {isDeletingClass ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Διαγραφή...</span>
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Οριστική Διαγραφή</span>
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

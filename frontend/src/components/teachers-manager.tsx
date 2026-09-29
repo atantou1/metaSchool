@@ -35,6 +35,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import {
+  SPECIALTIES,
+  getSpecialties,
+  getSpecialtyByCode,
+  findSpecialty,
+  formatSpecialtyLabel,
+  formatSpecialtyCode,
+} from "@/lib/specialties";
+import { ColorSwatchPicker } from "@/components/color-swatch-picker";
+import {
+  TEACHER_50_PALETTE,
+  getPaletteColorByHex,
+} from "@/lib/palette";
 
 interface TeachersManagerProps {
   data: TimetableData;
@@ -55,24 +68,8 @@ const PALETTE = [
   "#8b5cf6", "#14b8a6", "#f97316", "#0284c7", "#71717a",
 ];
 
-export const PREDEFINED_SPECIALTIES = [
-  "ΠΕ70 - Δάσκαλοι",
-  "ΠΕ60 - Νηπιαγωγοί",
-  "ΠΕ11 - Φυσική Αγωγή",
-  "ΠΕ06 - Αγγλική Φιλολογία",
-  "ΠΕ86 - Πληροφορική",
-  "ΠΕ08 - Εικαστικά",
-  "ΠΕ79.01 - Μουσική",
-  "ΠΕ91 - Θεατρική Αγωγή",
-  "ΠΕ05 - Γαλλική Φιλολογία",
-  "ΠΕ07 - Γερμανική Φιλολογία",
-  "ΠΕ71 - Ειδική Αγωγή / Παράλληλη",
-  "ΠΕ23 - Ψυχολόγοι",
-  "ΠΕ26 - Λογοθεραπευτές",
-  "ΠΕ29 - Εργοθεραπευτές",
-  "ΠΕ25 - Σχολικοί Νοσηλευτές",
-  "ΔΕ01 - Ειδικό Βοηθητικό Προσωπικό (ΕΒΠ)",
-];
+export const PREDEFINED_SPECIALTIES = SPECIALTIES.map((s) => s.code);
+
 
 /** Normalize Greek text to uppercase WITHOUT accents (Ά -> Α, Έ -> Ε, etc.) */
 export function normalizeGreekUpper(text: string): string {
@@ -143,13 +140,22 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
   // Ref to focus on the first input (lastName) when entering edit mode
   const lastNameInputRef = useRef<HTMLInputElement>(null);
 
-  // Combine predefined specialties with any existing custom ones in data
+  // Available specialties for filtering & selection
   const allSpecialties = useMemo(() => {
-    const set = new Set<string>(PREDEFINED_SPECIALTIES);
+    const list = [...SPECIALTIES];
+    // Also include any legacy/custom specialties found in existing data that aren't in SPECIALTIES
     data.teachers.forEach((t) => {
-      if (t.specialty) set.add(t.specialty);
+      if (t.specialty && !findSpecialty(t.specialty)) {
+        list.push({
+          code: t.specialty,
+          name: t.specialty,
+          type: "ΒΑΣΙΚΗ",
+          isPrimary: true,
+          isSecondary: true,
+        });
+      }
     });
-    return Array.from(set);
+    return list;
   }, [data.teachers]);
 
   const filteredTeachers = useMemo(() => {
@@ -159,12 +165,16 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
         const fullName = `${tch.lastName} ${tch.firstName}`.toLowerCase();
         const sName = (tch.shortName || "").toLowerCase();
         const spec = (tch.specialty || "").toLowerCase();
-        if (!fullName.includes(query) && !sName.includes(query) && !spec.includes(query)) {
+        const specName = (findSpecialty(tch.specialty)?.name || "").toLowerCase();
+        if (!fullName.includes(query) && !sName.includes(query) && !spec.includes(query) && !specName.includes(query)) {
           return false;
         }
       }
-      if (specialtyFilter !== "all" && tch.specialty !== specialtyFilter) {
-        return false;
+      if (specialtyFilter !== "all") {
+        const tchCode = formatSpecialtyCode(tch.specialty);
+        if (tchCode !== specialtyFilter && tch.specialty !== specialtyFilter) {
+          return false;
+        }
       }
       if (statusFilter === "active" && tch.isActive === false) return false;
       if (statusFilter === "inactive" && tch.isActive !== false) return false;
@@ -184,12 +194,17 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
 
   // Start creating a brand new teacher inline (1st row)
   const handleStartNew = () => {
+    const usedColors = new Set(data.teachers.map((t) => (t.color || "").toLowerCase()));
+    const nextColor =
+      TEACHER_50_PALETTE.find((c) => !usedColors.has(c.hex.toLowerCase()))?.hex ||
+      TEACHER_50_PALETTE[data.teachers.length % TEACHER_50_PALETTE.length].hex;
+
     setInlineData({
       firstName: "",
       lastName: "",
       shortName: "",
-      specialty: "ΠΕ70 - Δάσκαλοι",
-      color: "#3b82f6",
+      specialty: "ΠΕ70",
+      color: nextColor,
       isTeaching: true,
       isOnCall: false,
       isMorning: true,
@@ -223,7 +238,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
       firstName: "", // empty so user enters new name
       lastName: "",  // empty so user enters new name
       shortName: "",
-      specialty: target.specialty || "ΠΕ70 - Δάσκαλοι",
+      specialty: target.specialty ? formatSpecialtyCode(target.specialty) : "ΠΕ70",
       color: target.color || "#3b82f6",
       isTeaching: target.isTeaching ?? true,
       isOnCall: target.isOnCall ?? false,
@@ -256,7 +271,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
       firstName: tch.firstName,
       lastName: tch.lastName,
       shortName: prefilledShort,
-      specialty: tch.specialty || "ΠΕ70 - Δάσκαλοι",
+      specialty: tch.specialty ? formatSpecialtyCode(tch.specialty) : "ΠΕ70",
       color: tch.color || "#3b82f6",
       isTeaching: tch.isTeaching ?? true,
       isOnCall: tch.isOnCall ?? false,
@@ -439,14 +454,14 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
             : "bg-sky-50/70 border-y-2 border-sky-400 ring-2 ring-sky-400/50"
         } transition-colors`}
       >
-        {/* Color Picker */}
-        <td className="py-2 px-2 text-center">
-          <input
-            type="color"
+        {/* Color Picker (50-Swatch Curated Popover) */}
+        <td className="py-1.5 px-2 text-center">
+          <ColorSwatchPicker
             value={inlineData.color}
-            onChange={(e) => setInlineData({ ...inlineData, color: e.target.value })}
-            className="w-5 h-5 rounded-full border border-black/20 cursor-pointer p-0 bg-transparent mx-auto"
-            title="Επιλογή χρώματος"
+            onChange={(hex) => setInlineData({ ...inlineData, color: hex })}
+            usedColors={data.teachers
+              .filter((t) => t.id !== inlineData.id)
+              .map((t) => t.color)}
           />
         </td>
 
@@ -490,9 +505,16 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
         {/* Specialty Select Dropdown (Shadcn UI Select) */}
         <td className="py-1.5 px-2 border-r border-zinc-200">
           <Select
-            value={inlineData.specialty}
+            value={formatSpecialtyCode(inlineData.specialty)}
             onValueChange={(val) => {
-              if (val) setInlineData({ ...inlineData, specialty: val });
+              if (val) {
+                const spec = getSpecialtyByCode(val) || findSpecialty(val);
+                setInlineData({
+                  ...inlineData,
+                  specialty: val,
+                  isSupport: spec ? spec.type === "ΣΥΜΠΛΗΡΩΜΑΤΙΚΗ" : inlineData.isSupport,
+                });
+              }
             }}
           >
             <SelectTrigger
@@ -503,12 +525,31 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
                   : "border-sky-300 focus-visible:border-sky-400"
               } w-full text-zinc-800 font-medium px-2 py-0 justify-between`}
             >
-              <SelectValue placeholder="Επιλέξτε ειδικότητα" />
+              <SelectValue placeholder="Επιλέξτε ειδικότητα">
+                {(() => {
+                  const spec = findSpecialty(inlineData.specialty);
+                  return spec ? `${spec.code} - ${spec.name}` : inlineData.specialty;
+                })()}
+              </SelectValue>
             </SelectTrigger>
-            <SelectContent className="bg-white border-zinc-200 text-zinc-800 z-[70] max-h-[420px] min-w-[280px] shadow-xl p-1">
+            <SelectContent className="bg-white border-zinc-200 text-zinc-800 z-[70] max-h-[420px] min-w-[300px] shadow-xl p-1">
               {allSpecialties.map((spec) => (
-                <SelectItem key={spec} value={spec} className="text-xs py-2 px-2.5 cursor-pointer rounded-md">
-                  {spec}
+                <SelectItem key={spec.code} value={spec.code} className="text-xs py-2 px-2.5 cursor-pointer rounded-md">
+                  <div className="flex items-center justify-between w-full gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="font-bold text-zinc-900 font-mono text-[11.5px]">{spec.code}</span>
+                      <span className="text-zinc-600 text-[11px] truncate">— {spec.name}</span>
+                    </div>
+                    <span
+                      className={`text-[9.5px] px-1.5 py-0.2 rounded font-medium border shrink-0 ml-auto ${
+                        spec.type === "ΣΥΜΠΛΗΡΩΜΑΤΙΚΗ"
+                          ? "bg-sky-50 text-sky-700 border-sky-200"
+                          : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                      }`}
+                    >
+                      {spec.type === "ΣΥΜΠΛΗΡΩΜΑΤΙΚΗ" ? "Συμπλ." : "Βασική"}
+                    </span>
+                  </div>
                 </SelectItem>
               ))}
             </SelectContent>
@@ -770,14 +811,14 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
           <div className="flex items-center gap-1.5">
             <Filter className="w-3.5 h-3.5 text-zinc-400" />
             <Select value={specialtyFilter} onValueChange={(val) => val && setSpecialtyFilter(val)}>
-              <SelectTrigger size="sm" className="h-8.5 text-xs bg-zinc-50 border-zinc-200 text-zinc-700 min-w-[170px] max-w-[210px]">
+              <SelectTrigger size="sm" className="h-8.5 text-xs bg-zinc-50 border-zinc-200 text-zinc-700 min-w-[170px] max-w-[220px]">
                 <SelectValue placeholder="Ειδικότητα" />
               </SelectTrigger>
               <SelectContent className="bg-white border-zinc-200 text-zinc-800 z-[70] max-h-[420px] min-w-[280px] shadow-xl p-1">
-                <SelectItem value="all" className="text-xs py-2 px-2.5">Όλες οι ειδικότητες</SelectItem>
+                <SelectItem value="all" className="text-xs py-2 px-2.5 font-medium">Όλες οι ειδικότητες</SelectItem>
                 {allSpecialties.map((spec) => (
-                  <SelectItem key={spec} value={spec} className="text-xs py-2 px-2.5">
-                    {spec}
+                  <SelectItem key={spec.code} value={spec.code} className="text-xs py-2 px-2.5">
+                    <span className="font-bold font-mono">{spec.code}</span> - {spec.name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -985,8 +1026,9 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
                     {/* Color */}
                     <td className="py-2.5 px-3 text-center">
                       <div
-                        className="w-4 h-4 rounded-full border border-black/10 mx-auto shadow-2xs"
-                        style={{ backgroundColor: tch.color || "#71717a" }}
+                        className="w-4.5 h-4.5 rounded-full border border-black/20 mx-auto shadow-2xs cursor-default"
+                        style={{ backgroundColor: tch.color || "#fef08a" }}
+                        title={`Χρώμα: ${getPaletteColorByHex(tch.color)?.name || tch.color}`}
                       />
                     </td>
 
@@ -1003,8 +1045,20 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
                     </td>
 
                     {/* Specialty */}
-                    <td className="py-2.5 px-3 text-zinc-600 border-r border-zinc-100">
-                      {tch.specialty}
+                    <td className="py-2.5 px-3 text-zinc-700 border-r border-zinc-100 font-medium text-xs">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-bold text-zinc-900 font-mono text-[11.5px]">
+                          {formatSpecialtyCode(tch.specialty)}
+                        </span>
+                        {(() => {
+                          const spec = findSpecialty(tch.specialty);
+                          return spec ? (
+                            <span className="text-zinc-500 text-[11px]">
+                              {spec.name}
+                            </span>
+                          ) : null;
+                        })()}
+                      </div>
                     </td>
 
                     {/* Teaching */}
@@ -1180,8 +1234,8 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
                     «{teacherToDelete?.lastName} {teacherToDelete?.firstName}»
                   </span>
                   {teacherToDelete?.specialty && (
-                    <span className="text-zinc-500"> ({teacherToDelete.specialty})</span>
-                  )};
+                    <span className="text-zinc-500"> ({formatSpecialtyLabel(teacherToDelete.specialty)})</span>
+                  )}
                 </DialogDescription>
               </div>
             </div>

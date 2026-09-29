@@ -51,7 +51,11 @@ export async function GET() {
           constraints: t.constraints ? JSON.parse(t.constraints) : null,
         })),
         subjects: allSubjects,
-        classes: allClasses,
+        classes: allClasses.map((c) => ({
+          ...c,
+          isAllDay: Boolean(c.isAllDay),
+          supportSpecialties: c.supportSpecialties ? JSON.parse(c.supportSpecialties) : [],
+        })),
         subGroups: allSubGroups.map((sg) => ({
           ...sg,
           isDefault: Boolean(sg.isDefault),

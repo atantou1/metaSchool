@@ -31,7 +31,8 @@ import {
   RefreshCw,
   X,
 } from "lucide-react";
-import { getTeacherAbbr, getTeacherStyleClass } from "@/lib/teacher-utils";
+import { getTeacherAbbr, getTeacherStyleClass, getTeacherTileInlineStyle } from "@/lib/teacher-utils";
+import { formatSpecialtyLabel } from "@/lib/specialties";
 import { toast } from "sonner";
 
 export default function Home() {
@@ -286,7 +287,6 @@ export default function Home() {
           <div className="flex items-center gap-1 font-mono text-[9px] flex-shrink-0">
             {teachersList.map((tch) => {
               const abbr = getTeacherAbbr(tch);
-              const styleClass = getTeacherStyleClass(abbr);
               const isSelected = spotlightTeacherId === tch.id;
 
               return (
@@ -295,13 +295,14 @@ export default function Home() {
                   onClick={() =>
                     setSpotlightTeacherId(isSelected ? null : tch.id)
                   }
-                  title={`${tch.lastName} ${tch.firstName} (${tch.specialty})`}
-                  className={`inline-flex items-center gap-1 px-1 py-0.2 rounded border font-bold cursor-pointer transition-all ${styleClass} ${
+                  title={`${tch.lastName} ${tch.firstName} (${formatSpecialtyLabel(tch.specialty)})`}
+                  style={getTeacherTileInlineStyle(tch)}
+                  className={`inline-flex items-center gap-1 px-1.5 py-0.2 rounded border font-bold cursor-pointer transition-all ${
                     isSelected
-                      ? "ring-2 ring-zinc-900 scale-105"
+                      ? "ring-2 ring-zinc-900 scale-105 shadow-xs"
                       : spotlightTeacherId
                       ? "opacity-30"
-                      : "hover:opacity-85"
+                      : "hover:opacity-85 hover:scale-105"
                   }`}
                 >
                   {abbr}
@@ -333,33 +334,72 @@ export default function Home() {
       >
         <SheetContent
           side="right"
-          className={`overflow-y-auto p-6 ${
-            activeSheet === "teachers"
-              ? "!w-screen sm:!w-screen !max-w-none inset-0 rounded-none"
-              : "w-full sm:max-w-2xl lg:max-w-3xl"
-          }`}
+          className="!w-screen sm:!w-screen !max-w-none inset-0 rounded-none overflow-y-auto p-6"
         >
-          <SheetHeader className="pb-4 border-b border-zinc-200">
-            <SheetTitle className="text-base font-bold flex items-center gap-2">
-              {activeSheet === "classes" && (
-                <>
-                  <GraduationCap className="w-5 h-5 text-zinc-800" />
-                  <span>Διαχείριση Τμημάτων & Αναθέσεων</span>
-                </>
-              )}
-              {activeSheet === "teachers" && (
-                <>
-                  <Users className="w-5 h-5 text-zinc-800" />
-                  <span>Διαχείριση Εκπαιδευτικών & Περιορισμών</span>
-                </>
-              )}
-              {activeSheet === "subjects" && (
-                <>
-                  <BookOpen className="w-5 h-5 text-zinc-800" />
-                  <span>Διαχείριση Μαθημάτων & Χρωμάτων</span>
-                </>
-              )}
-            </SheetTitle>
+          <SheetHeader className="pb-3 border-b border-zinc-200">
+            <div className="flex items-center justify-between pr-8">
+              {/* Left: Active Section Title */}
+              <SheetTitle className="text-base font-bold flex items-center gap-2">
+                {activeSheet === "teachers" && (
+                  <>
+                    <Users className="w-5 h-5 text-zinc-800" />
+                    <span>Εκπαιδευτικοί</span>
+                  </>
+                )}
+                {activeSheet === "classes" && (
+                  <>
+                    <GraduationCap className="w-5 h-5 text-zinc-800" />
+                    <span>Τμήματα</span>
+                  </>
+                )}
+                {activeSheet === "subjects" && (
+                  <>
+                    <BookOpen className="w-5 h-5 text-zinc-800" />
+                    <span>Μαθήματα</span>
+                  </>
+                )}
+              </SheetTitle>
+
+              {/* Right: Modern Tabs Switcher */}
+              <div className="flex items-center gap-1 bg-zinc-100 p-1 rounded-lg border border-zinc-200/80">
+                <button
+                  type="button"
+                  onClick={() => setActiveSheet("teachers")}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                    activeSheet === "teachers"
+                      ? "bg-white text-zinc-900 shadow-2xs"
+                      : "text-zinc-600 hover:text-zinc-900"
+                  }`}
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  <span>Εκπαιδευτικοί</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveSheet("classes")}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                    activeSheet === "classes"
+                      ? "bg-white text-zinc-900 shadow-2xs"
+                      : "text-zinc-600 hover:text-zinc-900"
+                  }`}
+                >
+                  <GraduationCap className="w-3.5 h-3.5" />
+                  <span>Τμήματα</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveSheet("subjects")}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                    activeSheet === "subjects"
+                      ? "bg-white text-zinc-900 shadow-2xs"
+                      : "text-zinc-600 hover:text-zinc-900"
+                  }`}
+                >
+                  <BookOpen className="w-3.5 h-3.5" />
+                  <span>Μαθήματα</span>
+                </button>
+              </div>
+            </div>
           </SheetHeader>
 
           <div className="mt-4">

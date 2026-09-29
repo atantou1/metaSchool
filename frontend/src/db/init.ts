@@ -123,11 +123,10 @@ export async function initializeDatabase() {
   if (existingTeachers.length === 0) {
     console.log("Seeding default teachers...");
     for (const tch of DEMO_TEACHERS) {
-      // Some teachers have specific days (e.g. music on Tue/Thu, arts on Mon/Wed/Fri)
       let availableDays = [0, 1, 2, 3, 4];
-      if (tch.id === "tch-zer") availableDays = [1, 3]; // Music on Tue, Thu
-      if (tch.id === "tch-vas") availableDays = [0, 2, 4]; // Theater on Mon, Wed, Fri
-      if (tch.id === "tch-ale") availableDays = [1, 2, 3]; // Arts on Tue, Wed, Thu
+      if (tch.id === "tch-krg" || tch.id === "tch-lan") availableDays = [1, 3]; // Music on Tue, Thu
+      if (tch.id === "tch-mpt") availableDays = [0, 2, 4]; // Theater on Mon, Wed, Fri
+      if (tch.id === "tch-tsa") availableDays = [1, 2, 3]; // Arts on Tue, Wed, Thu
 
       await db.insert(schema.teachers).values({
         ...tch,
