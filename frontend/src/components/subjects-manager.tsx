@@ -12,17 +12,21 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Plus, Trash2, Edit2, BookOpen } from "lucide-react";
+import { Plus, Trash2, Edit2, BookOpen, Users, GraduationCap, CalendarDays } from "lucide-react";
 import { toast } from "sonner";
 
 interface SubjectsManagerProps {
   data: TimetableData;
   onRefresh: () => void;
+  activeTab?: "teachers" | "classes" | "subjects" | "assignments";
+  onTabChange?: (tab: "teachers" | "classes" | "subjects" | "assignments") => void;
 }
 
 export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
   data,
   onRefresh,
+  activeTab = "subjects",
+  onTabChange,
 }) => {
   const [editingSubject, setEditingSubject] = useState<Subject | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -110,27 +114,86 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between p-4 rounded-xl bg-white border border-zinc-200 shadow-xs">
-        <div>
-          <h3 className="text-sm font-semibold text-zinc-900">
-            Κατάλογος Μαθημάτων ({data.subjects.length})
-          </h3>
-          <p className="text-xs text-zinc-500">
-            Χρωματική παλέτα και κωδικοί μαθημάτων για το πρόγραμμα
-          </p>
+    <div className="flex flex-col h-full w-full overflow-hidden bg-zinc-100/60">
+      {/* Unified Top Header Bar */}
+      <div className="h-14 border-b border-zinc-200 bg-white px-4 flex items-center justify-between gap-4 shrink-0 z-20">
+        {/* Left: Modern Tabs Switcher */}
+        <div className="flex items-center gap-1 bg-zinc-100 p-1 rounded-lg border border-zinc-200/80 shrink-0">
+          <button
+            type="button"
+            onClick={() => onTabChange?.("teachers")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+              activeTab === "teachers"
+                ? "bg-white text-zinc-900 shadow-2xs border border-zinc-200/60"
+                : "text-zinc-600 hover:text-zinc-900"
+            }`}
+          >
+            <Users className="w-3.5 h-3.5" />
+            <span>Εκπαιδευτικοί</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onTabChange?.("classes")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+              activeTab === "classes"
+                ? "bg-white text-zinc-900 shadow-2xs border border-zinc-200/60"
+                : "text-zinc-600 hover:text-zinc-900"
+            }`}
+          >
+            <GraduationCap className="w-3.5 h-3.5" />
+            <span>Τμήματα</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onTabChange?.("subjects")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+              activeTab === "subjects"
+                ? "bg-white text-zinc-900 shadow-2xs border border-zinc-200/60"
+                : "text-zinc-600 hover:text-zinc-900"
+            }`}
+          >
+            <BookOpen className="w-3.5 h-3.5" />
+            <span>Μαθήματα</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onTabChange?.("assignments")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+              activeTab === "assignments"
+                ? "bg-white text-zinc-900 shadow-2xs border border-zinc-200/60"
+                : "text-zinc-600 hover:text-zinc-900"
+            }`}
+          >
+            <CalendarDays className="w-3.5 h-3.5" />
+            <span>Αναθέσεις</span>
+          </button>
         </div>
 
-        <Button
-          onClick={handleOpenAdd}
-          className="h-8 text-xs bg-zinc-900 hover:bg-zinc-800 text-white font-semibold shadow-xs"
-        >
-          <Plus className="w-3.5 h-3.5 mr-1.5" />
-          Προσθήκη Μαθήματος
-        </Button>
+        {/* Middle: Title & Count */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-zinc-800">
+            Κατάλογος Μαθημάτων
+          </span>
+          <span className="text-[11px] font-medium text-zinc-500 whitespace-nowrap bg-zinc-100 px-2 py-0.5 rounded-md border border-zinc-200">
+            {data.subjects.length} μαθήματα
+          </span>
+        </div>
+
+        {/* Right: Add Action */}
+        <div className="flex items-center gap-2 pr-10">
+          <Button
+            onClick={handleOpenAdd}
+            className="h-8 text-xs bg-zinc-900 hover:bg-zinc-800 text-white font-semibold shadow-xs"
+          >
+            <Plus className="w-3.5 h-3.5 mr-1.5" />
+            Προσθήκη Μαθήματος
+          </Button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+      {/* Main Content Area */}
+      <div className="flex-1 p-4 overflow-y-auto">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         {data.subjects.map((subj) => (
           <div
             key={subj.id}
@@ -168,6 +231,7 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
             </div>
           </div>
         ))}
+        </div>
       </div>
 
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>

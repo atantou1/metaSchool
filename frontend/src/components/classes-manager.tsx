@@ -34,6 +34,8 @@ import {
   AlertTriangle,
   Loader2,
   Sparkles,
+  BookOpen,
+  CalendarDays,
 } from "lucide-react";
 import { toast } from "sonner";
 import { normalizeGreekUpper } from "./teachers-manager";
@@ -51,6 +53,8 @@ import {
 interface ClassesManagerProps {
   data: TimetableData;
   onRefresh: () => void;
+  activeTab?: "teachers" | "classes" | "subjects" | "assignments";
+  onTabChange?: (tab: "teachers" | "classes" | "subjects" | "assignments") => void;
 }
 
 const CLASS_PALETTE = CLASS_15_PALETTE.map((c) => c.hex);
@@ -82,6 +86,8 @@ interface InlineClassEditState {
 export const ClassesManager: React.FC<ClassesManagerProps> = ({
   data,
   onRefresh,
+  activeTab = "classes",
+  onTabChange,
 }) => {
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
 
@@ -89,6 +95,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [gradeFilter, setGradeFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
+  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
 
   // Inline row edit state ("__new__" for new draft row, or existing class.id)
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
@@ -548,19 +555,74 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
     );
   };
 
+  const hasActiveFilters = gradeFilter !== "all" || typeFilter !== "all";
+  const activeFiltersCount = (gradeFilter !== "all" ? 1 : 0) + (typeFilter !== "all" ? 1 : 0);
+
   return (
-    <div className="flex flex-col h-[calc(100vh-6.5rem)] gap-3 p-1">
-      {/* Top Header Toolbar */}
-      <div className="bg-white border border-zinc-200 rounded-xl p-3 shadow-xs flex flex-wrap items-center justify-between gap-3 shrink-0">
-        {/* Left: Search & Filters */}
-        <div className="flex items-center flex-wrap gap-2 flex-1 min-w-[300px]">
-          <div className="relative w-64 max-w-full">
-            <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+    <div className="flex flex-col h-full w-full overflow-hidden bg-zinc-100/60">
+      {/* Unified Top Header Bar */}
+      <div className="h-14 border-b border-zinc-200 bg-white px-4 flex items-center justify-between gap-4 shrink-0 z-20">
+        {/* Left: Modern Tabs Switcher */}
+        <div className="flex items-center gap-1 bg-zinc-100 p-1 rounded-lg border border-zinc-200/80 shrink-0">
+          <button
+            type="button"
+            onClick={() => onTabChange?.("teachers")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+              activeTab === "teachers"
+                ? "bg-white text-zinc-900 shadow-2xs border border-zinc-200/60"
+                : "text-zinc-600 hover:text-zinc-900"
+            }`}
+          >
+            <Users className="w-3.5 h-3.5" />
+            <span>Εκπαιδευτικοί</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onTabChange?.("classes")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+              activeTab === "classes"
+                ? "bg-white text-zinc-900 shadow-2xs border border-zinc-200/60"
+                : "text-zinc-600 hover:text-zinc-900"
+            }`}
+          >
+            <GraduationCap className="w-3.5 h-3.5" />
+            <span>Τμήματα</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onTabChange?.("subjects")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+              activeTab === "subjects"
+                ? "bg-white text-zinc-900 shadow-2xs border border-zinc-200/60"
+                : "text-zinc-600 hover:text-zinc-900"
+            }`}
+          >
+            <BookOpen className="w-3.5 h-3.5" />
+            <span>Μαθήματα</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onTabChange?.("assignments")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+              activeTab === "assignments"
+                ? "bg-white text-zinc-900 shadow-2xs border border-zinc-200/60"
+                : "text-zinc-600 hover:text-zinc-900"
+            }`}
+          >
+            <CalendarDays className="w-3.5 h-3.5" />
+            <span>Αναθέσεις</span>
+          </button>
+        </div>
+
+        {/* Middle: Search & Filters Modal Trigger & Count */}
+        <div className="flex items-center gap-2 flex-1 max-w-md justify-center">
+          <div className="relative w-52 md:w-60">
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />
             <Input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Αναζήτηση τμήματος, υπεύθυνου, αίθουσας..."
-              className="pl-8.5 pr-7 h-8.5 text-xs bg-zinc-50 border-zinc-200 focus-visible:ring-1"
+              placeholder="Αναζήτηση τμήματος, αίθουσας..."
+              className="pl-8 pr-7 h-8 text-xs bg-zinc-50 border-zinc-200 focus-visible:ring-1"
             />
             {searchQuery && (
               <button
@@ -572,44 +634,35 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
             )}
           </div>
 
-          <div className="flex items-center gap-1.5">
-            <Filter className="w-3.5 h-3.5 text-zinc-400" />
-            <Select value={gradeFilter} onValueChange={(val) => val && setGradeFilter(val)}>
-              <SelectTrigger size="sm" className="h-8.5 text-xs bg-zinc-50 border-zinc-200 text-zinc-700 min-w-[130px]">
-                <SelectValue placeholder="Τάξη" />
-              </SelectTrigger>
-              <SelectContent className="bg-white border-zinc-200 text-zinc-800 z-[70] max-h-60">
-                <SelectItem value="all" className="text-xs">Όλες οι τάξεις</SelectItem>
-                {GRADES_LIST.map((g) => (
-                  <SelectItem key={g} value={g} className="text-xs">
-                    Τάξη {g}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsFilterModalOpen(true)}
+            className={`h-8 text-xs gap-1.5 border-zinc-200 font-medium ${
+              hasActiveFilters
+                ? "bg-zinc-900 text-white hover:bg-zinc-800 border-zinc-900 shadow-2xs"
+                : "bg-zinc-50 text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900"
+            }`}
+          >
+            <Filter className="w-3.5 h-3.5" />
+            <span>Φίλτρα</span>
+            {hasActiveFilters && (
+              <span className="px-1.5 py-0.2 bg-emerald-500 text-white font-bold rounded-full text-[10px]">
+                {activeFiltersCount}
+              </span>
+            )}
+          </Button>
 
-            <Select value={typeFilter} onValueChange={(val) => val && setTypeFilter(val)}>
-              <SelectTrigger size="sm" className="h-8.5 text-xs bg-zinc-50 border-zinc-200 text-zinc-700 min-w-[140px]">
-                <SelectValue placeholder="Πρόγραμμα" />
-              </SelectTrigger>
-              <SelectContent className="bg-white border-zinc-200 text-zinc-800 z-[70]">
-                <SelectItem value="all" className="text-xs">Όλα τα προγράμματα</SelectItem>
-                <SelectItem value="morning" className="text-xs">Μόνο Πρωινά</SelectItem>
-                <SelectItem value="allDay" className="text-xs">Μόνο Ολοήμερα</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <Badge variant="secondary" className="text-[11px] font-normal text-zinc-600 ml-1 py-1">
-            {filteredClasses.length} / {data.classes.length} τμήματα
-          </Badge>
+          <span className="text-[11px] font-medium text-zinc-500 whitespace-nowrap bg-zinc-100 px-2 py-1 rounded-md border border-zinc-200">
+            {filteredClasses.length} / {data.classes.length}
+          </span>
         </div>
 
         {/* Right: Actions */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 pr-10">
           {editingRowId && inlineData ? (
             /* Active Inline Editing Controls */
-            <div className="flex items-center gap-2 bg-emerald-50/80 border border-emerald-300 px-3 py-1.5 rounded-lg animate-in fade-in">
+            <div className="flex items-center gap-2 bg-emerald-50/90 border border-emerald-300 px-3 py-1 rounded-lg animate-in fade-in">
               <span className="text-xs font-semibold text-emerald-950 flex items-center gap-1.5">
                 {editingRowId === "__new__" ? (
                   <>
@@ -647,66 +700,69 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
             </div>
           ) : (
             /* Standard Action Buttons */
-            <div className="flex items-center gap-1 bg-zinc-100/80 p-1 rounded-lg border border-zinc-200/80">
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 bg-zinc-100/80 p-1 rounded-lg border border-zinc-200/80">
+                <Button
+                  onClick={() => {
+                    const target = data.classes.find((c) => c.id === selectedClassId);
+                    if (target) startInlineEdit(target);
+                    else toast.warning("Επιλέξτε ένα τμήμα από τον πίνακα.");
+                  }}
+                  disabled={!selectedClassId}
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs px-2.5 text-zinc-700 hover:text-zinc-900 disabled:opacity-40"
+                  title="Επεξεργασία στη γραμμή (ή διπλό κλικ)"
+                >
+                  <Edit2 className="w-3.5 h-3.5 mr-1.5 text-zinc-600" />
+                  Επεξεργασία
+                </Button>
+                <Button
+                  onClick={handleStartCopy}
+                  disabled={!selectedClassId}
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs px-2.5 text-zinc-700 hover:text-zinc-900 disabled:opacity-40"
+                  title="Αντιγραφή ρυθμίσεων σε νέα γραμμή"
+                >
+                  <Copy className="w-3.5 h-3.5 mr-1.5 text-zinc-600" />
+                  Αντιγραφή
+                </Button>
+                <Button
+                  onClick={promptDeleteClass}
+                  disabled={!selectedClassId}
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs px-2.5 text-red-600 hover:bg-red-50 hover:text-red-700 disabled:opacity-40"
+                  title="Διαγραφή επιλεγμένου τμήματος"
+                >
+                  <Trash2 className="w-3.5 h-3.5 mr-1 text-red-500" />
+                  Διαγραφή
+                </Button>
+              </div>
+
+              <div className="h-5 w-px bg-zinc-200" />
+
+              {/* Add Class Primary Button */}
               <Button
-                onClick={() => {
-                  const target = data.classes.find((c) => c.id === selectedClassId);
-                  if (target) startInlineEdit(target);
-                  else toast.warning("Επιλέξτε ένα τμήμα από τον πίνακα.");
-                }}
-                disabled={!selectedClassId}
-                variant="ghost"
+                onClick={handleStartNew}
                 size="sm"
-                className="h-7.5 text-xs px-2.5 text-zinc-700 hover:text-zinc-900 disabled:opacity-40"
-                title="Επεξεργασία στη γραμμή (ή διπλό κλικ)"
+                className="h-8 px-3.5 bg-zinc-900 hover:bg-zinc-800 text-white font-medium text-xs shadow-xs rounded-lg flex items-center gap-1.5"
+                title="Προσθήκη νέου τμήματος απευθείας στην 1η σειρά του πίνακα"
               >
-                <Edit2 className="w-3.5 h-3.5 mr-1.5 text-zinc-600" />
-                Επεξεργασία
-              </Button>
-              <Button
-                onClick={handleStartCopy}
-                disabled={!selectedClassId}
-                variant="ghost"
-                size="sm"
-                className="h-7.5 text-xs px-2.5 text-zinc-700 hover:text-zinc-900 disabled:opacity-40"
-                title="Αντιγραφή ρυθμίσεων σε νέα γραμμή"
-              >
-                <Copy className="w-3.5 h-3.5 mr-1.5 text-zinc-600" />
-                Αντιγραφή
-              </Button>
-              <Button
-                onClick={promptDeleteClass}
-                disabled={!selectedClassId}
-                variant="ghost"
-                size="sm"
-                className="h-7.5 text-xs px-2.5 text-red-600 hover:bg-red-50 hover:text-red-700 disabled:opacity-40"
-                title="Διαγραφή επιλεγμένου τμήματος"
-              >
-                <Trash2 className="w-3.5 h-3.5 mr-1 text-red-500" />
-                Διαγραφή
+                <Plus className="w-3.5 h-3.5" />
+                <span>+ Νέο Τμήμα</span>
               </Button>
             </div>
           )}
-
-          <div className="h-6 w-px bg-zinc-200 mx-1" />
-
-          {/* Add Class Primary Button */}
-          <Button
-            onClick={handleStartNew}
-            size="sm"
-            className="h-8.5 px-3.5 bg-zinc-900 hover:bg-zinc-800 text-white font-medium text-xs shadow-xs rounded-lg flex items-center gap-1.5"
-            title="Προσθήκη νέου τμήματος απευθείας στην 1η σειρά του πίνακα"
-          >
-            <Plus className="w-4 h-4" />
-            <span>+ Νέο Τμήμα</span>
-          </Button>
         </div>
       </div>
 
       {/* Main Full-Width Data Table */}
-      <div className="flex-1 bg-white border border-zinc-200 rounded-xl shadow-xs overflow-hidden flex flex-col">
-        <div className="flex-1 overflow-auto">
-          <table className="w-full text-left text-xs border-collapse">
+      <div className="flex-1 p-3 overflow-hidden flex flex-col min-h-0">
+        <div className="flex-1 bg-white border border-zinc-200 rounded-xl shadow-xs overflow-hidden flex flex-col">
+          <div className="flex-1 overflow-auto">
+            <table className="w-full text-left text-xs border-collapse">
             {/* Super Headers & Sub Headers */}
             <thead className="sticky top-0 z-20 bg-zinc-50 border-b border-zinc-200 text-zinc-600 shadow-2xs select-none">
               {/* Row 1: Super Headers Grouping */}
@@ -894,6 +950,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
           </table>
         </div>
       </div>
+    </div>
 
       {/* Custom Styled Delete Confirmation Dialog */}
       <Dialog
@@ -963,6 +1020,100 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
                   <span>Οριστική Διαγραφή</span>
                 </>
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Small Filter Modal (Dialog) */}
+      <Dialog open={isFilterModalOpen} onOpenChange={setIsFilterModalOpen}>
+        <DialogContent className="sm:max-w-md bg-white border-zinc-200 text-zinc-900 shadow-xl p-5 z-[80]">
+          <DialogHeader className="pb-2 border-b border-zinc-100">
+            <DialogTitle className="text-sm font-bold flex items-center gap-2">
+              <Filter className="w-4 h-4 text-zinc-700" />
+              <span>Φίλτρα Τμημάτων</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs text-zinc-500">
+              Επιλέξτε τάξη ή τύπο προγράμματος για να φιλτράρετε τα τμήματα.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-zinc-700">Τάξη</label>
+              <div className="flex items-center gap-1 bg-zinc-100 p-0.5 rounded-lg border border-zinc-200 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setGradeFilter("all")}
+                  className={`px-2.5 py-1 text-xs rounded-md transition-all ${
+                    gradeFilter === "all"
+                      ? "bg-zinc-900 text-white shadow-2xs font-semibold"
+                      : "text-zinc-600 hover:text-zinc-900 font-medium"
+                  }`}
+                >
+                  Όλες
+                </button>
+                {GRADES_LIST.map((g) => (
+                  <button
+                    key={g}
+                    type="button"
+                    onClick={() => setGradeFilter(g)}
+                    className={`flex-1 min-w-[36px] py-1 text-xs rounded-md transition-all ${
+                      gradeFilter === g
+                        ? "bg-zinc-900 text-white shadow-2xs font-bold"
+                        : "text-zinc-600 hover:text-zinc-900 font-medium"
+                    }`}
+                  >
+                    {g}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-zinc-700">Τύπος Προγράμματος</label>
+              <div className="flex items-center gap-1 bg-zinc-100 p-0.5 rounded-lg border border-zinc-200">
+                {[
+                  { value: "all", label: "Όλα" },
+                  { value: "morning", label: "Πρωινά" },
+                  { value: "allDay", label: "Ολοήμερα" },
+                ].map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setTypeFilter(opt.value)}
+                    className={`flex-1 py-1.5 text-xs rounded-md transition-all ${
+                      typeFilter === opt.value
+                        ? "bg-zinc-900 text-white shadow-2xs font-semibold"
+                        : "text-zinc-600 hover:text-zinc-900 font-medium"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="flex items-center justify-between pt-3 border-t border-zinc-100">
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={!hasActiveFilters}
+              onClick={() => {
+                setGradeFilter("all");
+                setTypeFilter("all");
+              }}
+              className="text-xs text-zinc-600 hover:text-zinc-900"
+            >
+              Επαναφορά
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => setIsFilterModalOpen(false)}
+              className="text-xs bg-zinc-900 hover:bg-zinc-800 text-white px-4"
+            >
+              Εφαρμογή
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -196,106 +196,40 @@ export default function Home() {
       >
         <SheetContent
           side="right"
-          className="!w-screen sm:!w-screen !max-w-none inset-0 rounded-none overflow-y-auto p-6"
+          className="!w-screen sm:!w-screen !max-w-none inset-0 rounded-none overflow-hidden p-0 flex flex-col bg-zinc-100/60 border-none"
         >
-          <SheetHeader className="pb-3 border-b border-zinc-200">
-            <div className="flex items-center justify-between pr-8">
-              {/* Left: Active Section Title */}
-              <SheetTitle className="text-base font-bold flex items-center gap-2">
-                {activeSheet === "teachers" && (
-                  <>
-                    <Users className="w-5 h-5 text-zinc-800" />
-                    <span>Εκπαιδευτικοί</span>
-                  </>
-                )}
-                {activeSheet === "classes" && (
-                  <>
-                    <GraduationCap className="w-5 h-5 text-zinc-800" />
-                    <span>Τμήματα</span>
-                  </>
-                )}
-                {activeSheet === "subjects" && (
-                  <>
-                    <BookOpen className="w-5 h-5 text-zinc-800" />
-                    <span>Μαθήματα</span>
-                  </>
-                )}
-                {activeSheet === "assignments" && (
-                  <>
-                    <CalendarDays className="w-5 h-5 text-zinc-800" />
-                    <span>Αναθέσεις</span>
-                  </>
-                )}
-              </SheetTitle>
-
-              {/* Right: Modern Tabs Switcher */}
-              <div className="flex items-center gap-1 bg-zinc-100 p-1 rounded-lg border border-zinc-200/80">
-                <button
-                  type="button"
-                  onClick={() => setActiveSheet("teachers")}
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold transition-all ${
-                    activeSheet === "teachers"
-                      ? "bg-white text-zinc-900 shadow-2xs"
-                      : "text-zinc-600 hover:text-zinc-900"
-                  }`}
-                >
-                  <Users className="w-3.5 h-3.5" />
-                  <span>Εκπαιδευτικοί</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveSheet("classes")}
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold transition-all ${
-                    activeSheet === "classes"
-                      ? "bg-white text-zinc-900 shadow-2xs"
-                      : "text-zinc-600 hover:text-zinc-900"
-                  }`}
-                >
-                  <GraduationCap className="w-3.5 h-3.5" />
-                  <span>Τμήματα</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveSheet("subjects")}
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold transition-all ${
-                    activeSheet === "subjects"
-                      ? "bg-white text-zinc-900 shadow-2xs"
-                      : "text-zinc-600 hover:text-zinc-900"
-                  }`}
-                >
-                  <BookOpen className="w-3.5 h-3.5" />
-                  <span>Μαθήματα</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveSheet("assignments")}
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold transition-all ${
-                    activeSheet === "assignments"
-                      ? "bg-white text-zinc-900 shadow-2xs"
-                      : "text-zinc-600 hover:text-zinc-900"
-                  }`}
-                >
-                  <CalendarDays className="w-3.5 h-3.5" />
-                  <span>Αναθέσεις</span>
-                </button>
-              </div>
-            </div>
-          </SheetHeader>
-
-          <div className="mt-4">
-            {activeSheet === "classes" && (
-              <ClassesManager data={data} onRefresh={loadData} />
-            )}
-            {activeSheet === "teachers" && (
-              <TeachersManager data={data} onRefresh={loadData} />
-            )}
-            {activeSheet === "subjects" && (
-              <SubjectsManager data={data} onRefresh={loadData} />
-            )}
-            {activeSheet === "assignments" && (
-              <AssignmentsManager data={data} onRefresh={loadData} />
-            )}
-          </div>
+          {activeSheet === "classes" && (
+            <ClassesManager
+              data={data}
+              onRefresh={loadData}
+              activeTab={activeSheet}
+              onTabChange={setActiveSheet}
+            />
+          )}
+          {activeSheet === "teachers" && (
+            <TeachersManager
+              data={data}
+              onRefresh={loadData}
+              activeTab={activeSheet}
+              onTabChange={setActiveSheet}
+            />
+          )}
+          {activeSheet === "subjects" && (
+            <SubjectsManager
+              data={data}
+              onRefresh={loadData}
+              activeTab={activeSheet}
+              onTabChange={setActiveSheet}
+            />
+          )}
+          {activeSheet === "assignments" && (
+            <AssignmentsManager
+              data={data}
+              onRefresh={loadData}
+              activeTab={activeSheet}
+              onTabChange={setActiveSheet}
+            />
+          )}
         </SheetContent>
       </Sheet>
     </div>
