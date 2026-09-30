@@ -662,9 +662,14 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
                     isResourceClass
                       ? "bg-purple-100 group-hover:bg-purple-200 text-purple-900 border-purple-300"
                       : "bg-zinc-100 group-hover:bg-zinc-200 text-zinc-900 border-zinc-300"
-                  } border-r-2 font-bold text-center select-none text-[11px]`}
+                  } border-r-2 font-bold text-center select-none`}
+                  title={cls.name}
                 >
-                  {cls.name}
+                  <div className="w-full max-h-[56px] overflow-hidden flex flex-col items-center justify-center text-center px-0.5 leading-[1.1] text-[10.5px]">
+                    <span className="w-full overflow-hidden text-clip break-words">
+                      {cls.name}
+                    </span>
+                  </div>
                 </td>
 
                 {/* 50 period cells */}

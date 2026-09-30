@@ -1,16 +1,16 @@
 export const DEMO_CLASSES = [
-  { id: "cls-a1", name: "Α1", grade: "Α", supportHoursMin: 2, supportHoursMax: 4, orderIndex: 1 },
-  { id: "cls-a2", name: "Α2", grade: "Α", supportHoursMin: 2, supportHoursMax: 3, orderIndex: 2 },
-  { id: "cls-b1", name: "Β1", grade: "Β", supportHoursMin: 2, supportHoursMax: 4, orderIndex: 3 },
-  { id: "cls-b2", name: "Β2", grade: "Β", supportHoursMin: 1, supportHoursMax: 3, orderIndex: 4 },
-  { id: "cls-g1", name: "Γ1", grade: "Γ", supportHoursMin: 2, supportHoursMax: 4, orderIndex: 5 },
-  { id: "cls-g2", name: "Γ2", grade: "Γ", supportHoursMin: 2, supportHoursMax: 3, orderIndex: 6 },
-  { id: "cls-d1", name: "Δ1", grade: "Δ", supportHoursMin: 2, supportHoursMax: 4, orderIndex: 7 },
-  { id: "cls-d2", name: "Δ2", grade: "Δ", supportHoursMin: 1, supportHoursMax: 3, orderIndex: 8 },
-  { id: "cls-e1", name: "Ε1", grade: "Ε", supportHoursMin: 2, supportHoursMax: 4, orderIndex: 9 },
-  { id: "cls-st1", name: "ΣΤ1", grade: "ΣΤ", supportHoursMin: 2, supportHoursMax: 4, orderIndex: 10 },
-  { id: "cls-st2", name: "ΣΤ2", grade: "ΣΤ", supportHoursMin: 2, supportHoursMax: 4, orderIndex: 11 },
-  { id: "cls-te", name: "Τ.Ε.", grade: "Ειδικό", supportHoursMin: 0, supportHoursMax: 0, orderIndex: 12 },
+  { id: "cls-a1", name: "Α1", grade: "Α", supportHoursMin: 2, supportHoursMax: 4, orderIndex: 1, color: "#3b82f6" },
+  { id: "cls-a2", name: "Α2", grade: "Α", supportHoursMin: 2, supportHoursMax: 3, orderIndex: 2, color: "#10b981" },
+  { id: "cls-b1", name: "Β1", grade: "Β", supportHoursMin: 2, supportHoursMax: 4, orderIndex: 3, color: "#f97316" },
+  { id: "cls-b2", name: "Β2", grade: "Β", supportHoursMin: 1, supportHoursMax: 3, orderIndex: 4, color: "#7c3aed" },
+  { id: "cls-g1", name: "Γ1", grade: "Γ", supportHoursMin: 2, supportHoursMax: 4, orderIndex: 5, color: "#ec4899" },
+  { id: "cls-g2", name: "Γ2", grade: "Γ", supportHoursMin: 2, supportHoursMax: 3, orderIndex: 6, color: "#06b6d4" },
+  { id: "cls-d1", name: "Δ1", grade: "Δ", supportHoursMin: 2, supportHoursMax: 4, orderIndex: 7, color: "#eab308" },
+  { id: "cls-d2", name: "Δ2", grade: "Δ", supportHoursMin: 1, supportHoursMax: 3, orderIndex: 8, color: "#ef4444" },
+  { id: "cls-e1", name: "Ε1", grade: "Ε", supportHoursMin: 2, supportHoursMax: 4, orderIndex: 9, color: "#14b8a6" },
+  { id: "cls-st1", name: "ΣΤ1", grade: "ΣΤ", supportHoursMin: 2, supportHoursMax: 4, orderIndex: 10, color: "#9f1239" },
+  { id: "cls-st2", name: "ΣΤ2", grade: "ΣΤ", supportHoursMin: 2, supportHoursMax: 4, orderIndex: 11, color: "#84cc16" },
+  { id: "cls-te", name: "Τ.Ε.", grade: "Ειδικό", supportHoursMin: 0, supportHoursMax: 0, orderIndex: 12, color: "#4338ca" },
 ];
 
 export const DEMO_TEACHERS = [
@@ -51,11 +51,186 @@ export const DEMO_TEACHERS = [
   { id: "tch-xry", lastName: "Χρυσάφη", firstName: "Αθηνά", shortName: "ΧΡΥ", specialty: "ΠΕ71", isSupport: false, isTeaching: true, isOnCall: false, isMorning: true, isAllDay: false, isActive: true, maxWeeklyHours: 24, color: "#ecfccb" },
 ];
 
+export interface DemoAssignment {
+  id: string;
+  teacherId: string;
+  subjectId: string;
+  subGroupId: string;
+  hours: number;
+  isAllDay: boolean;
+  isSupport?: boolean;
+}
+
+export function generateFullSchoolAssignments(
+  classesList?: {
+    id: string;
+    name: string;
+    grade?: string;
+    orderIndex?: number;
+    headTeacherId?: string | null;
+    isAllDay?: boolean | null;
+  }[],
+  subGroupsList?: { id: string; classId: string; isDefault?: boolean | null }[]
+): DemoAssignment[] {
+  const assignments: DemoAssignment[] = [];
+  let asgId = 1;
+
+  if (!classesList || classesList.length === 0) return [];
+
+  const getSubGroupId = (classId: string) => {
+    if (subGroupsList && subGroupsList.length > 0) {
+      const sg = subGroupsList.find((s) => s.classId === classId && s.isDefault);
+      if (sg) return sg.id;
+      const anySg = subGroupsList.find((s) => s.classId === classId);
+      if (anySg) return anySg.id;
+    }
+    return `grp-${classId}-main`;
+  };
+
+  const morningClasses = classesList.filter((c) => !c.isAllDay);
+  const allDayClasses = classesList.filter((c) => c.isAllDay);
+
+  // 1. Morning Classes: 30 hours per class
+  morningClasses.forEach((cls, idx) => {
+    const sgId = getSubGroupId(cls.id);
+    const headTchId = cls.headTeacherId || "tch-pap";
+
+    // Main Class Teacher: 21 hours
+    assignments.push({
+      id: `asg-${asgId++}`,
+      teacherId: headTchId,
+      subjectId: "sub-glossa",
+      subGroupId: sgId,
+      hours: 21,
+      isAllDay: false,
+    });
+
+    // English: 2 hours (tch-pal)
+    assignments.push({
+      id: `asg-${asgId++}`,
+      teacherId: "tch-pal",
+      subjectId: "sub-aggli",
+      subGroupId: sgId,
+      hours: 2,
+      isAllDay: false,
+    });
+
+    // Music: 1 hour (rotate tch-krg, tch-lan)
+    const musicTeacher = idx % 2 === 0 ? "tch-krg" : "tch-lan";
+    assignments.push({
+      id: `asg-${asgId++}`,
+      teacherId: musicTeacher,
+      subjectId: "sub-mousiki",
+      subGroupId: sgId,
+      hours: 1,
+      isAllDay: false,
+    });
+
+    // Arts: 1 hour (tch-tsa)
+    assignments.push({
+      id: `asg-${asgId++}`,
+      teacherId: "tch-tsa",
+      subjectId: "sub-eikast",
+      subGroupId: sgId,
+      hours: 1,
+      isAllDay: false,
+    });
+
+    // PE: 3 hours (rotate tch-gki, tch-hli, tch-mpe)
+    const peTeachers = ["tch-gki", "tch-hli", "tch-mpe"];
+    const peTeacher = peTeachers[idx % peTeachers.length];
+    assignments.push({
+      id: `asg-${asgId++}`,
+      teacherId: peTeacher,
+      subjectId: "sub-gymn",
+      subGroupId: sgId,
+      hours: 3,
+      isAllDay: false,
+    });
+
+    // Theater: 1 hour (tch-mpt)
+    assignments.push({
+      id: `asg-${asgId++}`,
+      teacherId: "tch-mpt",
+      subjectId: "sub-theatro",
+      subGroupId: sgId,
+      hours: 1,
+      isAllDay: false,
+    });
+
+    // ICT: 1 hour (rotate tch-atl, tch-dhm, tch-kat)
+    const ictTeachers = ["tch-atl", "tch-dhm", "tch-kat"];
+    const ictTeacher = ictTeachers[idx % ictTeachers.length];
+    assignments.push({
+      id: `asg-${asgId++}`,
+      teacherId: ictTeacher,
+      subjectId: "sub-tpe",
+      subGroupId: sgId,
+      hours: 1,
+      isAllDay: false,
+    });
+  });
+
+  // 2. All-Day Classes: 20 hours per class
+  allDayClasses.forEach((cls) => {
+    const sgId = getSubGroupId(cls.id);
+    const allDayTchId = cls.headTeacherId && !morningClasses.some((m) => m.headTeacherId === cls.headTeacherId)
+      ? cls.headTeacherId
+      : "tch-kld";
+
+    assignments.push({
+      id: `asg-${asgId++}`,
+      teacherId: allDayTchId,
+      subjectId: "sub-meleti",
+      subGroupId: sgId,
+      hours: 20,
+      isAllDay: true,
+    });
+  });
+
+  // 3. Support Specialists (Layer 2)
+  if (morningClasses.length > 0) {
+    assignments.push({
+      id: `asg-${asgId++}`,
+      teacherId: "tch-vai",
+      subjectId: "sub-logo",
+      subGroupId: getSubGroupId(morningClasses[0].id),
+      hours: 3,
+      isAllDay: false,
+      isSupport: true,
+    });
+    if (morningClasses.length > 1) {
+      assignments.push({
+        id: `asg-${asgId++}`,
+        teacherId: "tch-emm",
+        subjectId: "sub-ergo",
+        subGroupId: getSubGroupId(morningClasses[1].id),
+        hours: 3,
+        isAllDay: false,
+        isSupport: true,
+      });
+    }
+    if (morningClasses.length > 2) {
+      assignments.push({
+        id: `asg-${asgId++}`,
+        teacherId: "tch-kio",
+        subjectId: "sub-psycho",
+        subGroupId: getSubGroupId(morningClasses[2].id),
+        hours: 2,
+        isAllDay: false,
+        isSupport: true,
+      });
+    }
+  }
+
+  return assignments;
+}
+
 export interface RawMatrixSlot {
   classId: string;
   day: number;
   period: number;
-  teachers: string[]; // ["tch-pap"] or ["tch-pap", "tch-swt"]
+  teachers: string[];
   subjectId?: string;
 }
 

@@ -130,3 +130,29 @@ export function getTeacherTileStyle(teacherOrHex?: { color?: string } | string |
     borderColor: "#eab308",
   };
 }
+
+/** 15 Maximally-spaced distinct colors for Classes */
+export const CLASS_15_PALETTE: readonly PaletteColor[] = [
+  { hex: "#3b82f6", name: "Μπλε", group: "Μπλε", textColor: "#ffffff", borderColor: "#1d4ed8" },
+  { hex: "#10b981", name: "Σμαραγδί", group: "Πράσινο", textColor: "#ffffff", borderColor: "#047857" },
+  { hex: "#f97316", name: "Πορτοκαλί", group: "Πορτοκαλί", textColor: "#ffffff", borderColor: "#c2410c" },
+  { hex: "#7c3aed", name: "Βιολετί", group: "Μωβ", textColor: "#ffffff", borderColor: "#5b21b6" },
+  { hex: "#ec4899", name: "Ροζ / Φούξια", group: "Ροζ", textColor: "#ffffff", borderColor: "#be185d" },
+  { hex: "#06b6d4", name: "Κυανό / Ocean", group: "Σιέλ", textColor: "#ffffff", borderColor: "#0e7490" },
+  { hex: "#eab308", name: "Κίτρινο Χρυσό", group: "Κίτρινο", textColor: "#713f12", borderColor: "#a16207" },
+  { hex: "#ef4444", name: "Κόκκινο", group: "Κόκκινο", textColor: "#ffffff", borderColor: "#b91c1c" },
+  { hex: "#14b8a6", name: "Τιρκουάζ", group: "Τιρκουάζ", textColor: "#ffffff", borderColor: "#0f766e" },
+  { hex: "#9f1239", name: "Μπορντό / Βαθύ Κερασί", group: "Κόκκινο", textColor: "#ffffff", borderColor: "#881337" },
+  { hex: "#84cc16", name: "Λάιμ", group: "Λάιμ", textColor: "#365314", borderColor: "#4d7c0f" },
+  { hex: "#4338ca", name: "Indigo / Ναυτικό", group: "Indigo", textColor: "#ffffff", borderColor: "#312e81" },
+  { hex: "#b45309", name: "Κεχριμπάρι / Χάλκινο", group: "Πορτοκαλί", textColor: "#ffffff", borderColor: "#78350f" },
+  { hex: "#059669", name: "Πράσινο Δάσους", group: "Πράσινο", textColor: "#ffffff", borderColor: "#064e3b" },
+  { hex: "#64748b", name: "Slate / Ατσάλι", group: "Slate", textColor: "#ffffff", borderColor: "#334155" },
+] as const;
+
+export function getClassPaletteColorByHex(hex?: string | null): PaletteColor | undefined {
+  if (!hex) return undefined;
+  const clean = hex.trim().toLowerCase();
+  return CLASS_15_PALETTE.find((c) => c.hex.toLowerCase() === clean);
+}
+

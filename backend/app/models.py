@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field
 
 class TeacherConstraints(BaseModel):
     availability: Optional[Dict[str, List[bool]]] = None  # day_index string -> list of booleans per period
+    availableDays: Optional[List[int]] = None  # list of day indices [0..4]
     maxHoursPerDay: Optional[int] = None
     minHoursPerDay: Optional[int] = None
     maxConsecutiveHours: Optional[int] = None

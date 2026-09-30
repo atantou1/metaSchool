@@ -42,24 +42,27 @@ import {
   getSpecialtyByCode,
   findSpecialty,
 } from "@/lib/specialties";
+import { ClassColorPicker } from "@/components/class-color-picker";
+import {
+  CLASS_15_PALETTE,
+  getClassPaletteColorByHex,
+} from "@/lib/palette";
 
 interface ClassesManagerProps {
   data: TimetableData;
   onRefresh: () => void;
 }
 
-const CLASS_PALETTE = [
-  "#3b82f6", "#10b981", "#6366f1", "#ec4899", "#f59e0b",
-  "#8b5cf6", "#14b8a6", "#f97316", "#0284c7", "#059669",
-  "#d97706", "#dc2626", "#71717a",
-];
+const CLASS_PALETTE = CLASS_15_PALETTE.map((c) => c.hex);
 
-export const SUPPORT_SPECIALTIES_LIST = getSupportSpecialties("primary").map((s) => ({
-  code: s.code,
-  short: s.shortCode || s.code,
-  name: s.name,
-  color: s.color || "bg-zinc-100 text-zinc-800 border-zinc-300",
-}));
+export const SUPPORT_SPECIALTIES_LIST = getSupportSpecialties("primary")
+  .filter((s) => s.code !== "ΠΕ25")
+  .map((s) => ({
+    code: s.code,
+    short: s.shortCode || s.code,
+    name: s.name,
+    color: s.color || "bg-zinc-100 text-zinc-800 border-zinc-300",
+  }));
 
 const GRADES_LIST = ["Α", "Β", "Γ", "Δ", "Ε", "ΣΤ", "Ολοήμερο", "Ειδικό"];
 
@@ -74,7 +77,6 @@ interface InlineClassEditState {
   room: string;
   isAllDay: boolean;
   supportSpecialties: string[];
-  weeklyHoursTarget: number | "";
 }
 
 export const ClassesManager: React.FC<ClassesManagerProps> = ({
@@ -109,17 +111,6 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
     return map;
   }, [data.subGroups]);
 
-  // Calculate assigned hours per class
-  const classHoursMap = useMemo(() => {
-    const map = new Map<string, number>();
-    data.assignments.forEach((asg) => {
-      const clsId = subGroupToClassMap.get(asg.subGroupId);
-      if (clsId) {
-        map.set(clsId, (map.get(clsId) || 0) + (asg.hours || 0));
-      }
-    });
-    return map;
-  }, [data.assignments, subGroupToClassMap]);
 
   // Calculate assignments count per class
   const classAssignmentsCountMap = useMemo(() => {
@@ -182,7 +173,11 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
 
   // Start creating new class draft in row 1
   const handleStartNew = () => {
-    const nextColor = CLASS_PALETTE[data.classes.length % CLASS_PALETTE.length];
+    const usedColors = data.classes.map((c) => c.color?.toLowerCase()).filter(Boolean);
+    const nextColor =
+      CLASS_15_PALETTE.find((c) => !usedColors.includes(c.hex.toLowerCase()))?.hex ||
+      CLASS_15_PALETTE[data.classes.length % CLASS_15_PALETTE.length].hex;
+
     setInlineData({
       name: "",
       shortName: "",
@@ -193,7 +188,6 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
       room: `Αίθουσα ${data.classes.length + 1}`,
       isAllDay: false,
       supportSpecialties: [],
-      weeklyHoursTarget: 30,
     });
     setEditingRowId("__new__");
     setSelectedClassId(null);
@@ -217,7 +211,6 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
       room: target.room || "",
       isAllDay: target.isAllDay || false,
       supportSpecialties: target.supportSpecialties || [],
-      weeklyHoursTarget: target.weeklyHoursTarget || 30,
     });
     setEditingRowId("__new__");
     setSelectedClassId(null);
@@ -239,7 +232,6 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
       room: cls.room || "",
       isAllDay: cls.isAllDay || false,
       supportSpecialties: cls.supportSpecialties || [],
-      weeklyHoursTarget: cls.weeklyHoursTarget !== undefined ? cls.weeklyHoursTarget : 30,
     });
     setEditingRowId(cls.id);
     setSelectedClassId(cls.id);
@@ -272,7 +264,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
       room: inlineData.room.trim() || null,
       isAllDay: inlineData.isAllDay,
       supportSpecialties: inlineData.supportSpecialties,
-      weeklyHoursTarget: inlineData.weeklyHoursTarget === "" ? 30 : Number(inlineData.weeklyHoursTarget),
+      weeklyHoursTarget: inlineData.isAllDay ? 20 : 30,
     };
 
     try {
@@ -386,12 +378,13 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
       >
         {/* Color Picker */}
         <td className="py-2 px-2 text-center">
-          <input
-            type="color"
+          <ClassColorPicker
             value={inlineData.color}
-            onChange={(e) => setInlineData({ ...inlineData, color: e.target.value })}
-            className="w-5 h-5 rounded-full border border-black/20 cursor-pointer p-0 bg-transparent mx-auto"
-            title="Χρώμα τμήματος (για το ατομικό πρόγραμμα εκπαιδευτικού)"
+            onChange={(hex) => setInlineData({ ...inlineData, color: hex })}
+            usedColors={data.classes
+              .filter((c) => c.id !== inlineData.id)
+              .map((c) => c.color)
+              .filter(Boolean) as string[]}
           />
         </td>
 
@@ -529,7 +522,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
         </td>
 
         {/* Supportive Specialties Multi-toggle Chips */}
-        <td className="py-1.5 px-2 border-r border-zinc-200">
+        <td className="py-1.5 px-2">
           <div className="flex items-center gap-1 flex-wrap">
             {SUPPORT_SPECIALTIES_LIST.map((spec) => {
               const isActive = inlineData.supportSpecialties.includes(spec.code);
@@ -550,28 +543,6 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
               );
             })}
           </div>
-        </td>
-
-        {/* Weekly Hours Target */}
-        <td className="py-1.5 px-2 text-center">
-          <Input
-            type="number"
-            min={1}
-            max={40}
-            value={inlineData.weeklyHoursTarget}
-            onChange={(e) =>
-              setInlineData({
-                ...inlineData,
-                weeklyHoursTarget: e.target.value === "" ? "" : Number(e.target.value),
-              })
-            }
-            className={`h-7 text-xs w-16 bg-white ${isNewDraft ? "border-emerald-400" : "border-sky-300"} font-mono font-bold text-center px-1 mx-auto`}
-          />
-        </td>
-
-        {/* Assigned Hours Display (Read-only during edit) */}
-        <td className="py-1.5 px-2 text-center text-zinc-400 font-mono text-xs">
-          —
         </td>
       </tr>
     );
@@ -746,11 +717,8 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
                 <th colSpan={3} className="py-2 px-3 border-r border-zinc-200 bg-zinc-100/80 text-center">
                   ΡΟΛΟΙ & ΧΩΡΟΣ
                 </th>
-                <th colSpan={1} className="py-2 px-3 border-r border-zinc-200 bg-zinc-100/80 text-center">
+                <th colSpan={1} className="py-2 px-3 bg-zinc-100/80 text-center">
                   ΣΥΜΠΛΗΡΩΜΑΤΙΚΕΣ ΕΙΔΙΚΟΤΗΤΕΣ
-                </th>
-                <th colSpan={2} className="py-2 px-3 bg-zinc-100/80 text-center">
-                  ΩΡΟΛΟΓΙΟ ΠΡΟΓΡΑΜΜΑ & ΚΑΛΥΨΗ
                 </th>
               </tr>
 
@@ -766,12 +734,9 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
                 <th className="py-2.5 px-2 w-24 text-center" title="Πρόγραμμα (Πρωινό / Ολοήμερο)">Πρόγραμμα</th>
                 <th className="py-2.5 px-2.5 w-32 border-r border-zinc-200" title="Αίθουσα αναφοράς">Αίθουσα</th>
 
-                <th className="py-2.5 px-3 min-w-[200px] border-r border-zinc-200 text-center" title="Υποστηρικτικές ειδικότητες που δικαιούται το τμήμα (Λογοθεραπεία, Εργοθεραπεία, κ.λπ.)">
+                <th className="py-2.5 px-3 min-w-[200px] text-center" title="Υποστηρικτικές ειδικότητες που δικαιούται το τμήμα (Λογοθεραπεία, Εργοθεραπεία, κ.λπ.)">
                   Ειδικότητες Στήριξης
                 </th>
-
-                <th className="py-2.5 px-2.5 w-24 text-center" title="Εβδομαδιαίο διδακτικό ωράριο τμήματος">Στόχος Ωρών</th>
-                <th className="py-2.5 px-2.5 w-28 text-center" title="Ανατεθειμένες ώρες / Σύνολο">Κάλυψη</th>
               </tr>
             </thead>
 
@@ -783,9 +748,6 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
               {filteredClasses.map((cls) => {
                 const isSelected = selectedClassId === cls.id;
                 const isEditing = editingRowId === cls.id && inlineData !== null;
-                const assignedHours = classHoursMap.get(cls.id) || 0;
-                const targetHours = cls.weeklyHoursTarget || 30;
-                const isFullyCovered = assignedHours >= targetHours;
                 const headTeacher = cls.headTeacherId ? teachersMap.get(cls.headTeacherId) : null;
                 const displayShortName = normalizeGreekUpper(cls.shortName || cls.name);
                 const specialtiesList = cls.supportSpecialties || [];
@@ -814,7 +776,9 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
                       <div
                         className="w-4 h-4 rounded-full border border-black/10 mx-auto shadow-2xs"
                         style={{ backgroundColor: cls.color || "#3b82f6" }}
-                        title="Χρώμα τμήματος"
+                        title={`Χρώμα τμήματος: ${
+                          getClassPaletteColorByHex(cls.color)?.name || cls.color || "Μπλε"
+                        }`}
                       />
                     </td>
 
@@ -878,7 +842,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
                     </td>
 
                     {/* Supportive Specialties */}
-                    <td className="py-2.5 px-3 border-r border-zinc-100 text-center">
+                    <td className="py-2.5 px-3 text-center">
                       {specialtiesList.length > 0 ? (
                         <div className="flex items-center justify-center gap-1 flex-wrap">
                           {specialtiesList.map((code) => {
@@ -907,33 +871,13 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
                         <span className="text-zinc-300 text-[11px]">—</span>
                       )}
                     </td>
-
-                    {/* Target Hours */}
-                    <td className="py-2.5 px-2.5 text-center font-mono text-zinc-700 font-semibold bg-zinc-50/50">
-                      {targetHours}ω
-                    </td>
-
-                    {/* Coverage / Assigned Hours */}
-                    <td className="py-2.5 px-2.5 text-center font-mono">
-                      <span
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold ${
-                          isFullyCovered
-                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                            : assignedHours > 0
-                            ? "bg-amber-50 text-amber-700 border border-amber-200"
-                            : "bg-zinc-100 text-zinc-500 border border-zinc-200"
-                        }`}
-                      >
-                        {assignedHours} / {targetHours}ω
-                      </span>
-                    </td>
                   </tr>
                 );
               })}
 
               {filteredClasses.length === 0 && editingRowId !== "__new__" && (
                 <tr>
-                  <td colSpan={11} className="py-12 text-center text-zinc-500">
+                  <td colSpan={9} className="py-12 text-center text-zinc-500">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <Search className="w-8 h-8 text-zinc-300" />
                       <p className="font-medium text-sm text-zinc-700">Δεν βρέθηκαν τμήματα</p>

@@ -6,7 +6,7 @@ import path from "path";
 import {
   DEMO_CLASSES,
   DEMO_TEACHERS,
-  PROTOTYPE_RAW_MATRIX,
+  generateFullSchoolAssignments,
 } from "./seed-demo-matrix";
 
 export async function initializeDatabase() {
@@ -142,44 +142,21 @@ export async function initializeDatabase() {
     }
   }
 
-  // Check if lesson assignments & timetable slots exist
-  const existingSlots = await db.select().from(schema.timetableSlots).limit(1);
-  if (existingSlots.length === 0) {
-    console.log("Seeding prototype timetable slots & assignments...");
-    let slotCounter = 1;
-    let asgCounter = 1;
+  // Check if lesson assignments exist
+  const existingAssignments = await db.select().from(schema.lessonAssignments).limit(1);
+  if (existingAssignments.length === 0) {
+    console.log("Seeding full school curriculum assignments...");
+    const fullAssignments = generateFullSchoolAssignments();
 
-    for (const item of PROTOTYPE_RAW_MATRIX) {
-      for (const teacherId of item.teachers) {
-        const asgId = `asg-demo-${asgCounter++}`;
-        const slotId = `slot-demo-${slotCounter++}`;
-        const isSupport = teacherId === "tch-swt";
-        const subjectId = isSupport ? "sub-logo" : "sub-glossa";
-
-        // Create assignment record
-        await db.insert(schema.lessonAssignments).values({
-          id: asgId,
-          teacherId,
-          subjectId,
-          subGroupId: `grp-${item.classId}-main`,
-          hours: 1,
-          isAllDay: item.period >= 6,
-        });
-
-        // Create slot record
-        await db.insert(schema.timetableSlots).values({
-          id: slotId,
-          day: item.day,
-          period: item.period,
-          assignmentId: asgId,
-          classId: item.classId,
-          subGroupId: `grp-${item.classId}-main`,
-          teacherId,
-          subjectId,
-          isSupport,
-          layer: isSupport ? 2 : 1,
-        });
-      }
+    for (const asg of fullAssignments) {
+      await db.insert(schema.lessonAssignments).values({
+        id: asg.id,
+        teacherId: asg.teacherId,
+        subjectId: asg.subjectId,
+        subGroupId: asg.subGroupId,
+        hours: asg.hours,
+        isAllDay: asg.isAllDay,
+      });
     }
   }
 
