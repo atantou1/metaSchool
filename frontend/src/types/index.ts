@@ -31,6 +31,9 @@ export interface Subject {
   title: string;
   code: string;
   color: string;
+  allowedSpecialties?: string[] | null; // e.g. ["ΠΕ70", "ΠΕ71"]
+  defaultSpecialty?: string | null;
+  weeklyHoursByGrade?: Record<string, [number, number] | number> | null;
 }
 
 export interface ClassEntity {

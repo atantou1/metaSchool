@@ -13,6 +13,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -33,9 +38,9 @@ import {
   Users,
   AlertTriangle,
   Loader2,
-  Sparkles,
   BookOpen,
   CalendarDays,
+  ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { normalizeGreekUpper } from "./teachers-manager";
@@ -56,8 +61,6 @@ interface ClassesManagerProps {
   activeTab?: "teachers" | "classes" | "subjects" | "assignments";
   onTabChange?: (tab: "teachers" | "classes" | "subjects" | "assignments") => void;
 }
-
-const CLASS_PALETTE = CLASS_15_PALETTE.map((c) => c.hex);
 
 export const SUPPORT_SPECIALTIES_LIST = getSupportSpecialties("primary")
   .filter((s) => s.code !== "ΠΕ25")
@@ -83,6 +86,365 @@ interface InlineClassEditState {
   supportSpecialties: string[];
 }
 
+interface RangeFilterPopoverProps {
+  title: string;
+  min: number;
+  max: number;
+  step?: number;
+  unit?: string;
+  value: [number, number] | null;
+  onChange: (value: [number, number] | null) => void;
+  presets?: { label: string; range: [number, number] }[];
+  className?: string;
+}
+
+const RangeFilterPopover: React.FC<RangeFilterPopoverProps> = ({
+  title,
+  min,
+  max,
+  step = 1,
+  unit = "",
+  value,
+  onChange,
+  presets,
+  className = "",
+}) => {
+  const isCustomActive = value !== null && !(value[0] === min && value[1] === max);
+  const low = value ? value[0] : min;
+  const high = value ? value[1] : max;
+
+  const [localLow, setLocalLow] = useState(low);
+  const [localHigh, setLocalHigh] = useState(high);
+  const [activeDrag, setActiveDrag] = useState<"low" | "high" | null>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setLocalLow(value ? value[0] : min);
+    setLocalHigh(value ? value[1] : max);
+  }, [value, min, max]);
+
+  const commitRange = (newLow: number, newHigh: number) => {
+    const clLow = Math.max(min, Math.min(newLow, max));
+    const clHigh = Math.max(min, Math.min(newHigh, max));
+    const finalLow = Math.min(clLow, clHigh);
+    const finalHigh = Math.max(clLow, clHigh);
+    setLocalLow(finalLow);
+    setLocalHigh(finalHigh);
+    if (finalLow === min && finalHigh === max) {
+      onChange(null);
+    } else {
+      onChange([finalLow, finalHigh]);
+    }
+  };
+
+  const displayText = useMemo(() => {
+    if (!isCustomActive) return "Αδιαφ.";
+    if (low === high) return `${low}${unit}`;
+    return `${low}-${high}${unit}`;
+  }, [isCustomActive, low, high, unit]);
+
+  const leftPercent = ((localLow - min) / (max - min)) * 100;
+  const rightPercent = ((localHigh - min) / (max - min)) * 100;
+
+  // Convert clientX to stepped value
+  const getValueFromPointer = (clientX: number) => {
+    if (!trackRef.current) return min;
+    const rect = trackRef.current.getBoundingClientRect();
+    if (rect.width <= 0) return min;
+    const pos = (clientX - rect.left) / rect.width;
+    const clampedPos = Math.max(0, Math.min(1, pos));
+    const rawVal = min + clampedPos * (max - min);
+    const steppedVal = Math.round((rawVal - min) / step) * step + min;
+    return Math.max(min, Math.min(max, steppedVal));
+  };
+
+  // Drag thumb
+  const startDrag = (type: "low" | "high", e: React.PointerEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setActiveDrag(type);
+
+    let curLow = localLow;
+    let curHigh = localHigh;
+
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      const val = getValueFromPointer(moveEvent.clientX);
+      if (type === "low") {
+        const nextLow = Math.min(val, curHigh);
+        curLow = nextLow;
+        commitRange(nextLow, curHigh);
+      } else {
+        const nextHigh = Math.max(val, curLow);
+        curHigh = nextHigh;
+        commitRange(curLow, nextHigh);
+      }
+    };
+
+    const onPointerUp = () => {
+      setActiveDrag(null);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerUp);
+    };
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerUp);
+  };
+
+  // Track click & drag
+  const handleTrackPointerDown = (e: React.PointerEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const val = getValueFromPointer(e.clientX);
+    const distLow = Math.abs(val - localLow);
+    const distHigh = Math.abs(val - localHigh);
+    const chosenType: "low" | "high" = distLow <= distHigh ? "low" : "high";
+
+    setActiveDrag(chosenType);
+    let curLow = localLow;
+    let curHigh = localHigh;
+
+    if (chosenType === "low") {
+      const nextLow = Math.min(val, curHigh);
+      curLow = nextLow;
+      commitRange(nextLow, curHigh);
+    } else {
+      const nextHigh = Math.max(val, curLow);
+      curHigh = nextHigh;
+      commitRange(curLow, nextHigh);
+    }
+
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      const moveVal = getValueFromPointer(moveEvent.clientX);
+      if (chosenType === "low") {
+        const nextLow = Math.min(moveVal, curHigh);
+        curLow = nextLow;
+        commitRange(nextLow, curHigh);
+      } else {
+        const nextHigh = Math.max(moveVal, curLow);
+        curHigh = nextHigh;
+        commitRange(curLow, nextHigh);
+      }
+    };
+
+    const onPointerUp = () => {
+      setActiveDrag(null);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerUp);
+    };
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerUp);
+  };
+
+  return (
+    <Popover>
+      <PopoverTrigger
+        type="button"
+        className={`w-full h-7 text-[11px] px-1 justify-center rounded-md shadow-2xs transition-all flex items-center border cursor-pointer ${
+          isCustomActive
+            ? "bg-indigo-50 border-indigo-400 text-indigo-950 font-bold ring-1 ring-indigo-300/60"
+            : "bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-50"
+        } ${className}`}
+        title={`Φίλτρο: ${title} (${displayText})`}
+      >
+        <span className="truncate">{displayText}</span>
+        <ChevronDown className="w-3 h-3 shrink-0 opacity-40 ml-0.5" />
+      </PopoverTrigger>
+
+      <PopoverContent
+        align="center"
+        className="w-64 p-3 shadow-xl border border-zinc-200 bg-white text-xs z-50 rounded-xl animate-in fade-in"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between pb-2 mb-2 border-b border-zinc-100">
+          <span className="font-bold text-zinc-800 text-[11px] truncate">{title}</span>
+          {isCustomActive ? (
+            <button
+              type="button"
+              onClick={() => {
+                setLocalLow(min);
+                setLocalHigh(max);
+                onChange(null);
+              }}
+              className="text-[10.5px] text-red-600 hover:text-red-700 font-semibold cursor-pointer underline underline-offset-2"
+            >
+              Καθαρισμός
+            </button>
+          ) : (
+            <span className="text-[10px] text-zinc-400 font-medium">Αδιάφορο</span>
+          )}
+        </div>
+
+        {/* Current Active Range Tag Badge */}
+        <div className="flex items-center justify-center mb-3">
+          <div className="px-2.5 py-1 rounded-md bg-indigo-50 border border-indigo-200 text-indigo-950 font-mono text-xs font-bold shadow-2xs flex items-center gap-1.5">
+            {localLow === localHigh ? (
+              <span>{localLow}{unit} <span className="text-[10px] font-sans font-normal text-indigo-600">(ακριβώς)</span></span>
+            ) : localLow === min && localHigh === max ? (
+              <span className="text-zinc-500 font-sans font-medium text-[11px]">Όλες οι τιμές ({min} - {max}{unit})</span>
+            ) : (
+              <span>{localLow}{unit} — {localHigh}{unit}</span>
+            )}
+          </div>
+        </div>
+
+        {/* Dual Thumb Slider Bar */}
+        <div className="px-2 py-3 select-none">
+          <div
+            ref={trackRef}
+            onPointerDown={handleTrackPointerDown}
+            className="relative h-6 flex items-center cursor-pointer touch-none"
+          >
+            {/* Background Track */}
+            <div className="absolute w-full h-1.5 bg-zinc-200 rounded-full pointer-events-none" />
+
+            {/* Active Range Fill */}
+            <div
+              className="absolute h-1.5 bg-indigo-600 rounded-full transition-all duration-75 pointer-events-none"
+              style={{
+                left: `${leftPercent}%`,
+                width: `${Math.max(0, rightPercent - leftPercent)}%`,
+              }}
+            />
+
+            {/* Left Thumb */}
+            <div
+              tabIndex={0}
+              role="slider"
+              aria-label={`${title} από`}
+              aria-valuemin={min}
+              aria-valuemax={localHigh}
+              aria-valuenow={localLow}
+              onPointerDown={(e) => startDrag("low", e)}
+              onKeyDown={(e) => {
+                if (e.key === "ArrowLeft" || e.key === "ArrowDown") {
+                  e.preventDefault();
+                  commitRange(localLow - step, localHigh);
+                } else if (e.key === "ArrowRight" || e.key === "ArrowUp") {
+                  e.preventDefault();
+                  commitRange(localLow + step, localHigh);
+                }
+              }}
+              className={`absolute w-5 h-5 bg-white border-2 border-indigo-600 rounded-full shadow-md -translate-x-1/2 cursor-grab active:cursor-grabbing hover:scale-115 focus:scale-115 focus:outline-hidden ring-2 transition-transform ${
+                activeDrag === "low"
+                  ? "ring-indigo-400 scale-120 z-20"
+                  : "ring-indigo-100 hover:ring-indigo-300 z-10"
+              }`}
+              style={{ left: `${leftPercent}%` }}
+            />
+
+            {/* Right Thumb */}
+            <div
+              tabIndex={0}
+              role="slider"
+              aria-label={`${title} έως`}
+              aria-valuemin={localLow}
+              aria-valuemax={max}
+              aria-valuenow={localHigh}
+              onPointerDown={(e) => startDrag("high", e)}
+              onKeyDown={(e) => {
+                if (e.key === "ArrowLeft" || e.key === "ArrowDown") {
+                  e.preventDefault();
+                  commitRange(localLow, localHigh - step);
+                } else if (e.key === "ArrowRight" || e.key === "ArrowUp") {
+                  e.preventDefault();
+                  commitRange(localLow, localHigh + step);
+                }
+              }}
+              className={`absolute w-5 h-5 bg-white border-2 border-indigo-600 rounded-full shadow-md -translate-x-1/2 cursor-grab active:cursor-grabbing hover:scale-115 focus:scale-115 focus:outline-hidden ring-2 transition-transform ${
+                activeDrag === "high"
+                  ? "ring-indigo-400 scale-120 z-20"
+                  : "ring-indigo-100 hover:ring-indigo-300 z-10"
+              }`}
+              style={{ left: `${rightPercent}%` }}
+            />
+          </div>
+
+          {/* Endpoint labels */}
+          <div className="flex justify-between text-[10px] text-zinc-400 font-mono mt-1 select-none pointer-events-none">
+            <span>{min}{unit}</span>
+            <span>{max}{unit}</span>
+          </div>
+        </div>
+
+        {/* Quick Steppers & Input Fields */}
+        <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-zinc-100">
+          <div className="flex items-center justify-between bg-zinc-50 border border-zinc-200 rounded-lg p-1">
+            <span className="text-[10px] font-semibold text-zinc-500 pl-1">Από:</span>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => commitRange(localLow - step, localHigh)}
+                disabled={localLow <= min}
+                className="w-5 h-5 flex items-center justify-center rounded bg-white border border-zinc-200 text-zinc-700 hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer text-xs font-bold"
+              >
+                -
+              </button>
+              <span className="font-mono font-bold text-xs text-zinc-900 w-5 text-center">{localLow}</span>
+              <button
+                type="button"
+                onClick={() => commitRange(localLow + step, localHigh)}
+                disabled={localLow >= localHigh}
+                className="w-5 h-5 flex items-center justify-center rounded bg-white border border-zinc-200 text-zinc-700 hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer text-xs font-bold"
+              >
+                +
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between bg-zinc-50 border border-zinc-200 rounded-lg p-1">
+            <span className="text-[10px] font-semibold text-zinc-500 pl-1">Έως:</span>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => commitRange(localLow, localHigh - step)}
+                disabled={localHigh <= localLow}
+                className="w-5 h-5 flex items-center justify-center rounded bg-white border border-zinc-200 text-zinc-700 hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer text-xs font-bold"
+              >
+                -
+              </button>
+              <span className="font-mono font-bold text-xs text-zinc-900 w-5 text-center">{localHigh}</span>
+              <button
+                type="button"
+                onClick={() => commitRange(localLow, localHigh + step)}
+                disabled={localHigh >= max}
+                className="w-5 h-5 flex items-center justify-center rounded bg-white border border-zinc-200 text-zinc-700 hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer text-xs font-bold"
+              >
+                +
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Optional Presets */}
+        {presets && presets.length > 0 && (
+          <div className="mt-2.5 pt-2 border-t border-zinc-100 flex flex-wrap gap-1">
+            {presets.map((p) => (
+              <button
+                key={p.label}
+                type="button"
+                onClick={() => commitRange(p.range[0], p.range[1])}
+                className={`text-[10px] px-2 py-0.5 rounded border transition-all cursor-pointer ${
+                  localLow === p.range[0] && localHigh === p.range[1]
+                    ? "bg-indigo-600 border-indigo-600 text-white font-bold"
+                    : "bg-zinc-50 border-zinc-200 text-zinc-700 hover:bg-zinc-100"
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+};
+
 export const ClassesManager: React.FC<ClassesManagerProps> = ({
   data,
   onRefresh,
@@ -91,11 +453,16 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
 }) => {
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
 
-  // Search & Filters
-  const [searchQuery, setSearchQuery] = useState("");
-  const [gradeFilter, setGradeFilter] = useState("all");
+  // Search & Filters State (matching teachers-manager pattern)
+  const [showFilterRow, setShowFilterRow] = useState(false);
+  const [nameFilter, setNameFilter] = useState("");
+  const [selectedGrades, setSelectedGrades] = useState<string[]>([]);
+  const [studentsCountRange, setStudentsCountRange] = useState<[number, number] | null>(null);
+  const [headTeacherFilter, setHeadTeacherFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
-  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+  const [roomFilter, setRoomFilter] = useState("");
+  const [selectedSupportSpecialties, setSelectedSupportSpecialties] = useState<string[]>([]);
+  const [supportSearchQuery, setSupportSearchQuery] = useState("");
 
   // Inline row edit state ("__new__" for new draft row, or existing class.id)
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
@@ -118,7 +485,6 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
     return map;
   }, [data.subGroups]);
 
-
   // Calculate assignments count per class
   const classAssignmentsCountMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -138,36 +504,189 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
     return map;
   }, [data.teachers]);
 
+  // Filter handlers
+  const toggleGradeFilter = (grade: string) => {
+    setSelectedGrades((prev) =>
+      prev.includes(grade) ? prev.filter((g) => g !== grade) : [...prev, grade]
+    );
+  };
+
+  const toggleSupportSpecialtyFilter = (code: string) => {
+    setSelectedSupportSpecialties((prev) =>
+      prev.includes(code) ? prev.filter((s) => s !== code) : [...prev, code]
+    );
+  };
+
+  const resetAllFilters = () => {
+    setNameFilter("");
+    setSelectedGrades([]);
+    setStudentsCountRange(null);
+    setHeadTeacherFilter("all");
+    setTypeFilter("all");
+    setRoomFilter("");
+    setSelectedSupportSpecialties([]);
+  };
+
   // Filtered classes
   const filteredClasses = useMemo(() => {
     return data.classes.filter((cls) => {
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
+      // 1. Name / Short Name Filter
+      if (nameFilter.trim()) {
+        const q = nameFilter.toLowerCase().trim();
         const name = (cls.name || "").toLowerCase();
         const sName = (cls.shortName || "").toLowerCase();
-        const room = (cls.room || "").toLowerCase();
-        const headTch = cls.headTeacherId ? teachersMap.get(cls.headTeacherId) : null;
-        const tchName = headTch ? `${headTch.lastName} ${headTch.firstName}`.toLowerCase() : "";
-        if (
-          !name.includes(q) &&
-          !sName.includes(q) &&
-          !room.includes(q) &&
-          !tchName.includes(q)
-        ) {
+        if (!name.includes(q) && !sName.includes(q)) {
           return false;
         }
       }
 
-      if (gradeFilter !== "all" && cls.grade !== gradeFilter) {
+      // 2. Grade Filter (Multi-select)
+      if (selectedGrades.length > 0 && !selectedGrades.includes(cls.grade)) {
         return false;
       }
 
+      // 3. Students Count Range Filter
+      if (studentsCountRange !== null) {
+        const count = typeof cls.studentsCount === "number" ? cls.studentsCount : 20;
+        if (count < studentsCountRange[0] || count > studentsCountRange[1]) {
+          return false;
+        }
+      }
+
+      // 4. Head Teacher Filter
+      if (headTeacherFilter !== "all") {
+        if (headTeacherFilter === "none") {
+          if (cls.headTeacherId) return false;
+        } else {
+          if (cls.headTeacherId !== headTeacherFilter) return false;
+        }
+      }
+
+      // 5. Program Type (Morning / All-Day)
       if (typeFilter === "morning" && cls.isAllDay) return false;
       if (typeFilter === "allDay" && !cls.isAllDay) return false;
 
+      // 6. Room Filter
+      if (roomFilter.trim()) {
+        const q = roomFilter.toLowerCase().trim();
+        const room = (cls.room || "").toLowerCase();
+        if (!room.includes(q)) return false;
+      }
+
+      // 7. Support Specialties Filter (Multi-select)
+      if (selectedSupportSpecialties.length > 0) {
+        const specs = cls.supportSpecialties || [];
+        const hasMatch = selectedSupportSpecialties.some((s) => specs.includes(s));
+        if (!hasMatch) return false;
+      }
+
       return true;
     });
-  }, [data.classes, searchQuery, gradeFilter, typeFilter, teachersMap]);
+  }, [
+    data.classes,
+    nameFilter,
+    selectedGrades,
+    studentsCountRange,
+    headTeacherFilter,
+    typeFilter,
+    roomFilter,
+    selectedSupportSpecialties,
+  ]);
+
+  const hasActiveFilters =
+    nameFilter.trim() !== "" ||
+    selectedGrades.length > 0 ||
+    studentsCountRange !== null ||
+    headTeacherFilter !== "all" ||
+    typeFilter !== "all" ||
+    roomFilter.trim() !== "" ||
+    selectedSupportSpecialties.length > 0;
+
+  const activeFiltersCount =
+    (nameFilter.trim() !== "" ? 1 : 0) +
+    (selectedGrades.length > 0 ? 1 : 0) +
+    (studentsCountRange !== null ? 1 : 0) +
+    (headTeacherFilter !== "all" ? 1 : 0) +
+    (typeFilter !== "all" ? 1 : 0) +
+    (roomFilter.trim() !== "" ? 1 : 0) +
+    (selectedSupportSpecialties.length > 0 ? 1 : 0);
+
+  // Active tags for quick pill badges
+  const activeTags = useMemo(() => {
+    const list: { id: string; label: string; clear: () => void }[] = [];
+
+    if (nameFilter.trim()) {
+      list.push({
+        id: "name",
+        label: `Όνομα: "${nameFilter.trim()}"`,
+        clear: () => setNameFilter(""),
+      });
+    }
+
+    if (selectedGrades.length > 0) {
+      list.push({
+        id: "grade",
+        label: `Τάξεις: ${selectedGrades.join(", ")}`,
+        clear: () => setSelectedGrades([]),
+      });
+    }
+
+    if (studentsCountRange !== null) {
+      list.push({
+        id: "students",
+        label: `Μαθητές: ${
+          studentsCountRange[0] === studentsCountRange[1]
+            ? `${studentsCountRange[0]}`
+            : `${studentsCountRange[0]}-${studentsCountRange[1]}`
+        }`,
+        clear: () => setStudentsCountRange(null),
+      });
+    }
+
+    if (headTeacherFilter !== "all") {
+      const tch = data.teachers.find((t) => t.id === headTeacherFilter);
+      list.push({
+        id: "headTeacher",
+        label: `Υπεύθυνος: ${tch ? `${tch.lastName} ${tch.firstName}` : "Χωρίς ορισμό"}`,
+        clear: () => setHeadTeacherFilter("all"),
+      });
+    }
+
+    if (typeFilter !== "all") {
+      list.push({
+        id: "type",
+        label: `Πρόγραμμα: ${typeFilter === "morning" ? "Πρωινό" : "Ολοήμερο"}`,
+        clear: () => setTypeFilter("all"),
+      });
+    }
+
+    if (roomFilter.trim()) {
+      list.push({
+        id: "room",
+        label: `Αίθουσα: "${roomFilter.trim()}"`,
+        clear: () => setRoomFilter(""),
+      });
+    }
+
+    if (selectedSupportSpecialties.length > 0) {
+      list.push({
+        id: "support",
+        label: `Στήριξη: ${selectedSupportSpecialties.join(", ")}`,
+        clear: () => setSelectedSupportSpecialties([]),
+      });
+    }
+
+    return list;
+  }, [
+    nameFilter,
+    selectedGrades,
+    studentsCountRange,
+    headTeacherFilter,
+    typeFilter,
+    roomFilter,
+    selectedSupportSpecialties,
+    data.teachers,
+  ]);
 
   // Auto focus input when editingRowId changes
   useEffect(() => {
@@ -202,7 +721,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
 
   // Start copying from selected class into row 1 draft
   const handleStartCopy = () => {
-    const target = data.classes.find((c) => c.id === selectedTeacherOrClass);
+    const target = data.classes.find((c) => c.id === selectedClassId);
     if (!target) {
       toast.warning("Επιλέξτε ένα τμήμα από τον πίνακα για αντιγραφή.");
       return;
@@ -223,8 +742,6 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
     setSelectedClassId(null);
     toast.info(`Αντιγράφηκαν οι ρυθμίσεις του τμήματος «${target.name}». Πληκτρολογήστε το νέο όνομα.`);
   };
-
-  const selectedTeacherOrClass = selectedClassId;
 
   // Start editing existing class row
   const startInlineEdit = (cls: ClassEntity) => {
@@ -298,7 +815,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
     }
   };
 
-  // Keyboard shortcut: Enter to save, Escape to cancel (Capture Phase to avoid closing Sheet)
+  // Keyboard shortcut: Enter to save, Escape to cancel
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!editingRowId) return;
@@ -555,106 +1072,89 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
     );
   };
 
-  const hasActiveFilters = gradeFilter !== "all" || typeFilter !== "all";
-  const activeFiltersCount = (gradeFilter !== "all" ? 1 : 0) + (typeFilter !== "all" ? 1 : 0);
-
   return (
     <div className="flex flex-col h-full w-full overflow-hidden bg-zinc-100/60">
       {/* Unified Top Header Bar */}
       <div className="h-14 border-b border-zinc-200 bg-white px-4 flex items-center justify-between gap-4 shrink-0 z-20">
-        {/* Left: Modern Tabs Switcher */}
-        <div className="flex items-center gap-1 bg-zinc-100 p-1 rounded-lg border border-zinc-200/80 shrink-0">
-          <button
-            type="button"
-            onClick={() => onTabChange?.("teachers")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-              activeTab === "teachers"
-                ? "bg-white text-zinc-900 shadow-2xs border border-zinc-200/60"
-                : "text-zinc-600 hover:text-zinc-900"
-            }`}
-          >
-            <Users className="w-3.5 h-3.5" />
-            <span>Εκπαιδευτικοί</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => onTabChange?.("classes")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-              activeTab === "classes"
-                ? "bg-white text-zinc-900 shadow-2xs border border-zinc-200/60"
-                : "text-zinc-600 hover:text-zinc-900"
-            }`}
-          >
-            <GraduationCap className="w-3.5 h-3.5" />
-            <span>Τμήματα</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => onTabChange?.("subjects")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-              activeTab === "subjects"
-                ? "bg-white text-zinc-900 shadow-2xs border border-zinc-200/60"
-                : "text-zinc-600 hover:text-zinc-900"
-            }`}
-          >
-            <BookOpen className="w-3.5 h-3.5" />
-            <span>Μαθήματα</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => onTabChange?.("assignments")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-              activeTab === "assignments"
-                ? "bg-white text-zinc-900 shadow-2xs border border-zinc-200/60"
-                : "text-zinc-600 hover:text-zinc-900"
-            }`}
-          >
-            <CalendarDays className="w-3.5 h-3.5" />
-            <span>Αναθέσεις</span>
-          </button>
-        </div>
-
-        {/* Middle: Search & Filters Modal Trigger & Count */}
-        <div className="flex items-center gap-2 flex-1 max-w-md justify-center">
-          <div className="relative w-52 md:w-60">
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />
-            <Input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Αναζήτηση τμήματος, αίθουσας..."
-              className="pl-8 pr-7 h-8 text-xs bg-zinc-50 border-zinc-200 focus-visible:ring-1"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery("")}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
+        {/* Left: Modern Tabs Switcher + Inline Filter Toggle + Count */}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1 bg-zinc-100 p-1 rounded-lg border border-zinc-200/80 shrink-0">
+            <button
+              type="button"
+              onClick={() => onTabChange?.("teachers")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                activeTab === "teachers"
+                  ? "bg-white text-zinc-900 shadow-2xs border border-zinc-200/60"
+                  : "text-zinc-600 hover:text-zinc-900"
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span>Εκπαιδευτικοί</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onTabChange?.("classes")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                activeTab === "classes"
+                  ? "bg-white text-zinc-900 shadow-2xs border border-zinc-200/60"
+                  : "text-zinc-600 hover:text-zinc-900"
+              }`}
+            >
+              <GraduationCap className="w-3.5 h-3.5" />
+              <span>Τμήματα</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onTabChange?.("subjects")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                activeTab === "subjects"
+                  ? "bg-white text-zinc-900 shadow-2xs border border-zinc-200/60"
+                  : "text-zinc-600 hover:text-zinc-900"
+              }`}
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+              <span>Μαθήματα</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onTabChange?.("assignments")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                activeTab === "assignments"
+                  ? "bg-white text-zinc-900 shadow-2xs border border-zinc-200/60"
+                  : "text-zinc-600 hover:text-zinc-900"
+              }`}
+            >
+              <CalendarDays className="w-3.5 h-3.5" />
+              <span>Αναθέσεις</span>
+            </button>
           </div>
 
+          {/* Inline Filter Row Toggle Button */}
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setIsFilterModalOpen(true)}
-            className={`h-8 text-xs gap-1.5 border-zinc-200 font-medium ${
-              hasActiveFilters
+            onClick={() => setShowFilterRow(!showFilterRow)}
+            className={`h-8 text-xs gap-1.5 border-zinc-200 font-semibold cursor-pointer transition-all ${
+              showFilterRow
                 ? "bg-zinc-900 text-white hover:bg-zinc-800 border-zinc-900 shadow-2xs"
+                : hasActiveFilters
+                ? "bg-indigo-50 border-indigo-300 text-indigo-900 hover:bg-indigo-100"
                 : "bg-zinc-50 text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900"
             }`}
+            title="Εμφάνιση/απόκρυψη γραμμής φίλτρων στηλών"
           >
             <Filter className="w-3.5 h-3.5" />
             <span>Φίλτρα</span>
             {hasActiveFilters && (
-              <span className="px-1.5 py-0.2 bg-emerald-500 text-white font-bold rounded-full text-[10px]">
+              <span className="px-1.5 py-0.2 bg-indigo-600 text-white font-bold rounded-full text-[10px]">
                 {activeFiltersCount}
               </span>
             )}
           </Button>
 
-          <span className="text-[11px] font-medium text-zinc-500 whitespace-nowrap bg-zinc-100 px-2 py-1 rounded-md border border-zinc-200">
-            {filteredClasses.length} / {data.classes.length}
+          {/* Record Count Badge */}
+          <span className="text-[11px] font-medium text-zinc-500 whitespace-nowrap bg-zinc-100 px-2.5 py-1 rounded-md border border-zinc-200">
+            {filteredClasses.length} / {data.classes.length} τμήματα
           </span>
         </div>
 
@@ -681,7 +1181,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
                 onClick={saveInlineEdit}
                 disabled={isSavingInline}
                 size="sm"
-                className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-3 shadow-2xs gap-1"
+                className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-3 shadow-2xs gap-1 cursor-pointer"
                 title="Αποθήκευση αλλαγών (Enter)"
               >
                 <Check className="w-3.5 h-3.5" />
@@ -691,7 +1191,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
                 onClick={cancelInlineEdit}
                 variant="ghost"
                 size="sm"
-                className="h-7 text-xs text-zinc-600 hover:text-zinc-900 px-2"
+                className="h-7 text-xs text-zinc-600 hover:text-zinc-900 px-2 cursor-pointer"
                 title="Ακύρωση (Esc)"
               >
                 <X className="w-3.5 h-3.5 mr-1" />
@@ -711,7 +1211,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
                   disabled={!selectedClassId}
                   variant="ghost"
                   size="sm"
-                  className="h-7 text-xs px-2.5 text-zinc-700 hover:text-zinc-900 disabled:opacity-40"
+                  className="h-7 text-xs px-2.5 text-zinc-700 hover:text-zinc-900 disabled:opacity-40 cursor-pointer font-medium"
                   title="Επεξεργασία στη γραμμή (ή διπλό κλικ)"
                 >
                   <Edit2 className="w-3.5 h-3.5 mr-1.5 text-zinc-600" />
@@ -722,7 +1222,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
                   disabled={!selectedClassId}
                   variant="ghost"
                   size="sm"
-                  className="h-7 text-xs px-2.5 text-zinc-700 hover:text-zinc-900 disabled:opacity-40"
+                  className="h-7 text-xs px-2.5 text-zinc-700 hover:text-zinc-900 disabled:opacity-40 cursor-pointer font-medium"
                   title="Αντιγραφή ρυθμίσεων σε νέα γραμμή"
                 >
                   <Copy className="w-3.5 h-3.5 mr-1.5 text-zinc-600" />
@@ -733,7 +1233,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
                   disabled={!selectedClassId}
                   variant="ghost"
                   size="sm"
-                  className="h-7 text-xs px-2.5 text-red-600 hover:bg-red-50 hover:text-red-700 disabled:opacity-40"
+                  className="h-7 text-xs px-2.5 text-red-600 hover:bg-red-50 hover:text-red-700 disabled:opacity-40 cursor-pointer font-medium"
                   title="Διαγραφή επιλεγμένου τμήματος"
                 >
                   <Trash2 className="w-3.5 h-3.5 mr-1 text-red-500" />
@@ -747,7 +1247,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
               <Button
                 onClick={handleStartNew}
                 size="sm"
-                className="h-8 px-3.5 bg-zinc-900 hover:bg-zinc-800 text-white font-medium text-xs shadow-xs rounded-lg flex items-center gap-1.5"
+                className="h-8 px-3.5 bg-zinc-900 hover:bg-zinc-800 text-white font-semibold text-xs shadow-xs rounded-lg flex items-center gap-1.5 cursor-pointer"
                 title="Προσθήκη νέου τμήματος απευθείας στην 1η σειρά του πίνακα"
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -758,13 +1258,45 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
         </div>
       </div>
 
-      {/* Main Full-Width Data Table */}
-      <div className="flex-1 p-3 overflow-hidden flex flex-col min-h-0">
-        <div className="flex-1 bg-white border border-zinc-200 rounded-xl shadow-xs overflow-hidden flex flex-col">
-          <div className="flex-1 overflow-auto">
-            <table className="w-full text-left text-xs border-collapse">
+      {/* Active Filter Tags Strip (Shown when any filter is active and Filter Row is closed) */}
+      {hasActiveFilters && !showFilterRow && (
+        <div className="bg-zinc-50/90 border-b border-zinc-200 px-4 py-1.5 flex items-center gap-1.5 flex-wrap text-xs shrink-0 animate-in fade-in">
+          <span className="text-[11px] font-semibold text-zinc-500 mr-1 flex items-center gap-1">
+            <Filter className="w-3 h-3 text-zinc-400" />
+            Ενεργά Φίλτρα ({activeFiltersCount}):
+          </span>
+          {activeTags.map((tag) => (
+            <span
+              key={tag.id}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-zinc-300 text-zinc-800 text-[11px] shadow-2xs font-medium"
+            >
+              <span>{tag.label}</span>
+              <button
+                type="button"
+                onClick={tag.clear}
+                className="hover:text-red-600 rounded-sm p-0.5 transition-colors cursor-pointer"
+                title="Αφαίρεση φίλτρου"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          ))}
+          <button
+            type="button"
+            onClick={resetAllFilters}
+            className="text-[11px] text-red-600 hover:text-red-700 font-medium ml-2 underline underline-offset-2 cursor-pointer"
+          >
+            Καθαρισμός όλων
+          </button>
+        </div>
+      )}
+
+      {/* Main Content Area (Wraps tightly to last record, clean background below) */}
+      <div className="flex-1 p-4 overflow-y-auto">
+        <div className="bg-white border border-zinc-200 rounded-xl shadow-xs overflow-hidden">
+          <table className="w-full text-left text-xs border-collapse">
             {/* Super Headers & Sub Headers */}
-            <thead className="sticky top-0 z-20 bg-zinc-50 border-b border-zinc-200 text-zinc-600 shadow-2xs select-none">
+            <thead className="bg-zinc-50 border-b border-zinc-200 text-zinc-600 shadow-2xs select-none">
               {/* Row 1: Super Headers Grouping */}
               <tr className="border-b border-zinc-200 text-[10px] uppercase font-bold tracking-wider text-zinc-500">
                 <th colSpan={5} className="py-2 px-3 border-r border-zinc-200 bg-zinc-100/80 text-left">
@@ -794,6 +1326,347 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
                   Ειδικότητες Στήριξης
                 </th>
               </tr>
+
+              {/* Row 3: Dedicated Inline Column Filters Row */}
+              {showFilterRow && (
+                <tr
+                  onClick={(e) => e.stopPropagation()}
+                  className="bg-zinc-100/90 border-b-2 border-zinc-300 text-zinc-800 animate-in fade-in select-none"
+                >
+                  {/* 1. Color / Reset Column */}
+                  <th className="py-1 px-1 text-center">
+                    {hasActiveFilters ? (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          resetAllFilters();
+                        }}
+                        className="w-6 h-6 rounded bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 flex items-center justify-center mx-auto transition-colors cursor-pointer shadow-2xs"
+                        title="Καθαρισμός όλων των φίλτρων"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    ) : (
+                      <div className="w-6 h-6 flex items-center justify-center mx-auto text-zinc-300">
+                        <Filter className="w-3.5 h-3.5" />
+                      </div>
+                    )}
+                  </th>
+
+                  {/* 2. Name Filter */}
+                  <th className="py-1 px-1.5 min-w-[130px]">
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 absolute left-2 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+                      <Input
+                        value={nameFilter}
+                        onChange={(e) => setNameFilter(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        placeholder="Αναζήτηση..."
+                        className="h-7 text-xs bg-white border-zinc-200 pl-7 pr-6 rounded-md shadow-2xs focus-visible:ring-1 focus-visible:ring-zinc-400 placeholder:text-zinc-400"
+                      />
+                      {nameFilter && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setNameFilter("");
+                          }}
+                          className="absolute right-1.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 cursor-pointer p-0.5"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  </th>
+
+                  {/* 3. Short Name Filter */}
+                  <th className="py-1 px-1 w-16 text-center">
+                    <span className="text-zinc-300 text-[10px] font-mono">—</span>
+                  </th>
+
+                  {/* 4. Grade Filter (Multi-Select Popover) */}
+                  <th className="py-1 px-1 w-24 text-center">
+                    <Popover>
+                      <PopoverTrigger
+                        type="button"
+                        className={`w-full h-7 text-[11px] px-2 rounded-md shadow-2xs transition-all flex items-center justify-between border cursor-pointer ${
+                          selectedGrades.length > 0
+                            ? "bg-indigo-50 border-indigo-400 text-indigo-950 font-bold ring-1 ring-indigo-300/60"
+                            : "bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-50"
+                        }`}
+                      >
+                        <span className="truncate">
+                          {selectedGrades.length === 0
+                            ? "Όλες"
+                            : selectedGrades.length <= 2
+                            ? selectedGrades.join(", ")
+                            : `${selectedGrades.length} τάξεις`}
+                        </span>
+                        <ChevronDown className="w-3.5 h-3.5 shrink-0 opacity-50 ml-1" />
+                      </PopoverTrigger>
+                      <PopoverContent
+                        align="start"
+                        className="w-48 p-2 shadow-lg border border-zinc-200 bg-white text-xs z-50"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-zinc-100">
+                          <span className="font-semibold text-zinc-800 text-[11px]">
+                            Τάξη {selectedGrades.length > 0 && `(${selectedGrades.length})`}
+                          </span>
+                          {selectedGrades.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedGrades([])}
+                              className="text-[10px] text-red-600 hover:text-red-700 font-medium cursor-pointer"
+                            >
+                              Καθαρισμός
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="space-y-0.5">
+                          {GRADES_LIST.map((g) => {
+                            const isChecked = selectedGrades.includes(g);
+                            return (
+                              <div
+                                key={g}
+                                onClick={() => toggleGradeFilter(g)}
+                                className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors ${
+                                  isChecked
+                                    ? "bg-indigo-50/80 text-indigo-950 font-medium"
+                                    : "hover:bg-zinc-100 text-zinc-700"
+                                }`}
+                              >
+                                <div
+                                  className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition-all ${
+                                    isChecked
+                                      ? "bg-indigo-600 border-indigo-600 text-white"
+                                      : "border-zinc-300 bg-white"
+                                  }`}
+                                >
+                                  {isChecked && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                                </div>
+                                <span className="text-[11px]">Τάξη {g}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  </th>
+
+                  {/* 5. Students Count Filter (Dual-Thumb Range Slider) */}
+                  <th className="py-1 px-1 w-20 text-center border-r border-zinc-200">
+                    <RangeFilterPopover
+                      title="Αριθμός Μαθητών"
+                      min={0}
+                      max={35}
+                      unit=""
+                      value={studentsCountRange}
+                      onChange={setStudentsCountRange}
+                      presets={[
+                        { label: "15-25", range: [15, 25] },
+                        { label: "20", range: [20, 20] },
+                        { label: "1-15", range: [1, 15] },
+                        { label: "25-35", range: [25, 35] },
+                      ]}
+                    />
+                  </th>
+
+                  {/* 6. Head Teacher Filter */}
+                  <th className="py-1 px-1.5 min-w-[190px]">
+                    <Select
+                      value={headTeacherFilter}
+                      onValueChange={(val) => setHeadTeacherFilter(val || "all")}
+                    >
+                      <SelectTrigger
+                        size="sm"
+                        className={`w-full h-7 text-[11px] px-2 justify-between rounded-md shadow-2xs transition-all ${
+                          headTeacherFilter !== "all"
+                            ? "bg-indigo-50 border-indigo-400 text-indigo-950 font-bold ring-1 ring-indigo-300/60"
+                            : "bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-50"
+                        }`}
+                      >
+                        <SelectValue>
+                          {headTeacherFilter === "all"
+                            ? "Αδιαφ."
+                            : headTeacherFilter === "none"
+                            ? "— Χωρίς Ορισμό —"
+                            : (() => {
+                                const tch = data.teachers.find((t) => t.id === headTeacherFilter);
+                                return tch ? `${tch.lastName} ${tch.firstName}` : "Αδιαφ.";
+                              })()}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent className="bg-white border-zinc-200 text-zinc-800 z-[70] max-h-[320px]">
+                        <SelectItem value="all">Αδιάφορο</SelectItem>
+                        <SelectItem value="none">— Χωρίς Ορισμό —</SelectItem>
+                        {data.teachers.map((t) => (
+                          <SelectItem key={t.id} value={t.id} className="text-xs">
+                            {t.lastName} {t.firstName} ({t.shortName || t.specialty})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </th>
+
+                  {/* 7. Program Type Filter */}
+                  <th className="py-1 px-1 w-24 text-center">
+                    <Select
+                      value={typeFilter}
+                      onValueChange={(val) => setTypeFilter(val || "all")}
+                    >
+                      <SelectTrigger
+                        size="sm"
+                        className={`w-full h-7 text-[11px] px-1 justify-center rounded-md shadow-2xs transition-all ${
+                          typeFilter !== "all"
+                            ? "bg-indigo-50 border-indigo-400 text-indigo-950 font-bold ring-1 ring-indigo-300/60"
+                            : "bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-50"
+                        }`}
+                      >
+                        <SelectValue>
+                          {typeFilter === "all" ? "Αδιαφ." : typeFilter === "morning" ? "Πρωινό" : "Ολοήμερο"}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent className="bg-white border-zinc-200 text-zinc-800 z-[70]">
+                        <SelectItem value="all">Αδιάφορο</SelectItem>
+                        <SelectItem value="morning">Πρωινό</SelectItem>
+                        <SelectItem value="allDay">Ολοήμερο</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </th>
+
+                  {/* 8. Room Filter */}
+                  <th className="py-1 px-1 w-32 border-r border-zinc-200">
+                    <div className="relative">
+                      <Input
+                        value={roomFilter}
+                        onChange={(e) => setRoomFilter(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        placeholder="Αίθουσα..."
+                        className="h-7 text-xs bg-white border-zinc-200 px-2 pr-6 rounded-md shadow-2xs focus-visible:ring-1 focus-visible:ring-zinc-400 placeholder:text-zinc-400"
+                      />
+                      {roomFilter && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setRoomFilter("");
+                          }}
+                          className="absolute right-1.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 cursor-pointer p-0.5"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  </th>
+
+                  {/* 9. Support Specialties Multi-Select Popover */}
+                  <th className="py-1 px-1.5 min-w-[200px]">
+                    <Popover>
+                      <PopoverTrigger
+                        type="button"
+                        className={`w-full h-7 text-[11px] px-2 rounded-md shadow-2xs transition-all flex items-center justify-between border cursor-pointer ${
+                          selectedSupportSpecialties.length > 0
+                            ? "bg-indigo-50 border-indigo-400 text-indigo-950 font-bold ring-1 ring-indigo-300/60"
+                            : "bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-50"
+                        }`}
+                      >
+                        <span className="truncate">
+                          {selectedSupportSpecialties.length === 0
+                            ? "Όλες"
+                            : selectedSupportSpecialties.length <= 2
+                            ? selectedSupportSpecialties.join(", ")
+                            : `${selectedSupportSpecialties.length} ειδικότητες`}
+                        </span>
+                        <ChevronDown className="w-3.5 h-3.5 shrink-0 opacity-50 ml-1" />
+                      </PopoverTrigger>
+                      <PopoverContent
+                        align="end"
+                        className="w-64 p-2 shadow-lg border border-zinc-200 bg-white text-xs z-50"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-zinc-100">
+                          <span className="font-semibold text-zinc-800 text-[11px]">
+                            Ειδικότητες Στήριξης {selectedSupportSpecialties.length > 0 && `(${selectedSupportSpecialties.length})`}
+                          </span>
+                          {selectedSupportSpecialties.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedSupportSpecialties([])}
+                              className="text-[10px] text-red-600 hover:text-red-700 font-medium cursor-pointer"
+                            >
+                              Καθαρισμός
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="relative mb-2">
+                          <Search className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+                          <Input
+                            value={supportSearchQuery}
+                            onChange={(e) => setSupportSearchQuery(e.target.value)}
+                            placeholder="Αναζήτηση..."
+                            className="h-6 text-[11px] pl-6 pr-5 py-0 bg-zinc-50 border-zinc-200 focus-visible:ring-1"
+                          />
+                          {supportSearchQuery && (
+                            <button
+                              type="button"
+                              onClick={() => setSupportSearchQuery("")}
+                              className="absolute right-1.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 cursor-pointer"
+                            >
+                              <X className="w-2.5 h-2.5" />
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="max-h-56 overflow-y-auto space-y-0.5 pr-1">
+                          {SUPPORT_SPECIALTIES_LIST
+                            .filter((s) => {
+                              if (!supportSearchQuery.trim()) return true;
+                              const q = supportSearchQuery.toLowerCase().trim();
+                              return (
+                                s.code.toLowerCase().includes(q) ||
+                                s.name.toLowerCase().includes(q)
+                              );
+                            })
+                            .map((spec) => {
+                              const isChecked = selectedSupportSpecialties.includes(spec.code);
+                              return (
+                                <div
+                                  key={spec.code}
+                                  onClick={() => toggleSupportSpecialtyFilter(spec.code)}
+                                  className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors ${
+                                    isChecked
+                                      ? "bg-indigo-50/80 text-indigo-950 font-medium"
+                                      : "hover:bg-zinc-100 text-zinc-700"
+                                  }`}
+                                >
+                                  <div
+                                    className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition-all ${
+                                      isChecked
+                                        ? "bg-indigo-600 border-indigo-600 text-white"
+                                        : "border-zinc-300 bg-white"
+                                    }`}
+                                  >
+                                    {isChecked && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                                  </div>
+                                  <span className="font-mono font-bold text-[11px] shrink-0">
+                                    {spec.code}
+                                  </span>
+                                  <span className="text-[11px] text-zinc-600 truncate">
+                                    {spec.name}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  </th>
+                </tr>
+              )}
             </thead>
 
             {/* Table Body */}
@@ -938,8 +1811,8 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
                       <Search className="w-8 h-8 text-zinc-300" />
                       <p className="font-medium text-sm text-zinc-700">Δεν βρέθηκαν τμήματα</p>
                       <p className="text-xs text-zinc-400">
-                        {searchQuery || gradeFilter !== "all" || typeFilter !== "all"
-                          ? "Δοκιμάστε να αλλάξετε τα φίλτρα ή την αναζήτηση."
+                        {hasActiveFilters
+                          ? "Δοκιμάστε να αλλάξετε ή να καθαρίσετε τα φίλτρα."
                           : "Προσθέστε το πρώτο τμήμα κάνοντας κλικ στο «+ Νέο Τμήμα»."}
                       </p>
                     </div>
@@ -950,7 +1823,6 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
           </table>
         </div>
       </div>
-    </div>
 
       {/* Custom Styled Delete Confirmation Dialog */}
       <Dialog
@@ -998,7 +1870,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
               size="sm"
               disabled={isDeletingClass}
               onClick={() => setClassToDelete(null)}
-              className="h-8 text-xs font-medium"
+              className="h-8 text-xs font-medium cursor-pointer"
             >
               Ακύρωση
             </Button>
@@ -1007,7 +1879,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
               size="sm"
               disabled={isDeletingClass}
               onClick={confirmDeleteClass}
-              className="h-8 text-xs bg-red-600 hover:bg-red-700 text-white font-medium gap-1.5 shadow-xs"
+              className="h-8 text-xs bg-red-600 hover:bg-red-700 text-white font-medium gap-1.5 shadow-xs cursor-pointer"
             >
               {isDeletingClass ? (
                 <>
@@ -1020,100 +1892,6 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
                   <span>Οριστική Διαγραφή</span>
                 </>
               )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Small Filter Modal (Dialog) */}
-      <Dialog open={isFilterModalOpen} onOpenChange={setIsFilterModalOpen}>
-        <DialogContent className="sm:max-w-md bg-white border-zinc-200 text-zinc-900 shadow-xl p-5 z-[80]">
-          <DialogHeader className="pb-2 border-b border-zinc-100">
-            <DialogTitle className="text-sm font-bold flex items-center gap-2">
-              <Filter className="w-4 h-4 text-zinc-700" />
-              <span>Φίλτρα Τμημάτων</span>
-            </DialogTitle>
-            <DialogDescription className="text-xs text-zinc-500">
-              Επιλέξτε τάξη ή τύπο προγράμματος για να φιλτράρετε τα τμήματα.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-3">
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-zinc-700">Τάξη</label>
-              <div className="flex items-center gap-1 bg-zinc-100 p-0.5 rounded-lg border border-zinc-200 flex-wrap">
-                <button
-                  type="button"
-                  onClick={() => setGradeFilter("all")}
-                  className={`px-2.5 py-1 text-xs rounded-md transition-all ${
-                    gradeFilter === "all"
-                      ? "bg-zinc-900 text-white shadow-2xs font-semibold"
-                      : "text-zinc-600 hover:text-zinc-900 font-medium"
-                  }`}
-                >
-                  Όλες
-                </button>
-                {GRADES_LIST.map((g) => (
-                  <button
-                    key={g}
-                    type="button"
-                    onClick={() => setGradeFilter(g)}
-                    className={`flex-1 min-w-[36px] py-1 text-xs rounded-md transition-all ${
-                      gradeFilter === g
-                        ? "bg-zinc-900 text-white shadow-2xs font-bold"
-                        : "text-zinc-600 hover:text-zinc-900 font-medium"
-                    }`}
-                  >
-                    {g}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-zinc-700">Τύπος Προγράμματος</label>
-              <div className="flex items-center gap-1 bg-zinc-100 p-0.5 rounded-lg border border-zinc-200">
-                {[
-                  { value: "all", label: "Όλα" },
-                  { value: "morning", label: "Πρωινά" },
-                  { value: "allDay", label: "Ολοήμερα" },
-                ].map((opt) => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setTypeFilter(opt.value)}
-                    className={`flex-1 py-1.5 text-xs rounded-md transition-all ${
-                      typeFilter === opt.value
-                        ? "bg-zinc-900 text-white shadow-2xs font-semibold"
-                        : "text-zinc-600 hover:text-zinc-900 font-medium"
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter className="flex items-center justify-between pt-3 border-t border-zinc-100">
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={!hasActiveFilters}
-              onClick={() => {
-                setGradeFilter("all");
-                setTypeFilter("all");
-              }}
-              className="text-xs text-zinc-600 hover:text-zinc-900"
-            >
-              Επαναφορά
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => setIsFilterModalOpen(false)}
-              className="text-xs bg-zinc-900 hover:bg-zinc-800 text-white px-4"
-            >
-              Εφαρμογή
             </Button>
           </DialogFooter>
         </DialogContent>

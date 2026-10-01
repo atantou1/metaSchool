@@ -6,9 +6,22 @@ import { eq } from "drizzle-orm";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { id, title, code, color } = body;
+    const { id, title, code, color, allowedSpecialties, defaultSpecialty, weeklyHoursByGrade } = body;
 
     const subjectId = id || `sub-${crypto.randomUUID().slice(0, 8)}`;
+    const specialtiesArray = Array.isArray(allowedSpecialties)
+      ? allowedSpecialties
+      : defaultSpecialty
+      ? [defaultSpecialty]
+      : [];
+    const specialtiesJson = JSON.stringify(specialtiesArray);
+
+    const weeklyHoursJson =
+      typeof weeklyHoursByGrade === "object" && weeklyHoursByGrade !== null
+        ? JSON.stringify(weeklyHoursByGrade)
+        : typeof weeklyHoursByGrade === "string"
+        ? weeklyHoursByGrade
+        : null;
 
     const existing = await db
       .select()
@@ -23,6 +36,9 @@ export async function POST(req: Request) {
           title,
           code,
           color: color || "#71717a",
+          allowedSpecialties: specialtiesJson,
+          defaultSpecialty: specialtiesArray[0] || defaultSpecialty || null,
+          weeklyHoursByGrade: weeklyHoursJson,
         })
         .where(eq(schema.subjects.id, subjectId));
     } else {
@@ -31,6 +47,9 @@ export async function POST(req: Request) {
         title,
         code,
         color: color || "#71717a",
+        allowedSpecialties: specialtiesJson,
+        defaultSpecialty: specialtiesArray[0] || defaultSpecialty || null,
+        weeklyHoursByGrade: weeklyHoursJson,
       });
     }
 

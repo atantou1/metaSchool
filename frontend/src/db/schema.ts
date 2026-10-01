@@ -25,6 +25,9 @@ export const subjects = sqliteTable("subjects", {
   title: text("title").notNull(),
   code: text("code").notNull(),
   color: text("color").default("#71717a").notNull(),
+  allowedSpecialties: text("allowed_specialties"), // JSON string e.g. '["ΠΕ70","ΠΕ71"]'
+  defaultSpecialty: text("default_specialty"), // Legacy single specialty e.g. "ΠΕ70"
+  weeklyHoursByGrade: text("weekly_hours_by_grade"), // JSON string e.g. '{"Α":[9,9],"Β":[1,3],...}'
 });
 
 export const classes = sqliteTable("classes", {

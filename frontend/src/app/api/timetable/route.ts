@@ -50,7 +50,16 @@ export async function GET() {
           isActive: Boolean(t.isActive),
           constraints: t.constraints ? JSON.parse(t.constraints) : null,
         })),
-        subjects: allSubjects,
+        subjects: allSubjects.map((s) => ({
+          ...s,
+          allowedSpecialties: s.allowedSpecialties
+            ? JSON.parse(s.allowedSpecialties)
+            : s.defaultSpecialty
+            ? [s.defaultSpecialty]
+            : [],
+          defaultSpecialty: s.defaultSpecialty || null,
+          weeklyHoursByGrade: s.weeklyHoursByGrade ? JSON.parse(s.weeklyHoursByGrade) : null,
+        })),
         classes: allClasses.map((c) => ({
           ...c,
           isAllDay: Boolean(c.isAllDay),

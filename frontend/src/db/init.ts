@@ -33,6 +33,17 @@ export async function initializeDatabase() {
     }
   }
 
+  // Ensure new columns exist on subjects table
+  try {
+    await client.execute("ALTER TABLE subjects ADD COLUMN allowed_specialties TEXT");
+  } catch {}
+  try {
+    await client.execute("ALTER TABLE subjects ADD COLUMN default_specialty TEXT");
+  } catch {}
+  try {
+    await client.execute("ALTER TABLE subjects ADD COLUMN weekly_hours_by_grade TEXT");
+  } catch {}
+
   // Check if school settings exist
   const existingSettings = await db
     .select()
@@ -68,32 +79,193 @@ export async function initializeDatabase() {
     });
   }
 
+  // Default subjects
+  const defaultSubjects = [
+    {
+      id: "sub-glossa",
+      title: "Γλώσσα",
+      code: "ΓΛΩΣ",
+      color: "#3b82f6",
+      allowedSpecialties: JSON.stringify(["ΠΕ70", "ΠΕ71"]),
+      defaultSpecialty: "ΠΕ70",
+      weeklyHoursByGrade: JSON.stringify({ Α: [9, 9], Β: [9, 9], Γ: [8, 8], Δ: [8, 8], Ε: [7, 7], ΣΤ: [7, 7], Ολοήμερο: [0, 0] }),
+    },
+    {
+      id: "sub-math",
+      title: "Μαθηματικά",
+      code: "ΜΑΘ",
+      color: "#10b981",
+      allowedSpecialties: JSON.stringify(["ΠΕ70", "ΠΕ71"]),
+      defaultSpecialty: "ΠΕ70",
+      weeklyHoursByGrade: JSON.stringify({ Α: [5, 5], Β: [5, 5], Γ: [4, 4], Δ: [4, 4], Ε: [4, 4], ΣΤ: [4, 4], Ολοήμερο: [0, 0] }),
+    },
+    {
+      id: "sub-istoria",
+      title: "Ιστορία",
+      code: "ΙΣΤ",
+      color: "#f59e0b",
+      allowedSpecialties: JSON.stringify(["ΠΕ70", "ΠΕ71"]),
+      defaultSpecialty: "ΠΕ70",
+      weeklyHoursByGrade: JSON.stringify({ Α: [0, 0], Β: [0, 0], Γ: [2, 2], Δ: [2, 2], Ε: [2, 2], ΣΤ: [2, 2], Ολοήμερο: [0, 0] }),
+    },
+    {
+      id: "sub-fysiki",
+      title: "Φυσικά",
+      code: "ΦΥΣ",
+      color: "#8b5cf6",
+      allowedSpecialties: JSON.stringify(["ΠΕ70", "ΠΕ71"]),
+      defaultSpecialty: "ΠΕ70",
+      weeklyHoursByGrade: JSON.stringify({ Α: [0, 0], Β: [0, 0], Γ: [0, 0], Δ: [0, 0], Ε: [3, 3], ΣΤ: [3, 3], Ολοήμερο: [0, 0] }),
+    },
+    {
+      id: "sub-meleti",
+      title: "Μελέτη Περιβάλλοντος",
+      code: "ΜΕΛ",
+      color: "#06b6d4",
+      allowedSpecialties: JSON.stringify(["ΠΕ70", "ΠΕ71"]),
+      defaultSpecialty: "ΠΕ70",
+      weeklyHoursByGrade: JSON.stringify({ Α: [3, 3], Β: [3, 3], Γ: [2, 2], Δ: [2, 2], Ε: [0, 0], ΣΤ: [0, 0], Ολοήμερο: [0, 0] }),
+    },
+    {
+      id: "sub-geografia",
+      title: "Γεωγραφία",
+      code: "ΓΕΩ",
+      color: "#84cc16",
+      allowedSpecialties: JSON.stringify(["ΠΕ70", "ΠΕ71"]),
+      defaultSpecialty: "ΠΕ70",
+      weeklyHoursByGrade: JSON.stringify({ Α: [0, 0], Β: [0, 0], Γ: [0, 0], Δ: [0, 0], Ε: [1, 1], ΣΤ: [1, 1], Ολοήμερο: [0, 0] }),
+    },
+    {
+      id: "sub-kpa",
+      title: "Κ.Π.Α.",
+      code: "ΚΠΑ",
+      color: "#64748b",
+      allowedSpecialties: JSON.stringify(["ΠΕ70", "ΠΕ71"]),
+      defaultSpecialty: "ΠΕ70",
+      weeklyHoursByGrade: JSON.stringify({ Α: [0, 0], Β: [0, 0], Γ: [0, 0], Δ: [0, 0], Ε: [1, 1], ΣΤ: [1, 1], Ολοήμερο: [0, 0] }),
+    },
+    {
+      id: "sub-thrisk",
+      title: "Θρησκευτικά",
+      code: "ΘΡΗΣ",
+      color: "#ca8a04",
+      allowedSpecialties: JSON.stringify(["ΠΕ70", "ΠΕ71"]),
+      defaultSpecialty: "ΠΕ70",
+      weeklyHoursByGrade: JSON.stringify({ Α: [0, 0], Β: [0, 0], Γ: [1, 1], Δ: [1, 1], Ε: [1, 1], ΣΤ: [1, 1], Ολοήμερο: [0, 0] }),
+    },
+    {
+      id: "sub-omilos",
+      title: "Εργαστήρια Δεξιοτήτων",
+      code: "ΕΔ",
+      color: "#d946ef",
+      allowedSpecialties: JSON.stringify(["ΠΕ70", "ΠΕ71", "ΠΕ06", "ΠΕ86"]),
+      defaultSpecialty: "ΠΕ70",
+      weeklyHoursByGrade: JSON.stringify({ Α: [3, 3], Β: [3, 3], Γ: [2, 2], Δ: [2, 2], Ε: [1, 1], ΣΤ: [1, 1], Ολοήμερο: [0, 0] }),
+    },
+    {
+      id: "sub-aggli",
+      title: "Αγγλικά",
+      code: "ΑΓΓ",
+      color: "#ec4899",
+      allowedSpecialties: JSON.stringify(["ΠΕ06"]),
+      defaultSpecialty: "ΠΕ06",
+      weeklyHoursByGrade: JSON.stringify({ Α: [2, 2], Β: [2, 2], Γ: [3, 3], Δ: [3, 3], Ε: [3, 3], ΣΤ: [3, 3], Ολοήμερο: [0, 0] }),
+    },
+    {
+      id: "sub-tpe",
+      title: "Τ.Π.Ε. (Πληροφορική)",
+      code: "ΤΠΕ",
+      color: "#6366f1",
+      allowedSpecialties: JSON.stringify(["ΠΕ86"]),
+      defaultSpecialty: "ΠΕ86",
+      weeklyHoursByGrade: JSON.stringify({ Α: [1, 1], Β: [1, 3], Γ: [1, 1], Δ: [1, 1], Ε: [1, 1], ΣΤ: [1, 1], Ολοήμερο: [0, 0] }),
+    },
+    {
+      id: "sub-gymn",
+      title: "Φυσική Αγωγή",
+      code: "ΦΑ",
+      color: "#14b8a6",
+      allowedSpecialties: JSON.stringify(["ΠΕ11"]),
+      defaultSpecialty: "ΠΕ11",
+      weeklyHoursByGrade: JSON.stringify({ Α: [3, 3], Β: [3, 3], Γ: [3, 3], Δ: [3, 3], Ε: [2, 2], ΣΤ: [2, 2], Ολοήμερο: [0, 0] }),
+    },
+    {
+      id: "sub-eikast",
+      title: "Εικαστικά",
+      code: "ΕΙΚ",
+      color: "#f97316",
+      allowedSpecialties: JSON.stringify(["ΠΕ08"]),
+      defaultSpecialty: "ΠΕ08",
+      weeklyHoursByGrade: JSON.stringify({ Α: [1, 1], Β: [1, 1], Γ: [1, 1], Δ: [1, 1], Ε: [1, 1], ΣΤ: [1, 1], Ολοήμερο: [0, 0] }),
+    },
+    {
+      id: "sub-mousiki",
+      title: "Μουσική",
+      code: "ΜΟΥΣ",
+      color: "#e11d48",
+      allowedSpecialties: JSON.stringify(["ΠΕ79.01"]),
+      defaultSpecialty: "ΠΕ79.01",
+      weeklyHoursByGrade: JSON.stringify({ Α: [1, 1], Β: [1, 1], Γ: [1, 1], Δ: [1, 1], Ε: [1, 1], ΣΤ: [1, 1], Ολοήμερο: [0, 0] }),
+    },
+    {
+      id: "sub-theatro",
+      title: "Θεατρική Αγωγή",
+      code: "ΘΕΑ",
+      color: "#a855f7",
+      allowedSpecialties: JSON.stringify(["ΠΕ91.01", "ΠΕ91.02"]),
+      defaultSpecialty: "ΠΕ91.01",
+      weeklyHoursByGrade: JSON.stringify({ Α: [1, 1], Β: [1, 1], Γ: [1, 1], Δ: [1, 1], Ε: [0, 0], ΣΤ: [0, 0], Ολοήμερο: [0, 0] }),
+    },
+    {
+      id: "sub-logo",
+      title: "Λογοθεραπεία",
+      code: "ΛΟΓΟ",
+      color: "#0284c7",
+      allowedSpecialties: JSON.stringify(["ΠΕ21"]),
+      defaultSpecialty: "ΠΕ21",
+      weeklyHoursByGrade: JSON.stringify({ Α: [0, 0], Β: [0, 0], Γ: [0, 0], Δ: [0, 0], Ε: [0, 0], ΣΤ: [0, 0], Ολοήμερο: [0, 0] }),
+    },
+    {
+      id: "sub-psycho",
+      title: "Ψυχολογική Υποστήριξη",
+      code: "ΨΥΧ",
+      color: "#059669",
+      allowedSpecialties: JSON.stringify(["ΠΕ23"]),
+      defaultSpecialty: "ΠΕ23",
+      weeklyHoursByGrade: JSON.stringify({ Α: [0, 0], Β: [0, 0], Γ: [0, 0], Δ: [0, 0], Ε: [0, 0], ΣΤ: [0, 0], Ολοήμερο: [0, 0] }),
+    },
+    {
+      id: "sub-ergo",
+      title: "Εργοθεραπεία",
+      code: "ΕΡΓΟ",
+      color: "#d97706",
+      allowedSpecialties: JSON.stringify(["ΠΕ29"]),
+      defaultSpecialty: "ΠΕ29",
+      weeklyHoursByGrade: JSON.stringify({ Α: [0, 0], Β: [0, 0], Γ: [0, 0], Δ: [0, 0], Ε: [0, 0], ΣΤ: [0, 0], Ολοήμερο: [0, 0] }),
+    },
+  ];
+
   // Check if subjects exist
-  const existingSubjects = await db.select().from(schema.subjects).limit(1);
+  const existingSubjects = await db.select().from(schema.subjects);
   if (existingSubjects.length === 0) {
     console.log("Seeding default subjects...");
-    const defaultSubjects = [
-      { id: "sub-glossa", title: "Γλώσσα", code: "ΓΛΩΣ", color: "#3b82f6" },
-      { id: "sub-math", title: "Μαθηματικά", code: "ΜΑΘ", color: "#10b981" },
-      { id: "sub-istoria", title: "Ιστορία", code: "ΙΣΤ", color: "#f59e0b" },
-      { id: "sub-fysiki", title: "Φυσικά", code: "ΦΥΣ", color: "#8b5cf6" },
-      { id: "sub-meleti", title: "Μελέτη Περιβάλλοντος", code: "ΜΕΛ", color: "#06b6d4" },
-      { id: "sub-aggli", title: "Αγγλικά", code: "ΑΓΓ", color: "#ec4899" },
-      { id: "sub-tpe", title: "Τ.Π.Ε. (Πληροφορική)", code: "ΤΠΕ", color: "#6366f1" },
-      { id: "sub-gymn", title: "Φυσική Αγωγή", code: "ΦΑ", color: "#14b8a6" },
-      { id: "sub-eikast", title: "Εικαστικά", code: "ΕΙΚ", color: "#f97316" },
-      { id: "sub-mousiki", title: "Μουσική", code: "ΜΟΥΣ", color: "#e11d48" },
-      { id: "sub-theatro", title: "Θεατρική Αγωγή", code: "ΘΕΑ", color: "#a855f7" },
-      { id: "sub-geografia", title: "Γεωγραφία", code: "ΓΕΩ", color: "#84cc16" },
-      { id: "sub-kpa", title: "Κ.Π.Α.", code: "ΚΠΑ", color: "#64748b" },
-      { id: "sub-omilos", title: "Εργαστήρια Δεξιοτήτων", code: "ΕΔ", color: "#d946ef" },
-      { id: "sub-logo", title: "Λογοθεραπεία", code: "ΛΟΓΟ", color: "#0284c7" },
-      { id: "sub-psycho", title: "Ψυχολογική Υποστήριξη", code: "ΨΥΧ", color: "#059669" },
-      { id: "sub-ergo", title: "Εργοθεραπεία", code: "ΕΡΓΟ", color: "#d97706" },
-    ];
-
     for (const sub of defaultSubjects) {
       await db.insert(schema.subjects).values(sub);
+    }
+  } else {
+    // Populate any subjects that have missing allowed_specialties or weekly_hours_by_grade
+    for (const defSub of defaultSubjects) {
+      const match = existingSubjects.find((s) => s.id === defSub.id || s.code === defSub.code);
+      if (match && (!match.allowedSpecialties || !match.weeklyHoursByGrade)) {
+        await db
+          .update(schema.subjects)
+          .set({
+            allowedSpecialties: defSub.allowedSpecialties,
+            defaultSpecialty: defSub.defaultSpecialty,
+            weeklyHoursByGrade: defSub.weeklyHoursByGrade,
+          })
+          .where(eq(schema.subjects.id, match.id));
+      }
     }
   }
 
