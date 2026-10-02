@@ -65,8 +65,8 @@ import {
 interface TeachersManagerProps {
   data: TimetableData;
   onRefresh: () => void;
-  activeTab?: "teachers" | "classes" | "subjects" | "assignments";
-  onTabChange?: (tab: "teachers" | "classes" | "subjects" | "assignments") => void;
+  activeTab?: "teachers" | "classes" | "subjects" | "rules";
+  onTabChange?: (tab: "teachers" | "classes" | "subjects" | "rules") => void;
 }
 
 const ALL_DAYS_INDICES = [0, 1, 2, 3, 4];
@@ -418,51 +418,126 @@ const RangeFilterPopover: React.FC<RangeFilterPopoverProps> = ({
           </div>
         </div>
 
-        {/* Quick Steppers & Input Fields */}
-        <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-zinc-100">
-          <div className="flex items-center justify-between bg-zinc-50 border border-zinc-200 rounded-lg p-1">
-            <span className="text-[10px] font-semibold text-zinc-500 pl-1">Από:</span>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => commitRange(localLow - step, localHigh)}
-                disabled={localLow <= min}
-                className="w-5 h-5 flex items-center justify-center rounded bg-white border border-zinc-200 text-zinc-700 hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer text-xs font-bold"
-              >
-                -
-              </button>
-              <span className="font-mono font-bold text-xs text-zinc-900 w-5 text-center">{localLow}</span>
-              <button
-                type="button"
-                onClick={() => commitRange(localLow + step, localHigh)}
-                disabled={localLow >= localHigh}
-                className="w-5 h-5 flex items-center justify-center rounded bg-white border border-zinc-200 text-zinc-700 hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer text-xs font-bold"
-              >
-                +
-              </button>
-            </div>
+        {/* 1. Σταθερή Τιμή (Ορισμός ίδιας τιμής και για τα δύο άκρα) */}
+        <div className="bg-indigo-50/70 border border-indigo-200/80 rounded-lg p-2 mt-2">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[10.5px] font-bold text-indigo-950">Σταθερή Τιμή:</span>
+            {localLow === localHigh && isCustomActive ? (
+              <span className="text-[9.5px] text-emerald-700 font-bold bg-emerald-100/90 border border-emerald-300 px-1.5 py-0.2 rounded">
+                {localLow}{unit} Σταθερό
+              </span>
+            ) : isCustomActive && localLow !== localHigh ? (
+              <span className="text-[9.5px] text-amber-800 font-medium bg-amber-100/70 border border-amber-200 px-1.5 py-0.2 rounded">
+                (Κλικ για ενοποίηση)
+              </span>
+            ) : null}
           </div>
+          <div className="flex items-center justify-between gap-1.5 bg-white border border-indigo-200/80 rounded-md p-1 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => {
+                const base = localLow === localHigh ? localLow : localLow;
+                const next = Math.max(min, base - step);
+                commitRange(next, next);
+              }}
+              disabled={localLow <= min && localHigh <= min}
+              className="w-6 h-6 flex items-center justify-center rounded bg-zinc-50 border border-zinc-200 text-zinc-700 hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer text-xs font-bold transition-colors"
+              title="Μείωση σταθερής τιμής"
+            >
+              -
+            </button>
+            <div className="flex items-center justify-center gap-1 flex-1">
+              <input
+                type="number"
+                min={min}
+                max={max}
+                step={step}
+                value={localLow === localHigh && isCustomActive ? localLow : ""}
+                placeholder={localLow === localHigh && isCustomActive ? "" : `${localLow}-${localHigh}`}
+                onChange={(e) => {
+                  const valStr = e.target.value;
+                  if (valStr === "") return;
+                  const parsed = parseInt(valStr, 10);
+                  if (!isNaN(parsed)) {
+                    const clamped = Math.max(min, Math.min(max, parsed));
+                    commitRange(clamped, clamped);
+                  }
+                }}
+                className="w-16 h-6 text-center font-mono font-bold text-xs bg-zinc-50 border border-zinc-200 rounded text-zinc-900 focus:bg-white focus:border-indigo-400 focus:outline-hidden"
+              />
+              {unit && <span className="text-zinc-500 font-mono text-xs font-semibold">{unit}</span>}
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                const base = localLow === localHigh ? localLow : localHigh;
+                const next = Math.min(max, base + step);
+                commitRange(next, next);
+              }}
+              disabled={localLow >= max && localHigh >= max}
+              className="w-6 h-6 flex items-center justify-center rounded bg-zinc-50 border border-zinc-200 text-zinc-700 hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer text-xs font-bold transition-colors"
+              title="Αύξηση σταθερής τιμής"
+            >
+              +
+            </button>
+          </div>
+        </div>
 
-          <div className="flex items-center justify-between bg-zinc-50 border border-zinc-200 rounded-lg p-1">
-            <span className="text-[10px] font-semibold text-zinc-500 pl-1">Έως:</span>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => commitRange(localLow, localHigh - step)}
-                disabled={localHigh <= localLow}
-                className="w-5 h-5 flex items-center justify-center rounded bg-white border border-zinc-200 text-zinc-700 hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer text-xs font-bold"
-              >
-                -
-              </button>
-              <span className="font-mono font-bold text-xs text-zinc-900 w-5 text-center">{localHigh}</span>
-              <button
-                type="button"
-                onClick={() => commitRange(localLow, localHigh + step)}
-                disabled={localHigh >= max}
-                className="w-5 h-5 flex items-center justify-center rounded bg-white border border-zinc-200 text-zinc-700 hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer text-xs font-bold"
-              >
-                +
-              </button>
+        {/* 2. Εύρος Τιμών (Από — Έως) */}
+        <div className="bg-zinc-50/80 border border-zinc-200 rounded-lg p-2 mt-2">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[10.5px] font-bold text-zinc-700">Εύρος Τιμών (Από — Έως):</span>
+            {localLow !== localHigh && (
+              <span className="text-[9.5px] text-amber-800 font-bold bg-amber-100/90 border border-amber-300 px-1.5 py-0.2 rounded">
+                Ενεργό
+              </span>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="flex items-center justify-between bg-white border border-zinc-200 rounded-md p-1 shadow-2xs">
+              <span className="text-[10px] font-semibold text-zinc-500 pl-1">Από:</span>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => commitRange(localLow - step, localHigh)}
+                  disabled={localLow <= min}
+                  className="w-5 h-5 flex items-center justify-center rounded bg-zinc-50 border border-zinc-200 text-zinc-700 hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer text-xs font-bold"
+                >
+                  -
+                </button>
+                <span className="font-mono font-bold text-xs text-zinc-900 w-5 text-center">{localLow}</span>
+                <button
+                  type="button"
+                  onClick={() => commitRange(localLow + step, localHigh)}
+                  disabled={localLow >= localHigh}
+                  className="w-5 h-5 flex items-center justify-center rounded bg-zinc-50 border border-zinc-200 text-zinc-700 hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer text-xs font-bold"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between bg-white border border-zinc-200 rounded-md p-1 shadow-2xs">
+              <span className="text-[10px] font-semibold text-zinc-500 pl-1">Έως:</span>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => commitRange(localLow, localHigh - step)}
+                  disabled={localHigh <= localLow}
+                  className="w-5 h-5 flex items-center justify-center rounded bg-zinc-50 border border-zinc-200 text-zinc-700 hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer text-xs font-bold"
+                >
+                  -
+                </button>
+                <span className="font-mono font-bold text-xs text-zinc-900 w-5 text-center">{localHigh}</span>
+                <button
+                  type="button"
+                  onClick={() => commitRange(localLow, localHigh + step)}
+                  disabled={localHigh >= max}
+                  className="w-5 h-5 flex items-center justify-center rounded bg-zinc-50 border border-zinc-200 text-zinc-700 hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer text-xs font-bold"
+                >
+                  +
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1815,15 +1890,15 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => onTabChange?.("assignments")}
+              onClick={() => onTabChange?.("rules")}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-                activeTab === "assignments"
+                activeTab === "rules"
                   ? "bg-white text-zinc-900 shadow-2xs border border-zinc-200/60"
                   : "text-zinc-600 hover:text-zinc-900"
               }`}
             >
               <CalendarDays className="w-3.5 h-3.5" />
-              <span>Αναθέσεις</span>
+              <span>Κανόνες</span>
             </button>
           </div>
 

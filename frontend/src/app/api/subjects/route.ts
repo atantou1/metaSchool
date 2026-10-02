@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { id, title, code, color, allowedSpecialties, defaultSpecialty, weeklyHoursByGrade } = body;
+    const { id, title, code, color, allowedSpecialties, defaultSpecialty, classHours } = body;
 
     const subjectId = id || `sub-${crypto.randomUUID().slice(0, 8)}`;
     const specialtiesArray = Array.isArray(allowedSpecialties)
@@ -17,10 +17,10 @@ export async function POST(req: Request) {
     const specialtiesJson = JSON.stringify(specialtiesArray);
 
     const weeklyHoursJson =
-      typeof weeklyHoursByGrade === "object" && weeklyHoursByGrade !== null
-        ? JSON.stringify(weeklyHoursByGrade)
-        : typeof weeklyHoursByGrade === "string"
-        ? weeklyHoursByGrade
+      typeof classHours === "object" && classHours !== null
+        ? JSON.stringify(classHours)
+        : typeof classHours === "string"
+        ? classHours
         : null;
 
     const existing = await db
@@ -38,7 +38,7 @@ export async function POST(req: Request) {
           color: color || "#71717a",
           allowedSpecialties: specialtiesJson,
           defaultSpecialty: specialtiesArray[0] || defaultSpecialty || null,
-          weeklyHoursByGrade: weeklyHoursJson,
+          classHours: weeklyHoursJson,
         })
         .where(eq(schema.subjects.id, subjectId));
     } else {
@@ -49,7 +49,7 @@ export async function POST(req: Request) {
         color: color || "#71717a",
         allowedSpecialties: specialtiesJson,
         defaultSpecialty: specialtiesArray[0] || defaultSpecialty || null,
-        weeklyHoursByGrade: weeklyHoursJson,
+        classHours: weeklyHoursJson,
       });
     }
 

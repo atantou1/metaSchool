@@ -41,7 +41,7 @@ export async function initializeDatabase() {
     await client.execute("ALTER TABLE subjects ADD COLUMN default_specialty TEXT");
   } catch {}
   try {
-    await client.execute("ALTER TABLE subjects ADD COLUMN weekly_hours_by_grade TEXT");
+    await client.execute("ALTER TABLE subjects ADD COLUMN class_hours TEXT");
   } catch {}
 
   // Check if school settings exist
@@ -88,7 +88,7 @@ export async function initializeDatabase() {
       color: "#3b82f6",
       allowedSpecialties: JSON.stringify(["ΠΕ70", "ΠΕ71"]),
       defaultSpecialty: "ΠΕ70",
-      weeklyHoursByGrade: JSON.stringify({ Α: [9, 9], Β: [9, 9], Γ: [8, 8], Δ: [8, 8], Ε: [7, 7], ΣΤ: [7, 7], Ολοήμερο: [0, 0] }),
+      classHours: JSON.stringify({ Α: [9, 9], Β: [9, 9], Γ: [8, 8], Δ: [8, 8], Ε: [7, 7], ΣΤ: [7, 7], Ολοήμερο: [0, 0] }),
     },
     {
       id: "sub-math",
@@ -97,7 +97,7 @@ export async function initializeDatabase() {
       color: "#10b981",
       allowedSpecialties: JSON.stringify(["ΠΕ70", "ΠΕ71"]),
       defaultSpecialty: "ΠΕ70",
-      weeklyHoursByGrade: JSON.stringify({ Α: [5, 5], Β: [5, 5], Γ: [4, 4], Δ: [4, 4], Ε: [4, 4], ΣΤ: [4, 4], Ολοήμερο: [0, 0] }),
+      classHours: JSON.stringify({ Α: [5, 5], Β: [5, 5], Γ: [4, 4], Δ: [4, 4], Ε: [4, 4], ΣΤ: [4, 4], Ολοήμερο: [0, 0] }),
     },
     {
       id: "sub-istoria",
@@ -106,7 +106,7 @@ export async function initializeDatabase() {
       color: "#f59e0b",
       allowedSpecialties: JSON.stringify(["ΠΕ70", "ΠΕ71"]),
       defaultSpecialty: "ΠΕ70",
-      weeklyHoursByGrade: JSON.stringify({ Α: [0, 0], Β: [0, 0], Γ: [2, 2], Δ: [2, 2], Ε: [2, 2], ΣΤ: [2, 2], Ολοήμερο: [0, 0] }),
+      classHours: JSON.stringify({ Α: [0, 0], Β: [0, 0], Γ: [2, 2], Δ: [2, 2], Ε: [2, 2], ΣΤ: [2, 2], Ολοήμερο: [0, 0] }),
     },
     {
       id: "sub-fysiki",
@@ -115,7 +115,7 @@ export async function initializeDatabase() {
       color: "#8b5cf6",
       allowedSpecialties: JSON.stringify(["ΠΕ70", "ΠΕ71"]),
       defaultSpecialty: "ΠΕ70",
-      weeklyHoursByGrade: JSON.stringify({ Α: [0, 0], Β: [0, 0], Γ: [0, 0], Δ: [0, 0], Ε: [3, 3], ΣΤ: [3, 3], Ολοήμερο: [0, 0] }),
+      classHours: JSON.stringify({ Α: [0, 0], Β: [0, 0], Γ: [0, 0], Δ: [0, 0], Ε: [3, 3], ΣΤ: [3, 3], Ολοήμερο: [0, 0] }),
     },
     {
       id: "sub-meleti",
@@ -124,7 +124,7 @@ export async function initializeDatabase() {
       color: "#06b6d4",
       allowedSpecialties: JSON.stringify(["ΠΕ70", "ΠΕ71"]),
       defaultSpecialty: "ΠΕ70",
-      weeklyHoursByGrade: JSON.stringify({ Α: [3, 3], Β: [3, 3], Γ: [2, 2], Δ: [2, 2], Ε: [0, 0], ΣΤ: [0, 0], Ολοήμερο: [0, 0] }),
+      classHours: JSON.stringify({ Α: [3, 3], Β: [3, 3], Γ: [2, 2], Δ: [2, 2], Ε: [0, 0], ΣΤ: [0, 0], Ολοήμερο: [0, 0] }),
     },
     {
       id: "sub-geografia",
@@ -133,7 +133,7 @@ export async function initializeDatabase() {
       color: "#84cc16",
       allowedSpecialties: JSON.stringify(["ΠΕ70", "ΠΕ71"]),
       defaultSpecialty: "ΠΕ70",
-      weeklyHoursByGrade: JSON.stringify({ Α: [0, 0], Β: [0, 0], Γ: [0, 0], Δ: [0, 0], Ε: [1, 1], ΣΤ: [1, 1], Ολοήμερο: [0, 0] }),
+      classHours: JSON.stringify({ Α: [0, 0], Β: [0, 0], Γ: [0, 0], Δ: [0, 0], Ε: [1, 1], ΣΤ: [1, 1], Ολοήμερο: [0, 0] }),
     },
     {
       id: "sub-kpa",
@@ -142,7 +142,7 @@ export async function initializeDatabase() {
       color: "#64748b",
       allowedSpecialties: JSON.stringify(["ΠΕ70", "ΠΕ71"]),
       defaultSpecialty: "ΠΕ70",
-      weeklyHoursByGrade: JSON.stringify({ Α: [0, 0], Β: [0, 0], Γ: [0, 0], Δ: [0, 0], Ε: [1, 1], ΣΤ: [1, 1], Ολοήμερο: [0, 0] }),
+      classHours: JSON.stringify({ Α: [0, 0], Β: [0, 0], Γ: [0, 0], Δ: [0, 0], Ε: [1, 1], ΣΤ: [1, 1], Ολοήμερο: [0, 0] }),
     },
     {
       id: "sub-thrisk",
@@ -151,7 +151,7 @@ export async function initializeDatabase() {
       color: "#ca8a04",
       allowedSpecialties: JSON.stringify(["ΠΕ70", "ΠΕ71"]),
       defaultSpecialty: "ΠΕ70",
-      weeklyHoursByGrade: JSON.stringify({ Α: [0, 0], Β: [0, 0], Γ: [1, 1], Δ: [1, 1], Ε: [1, 1], ΣΤ: [1, 1], Ολοήμερο: [0, 0] }),
+      classHours: JSON.stringify({ Α: [0, 0], Β: [0, 0], Γ: [1, 1], Δ: [1, 1], Ε: [1, 1], ΣΤ: [1, 1], Ολοήμερο: [0, 0] }),
     },
     {
       id: "sub-omilos",
@@ -160,7 +160,7 @@ export async function initializeDatabase() {
       color: "#d946ef",
       allowedSpecialties: JSON.stringify(["ΠΕ70", "ΠΕ71", "ΠΕ06", "ΠΕ86"]),
       defaultSpecialty: "ΠΕ70",
-      weeklyHoursByGrade: JSON.stringify({ Α: [3, 3], Β: [3, 3], Γ: [2, 2], Δ: [2, 2], Ε: [1, 1], ΣΤ: [1, 1], Ολοήμερο: [0, 0] }),
+      classHours: JSON.stringify({ Α: [3, 3], Β: [3, 3], Γ: [2, 2], Δ: [2, 2], Ε: [1, 1], ΣΤ: [1, 1], Ολοήμερο: [0, 0] }),
     },
     {
       id: "sub-aggli",
@@ -169,7 +169,7 @@ export async function initializeDatabase() {
       color: "#ec4899",
       allowedSpecialties: JSON.stringify(["ΠΕ06"]),
       defaultSpecialty: "ΠΕ06",
-      weeklyHoursByGrade: JSON.stringify({ Α: [2, 2], Β: [2, 2], Γ: [3, 3], Δ: [3, 3], Ε: [3, 3], ΣΤ: [3, 3], Ολοήμερο: [0, 0] }),
+      classHours: JSON.stringify({ Α: [2, 2], Β: [2, 2], Γ: [3, 3], Δ: [3, 3], Ε: [3, 3], ΣΤ: [3, 3], Ολοήμερο: [0, 0] }),
     },
     {
       id: "sub-tpe",
@@ -178,7 +178,7 @@ export async function initializeDatabase() {
       color: "#6366f1",
       allowedSpecialties: JSON.stringify(["ΠΕ86"]),
       defaultSpecialty: "ΠΕ86",
-      weeklyHoursByGrade: JSON.stringify({ Α: [1, 1], Β: [1, 3], Γ: [1, 1], Δ: [1, 1], Ε: [1, 1], ΣΤ: [1, 1], Ολοήμερο: [0, 0] }),
+      classHours: JSON.stringify({ Α: [1, 1], Β: [1, 3], Γ: [1, 1], Δ: [1, 1], Ε: [1, 1], ΣΤ: [1, 1], Ολοήμερο: [0, 0] }),
     },
     {
       id: "sub-gymn",
@@ -187,7 +187,7 @@ export async function initializeDatabase() {
       color: "#14b8a6",
       allowedSpecialties: JSON.stringify(["ΠΕ11"]),
       defaultSpecialty: "ΠΕ11",
-      weeklyHoursByGrade: JSON.stringify({ Α: [3, 3], Β: [3, 3], Γ: [3, 3], Δ: [3, 3], Ε: [2, 2], ΣΤ: [2, 2], Ολοήμερο: [0, 0] }),
+      classHours: JSON.stringify({ Α: [3, 3], Β: [3, 3], Γ: [3, 3], Δ: [3, 3], Ε: [2, 2], ΣΤ: [2, 2], Ολοήμερο: [0, 0] }),
     },
     {
       id: "sub-eikast",
@@ -196,7 +196,7 @@ export async function initializeDatabase() {
       color: "#f97316",
       allowedSpecialties: JSON.stringify(["ΠΕ08"]),
       defaultSpecialty: "ΠΕ08",
-      weeklyHoursByGrade: JSON.stringify({ Α: [1, 1], Β: [1, 1], Γ: [1, 1], Δ: [1, 1], Ε: [1, 1], ΣΤ: [1, 1], Ολοήμερο: [0, 0] }),
+      classHours: JSON.stringify({ Α: [1, 1], Β: [1, 1], Γ: [1, 1], Δ: [1, 1], Ε: [1, 1], ΣΤ: [1, 1], Ολοήμερο: [0, 0] }),
     },
     {
       id: "sub-mousiki",
@@ -205,7 +205,7 @@ export async function initializeDatabase() {
       color: "#e11d48",
       allowedSpecialties: JSON.stringify(["ΠΕ79.01"]),
       defaultSpecialty: "ΠΕ79.01",
-      weeklyHoursByGrade: JSON.stringify({ Α: [1, 1], Β: [1, 1], Γ: [1, 1], Δ: [1, 1], Ε: [1, 1], ΣΤ: [1, 1], Ολοήμερο: [0, 0] }),
+      classHours: JSON.stringify({ Α: [1, 1], Β: [1, 1], Γ: [1, 1], Δ: [1, 1], Ε: [1, 1], ΣΤ: [1, 1], Ολοήμερο: [0, 0] }),
     },
     {
       id: "sub-theatro",
@@ -214,7 +214,7 @@ export async function initializeDatabase() {
       color: "#a855f7",
       allowedSpecialties: JSON.stringify(["ΠΕ91.01", "ΠΕ91.02"]),
       defaultSpecialty: "ΠΕ91.01",
-      weeklyHoursByGrade: JSON.stringify({ Α: [1, 1], Β: [1, 1], Γ: [1, 1], Δ: [1, 1], Ε: [0, 0], ΣΤ: [0, 0], Ολοήμερο: [0, 0] }),
+      classHours: JSON.stringify({ Α: [1, 1], Β: [1, 1], Γ: [1, 1], Δ: [1, 1], Ε: [0, 0], ΣΤ: [0, 0], Ολοήμερο: [0, 0] }),
     },
     {
       id: "sub-logo",
@@ -223,7 +223,7 @@ export async function initializeDatabase() {
       color: "#0284c7",
       allowedSpecialties: JSON.stringify(["ΠΕ21"]),
       defaultSpecialty: "ΠΕ21",
-      weeklyHoursByGrade: JSON.stringify({ Α: [0, 0], Β: [0, 0], Γ: [0, 0], Δ: [0, 0], Ε: [0, 0], ΣΤ: [0, 0], Ολοήμερο: [0, 0] }),
+      classHours: JSON.stringify({ Α: [0, 0], Β: [0, 0], Γ: [0, 0], Δ: [0, 0], Ε: [0, 0], ΣΤ: [0, 0], Ολοήμερο: [0, 0] }),
     },
     {
       id: "sub-psycho",
@@ -232,7 +232,7 @@ export async function initializeDatabase() {
       color: "#059669",
       allowedSpecialties: JSON.stringify(["ΠΕ23"]),
       defaultSpecialty: "ΠΕ23",
-      weeklyHoursByGrade: JSON.stringify({ Α: [0, 0], Β: [0, 0], Γ: [0, 0], Δ: [0, 0], Ε: [0, 0], ΣΤ: [0, 0], Ολοήμερο: [0, 0] }),
+      classHours: JSON.stringify({ Α: [0, 0], Β: [0, 0], Γ: [0, 0], Δ: [0, 0], Ε: [0, 0], ΣΤ: [0, 0], Ολοήμερο: [0, 0] }),
     },
     {
       id: "sub-ergo",
@@ -241,7 +241,7 @@ export async function initializeDatabase() {
       color: "#d97706",
       allowedSpecialties: JSON.stringify(["ΠΕ29"]),
       defaultSpecialty: "ΠΕ29",
-      weeklyHoursByGrade: JSON.stringify({ Α: [0, 0], Β: [0, 0], Γ: [0, 0], Δ: [0, 0], Ε: [0, 0], ΣΤ: [0, 0], Ολοήμερο: [0, 0] }),
+      classHours: JSON.stringify({ Α: [0, 0], Β: [0, 0], Γ: [0, 0], Δ: [0, 0], Ε: [0, 0], ΣΤ: [0, 0], Ολοήμερο: [0, 0] }),
     },
   ];
 
@@ -253,16 +253,16 @@ export async function initializeDatabase() {
       await db.insert(schema.subjects).values(sub);
     }
   } else {
-    // Populate any subjects that have missing allowed_specialties or weekly_hours_by_grade
+    // Populate any subjects that have missing allowed_specialties or class_hours
     for (const defSub of defaultSubjects) {
       const match = existingSubjects.find((s) => s.id === defSub.id || s.code === defSub.code);
-      if (match && (!match.allowedSpecialties || !match.weeklyHoursByGrade)) {
+      if (match && (!match.allowedSpecialties || !match.classHours)) {
         await db
           .update(schema.subjects)
           .set({
             allowedSpecialties: defSub.allowedSpecialties,
             defaultSpecialty: defSub.defaultSpecialty,
-            weeklyHoursByGrade: defSub.weeklyHoursByGrade,
+            classHours: defSub.classHours,
           })
           .where(eq(schema.subjects.id, match.id));
       }

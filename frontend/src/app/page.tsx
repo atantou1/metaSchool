@@ -6,7 +6,7 @@ import { MasterMatrix } from "@/components/master-matrix";
 import { ClassesManager } from "@/components/classes-manager";
 import { TeachersManager } from "@/components/teachers-manager";
 import { SubjectsManager } from "@/components/subjects-manager";
-import { AssignmentsManager } from "@/components/assignments-manager";
+import { RulesManager } from "@/components/rules-manager";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -27,24 +27,31 @@ export default function Home() {
   const [data, setData] = useState<TimetableData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSolving, setIsSolving] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [activeSheet, setActiveSheet] = useState<
-    "classes" | "teachers" | "subjects" | "assignments" | null
+    "classes" | "teachers" | "subjects" | "rules" | null
   >(null);
   const [spotlightTeacherId, setSpotlightTeacherId] = useState<string | null>(
     null
   );
 
   const loadData = async () => {
+    setIsLoading(true);
+    setLoadError(null);
     try {
       const res = await fetch("/api/timetable");
       const json = await res.json();
       if (json.success) {
         setData(json.data);
       } else {
-        toast.error("Σφάλμα φόρτωσης δεδομένων", { description: json.error });
+        const msg = json.error || "Αποτυχία ανάγνωσης δεδομένων";
+        setLoadError(msg);
+        toast.error("Σφάλμα φόρτωσης δεδομένων", { description: msg });
       }
     } catch (e: any) {
-      toast.error("Σφάλμα σύνδεσης με τη βάση", { description: e.message });
+      const msg = e.message || "Σφάλμα σύνδεσης";
+      setLoadError(msg);
+      toast.error("Σφάλμα σύνδεσης με τη βάση", { description: msg });
     } finally {
       setIsLoading(false);
     }
@@ -88,6 +95,25 @@ export default function Home() {
     }
   };
 
+
+  if (loadError && !data) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-zinc-50 text-zinc-800">
+        <div className="flex flex-col items-center gap-4 max-w-md text-center p-6 bg-white border border-zinc-200 rounded-xl shadow-sm">
+          <div className="w-10 h-10 rounded-full bg-red-50 text-red-500 flex items-center justify-center font-bold text-lg">
+            !
+          </div>
+          <div>
+            <h3 className="font-semibold text-sm text-zinc-900">Σφάλμα Σύνδεσης</h3>
+            <p className="text-xs text-zinc-500 mt-1">{loadError}</p>
+          </div>
+          <Button onClick={loadData} size="sm" className="h-8 text-xs bg-zinc-900 text-white hover:bg-zinc-800">
+            Δοκιμάστε ξανά
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   if (isLoading || !data) {
     return (
@@ -152,11 +178,11 @@ export default function Home() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setActiveSheet("assignments")}
+            onClick={() => setActiveSheet("rules")}
             className="h-6 px-2 text-[10px] font-sans border-zinc-200 text-zinc-700 hover:text-zinc-900 hover:bg-zinc-100"
           >
             <CalendarDays className="w-3 h-3 mr-1" />
-            Αναθέσεις
+            Κανόνες
           </Button>
 
           {/* Solver Button */}
@@ -222,8 +248,8 @@ export default function Home() {
               onTabChange={setActiveSheet}
             />
           )}
-          {activeSheet === "assignments" && (
-            <AssignmentsManager
+          {activeSheet === "rules" && (
+            <RulesManager
               data={data}
               onRefresh={loadData}
               activeTab={activeSheet}

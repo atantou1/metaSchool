@@ -1,185 +1,315 @@
-# Product Requirements Document (PRD): Εφαρμογή Δημιουργίας Σχολικού Προγράμματος (metaSchool)
+# Product Requirements Document (PRD): metaSchool
+### Έκδοση 2.0 — Ενημερωμένο Οκτώβριος 2026
+
+---
 
 ## 1. Project Overview & Goals
 
-Η εφαρμογή στοχεύει στην αυτοματοποιημένη δημιουργία ωρολογίου προγράμματος για σχολεία, καλύπτοντας από τις τυπικές ανάγκες ενός κλασικού ελληνικού σχολείου έως τις πολύπλοκες απαιτήσεις ενός Ειδικού Πειραματικού Δημοτικού. Το σύστημα διαχειρίζεται το πρωινό πρόγραμμα, το ολοήμερο (ως ενιαίο ή ξεχωριστό πρόβλημα) και σε δεύτερη φάση τις εφημερίες εκπαιδευτικών.
+Η εφαρμογή **metaSchool** στοχεύει στην αυτοματοποιημένη δημιουργία ωρολογίου προγράμματος για σχολεία, καλύπτοντας από τις τυπικές ανάγκες ενός κλασικού ελληνικού σχολείου έως τις πολύπλοκες απαιτήσεις ενός Ειδικού Πειραματικού Δημοτικού.
 
-**Βασικοί Στόχοι (Phase 1):**
+**Βασικοί Στόχοι (Phase 1 — Ενεργή):**
 
-* Ευελιξία στο "σπάσιμο" τμημάτων σε υπο-ομάδες για ταυτόχρονη διδασκαλία διαφορετικών μαθημάτων (π.χ. Πληροφορική / Γλώσσα).
-* Διαχείριση υποστηρικτικών ειδικοτήτων (Λογοθεραπεία, Ψυχολογική υποστήριξη) που αναλαμβάνουν μαθητές παράλληλα με το βασικό πρόγραμμα.
-* Αντιμετώπιση των συνδιδασκαλιών ή διπλών τμημάτων ως ανεξάρτητων οντοτήτων στο σύστημα.
-* Local-first λειτουργία με προοπτική για Online/SaaS.
+* Ευελιξία στο "σπάσιμο" τμημάτων σε υπο-ομάδες για ταυτόχρονη διδασκαλία.
+* Διαχείριση υποστηρικτικών ειδικοτήτων (Λογοθεραπεία, Ψυχολογική υποστήριξη).
+* **Conditional Rule Engine**: ορισμός κανόνων τύπου ΟΤΑΝ→ΤΟΤΕ με AND/OR λογική.
+* Local-first λειτουργία (SQLite) με προοπτική για Online/SaaS.
 
-## 2. Tech Stack & Architecture
+---
 
-* **Frontend / UI:** Next.js (App Router, TypeScript), Tailwind CSS, shadcn/ui
-* **Desktop Wrapper:** Tauri (πακετάρισμα σε αυτόνομο `.exe` / `.dmg`)
-* **Local Database:** SQLite (ORM: Prisma ή Drizzle) - Σχεδιασμός με γνώμονα τη μελλοντική μετάβαση σε Supabase (PostgreSQL).
-* **Backend / Solver Sidecar:** Python με FastAPI
-* **Αλγόριθμος Βελτιστοποίησης:** Google OR-Tools (CP-SAT Solver)
+## 2. Tech Stack & Architecture (Τρέχουσα Κατάσταση)
 
-## 3. Core Entities & Data Architecture
+| Layer | Τεχνολογία |
+|-------|-----------|
+| **Frontend / UI** | Next.js 15 (App Router, TypeScript), Tailwind CSS, shadcn/ui |
+| **Desktop Wrapper** | Tauri (προοπτική — δεν έχει ενσωματωθεί ακόμα) |
+| **Local Database** | SQLite μέσω **Drizzle ORM** (`metaschool.db`) |
+| **Backend / Solver Sidecar** | Python με FastAPI (`http://127.0.0.1:8000`) |
+| **Αλγόριθμος** | Google OR-Tools CP-SAT Solver |
 
-**3.1. School Configuration (Ρυθμίσεις Σχολείου)**
+---
 
-* **Ημέρες Λειτουργίας:** π.χ. Δευτέρα έως Παρασκευή.
-* **Περίοδοι (Periods):** Ορισμός συνολικού αριθμού ωρών (π.χ. 6ωρο, 7ωρο, Ολοήμερο).
-* **Χρονοδιάγραμμα:** Έναρξη και λήξη κάθε ώρας (π.χ. 1η Ώρα: 08:15 - 09:00).
+## 3. Core Entities & Data Architecture (Πλήρες Schema)
 
-**3.2. Specialty Category (Κατηγορία Ειδικότητας)**
+### 3.1. Teachers (Εκπαιδευτικοί)
 
-* **Core (Βασική):** Καταλαμβάνει τις επίσημες ώρες του ωρολογίου προγράμματος του τμήματος (π.χ. Δάσκαλοι, Πληροφορική, Μουσική).
-* **Pull-out / Support (Υποστηρικτική):** Λειτουργεί παράλληλα με το πρόγραμμα. Οι ειδικότητες αυτές (π.χ. Λογοθεραπευτής, Ψυχολόγος) παίρνουν μαθητές εκτός τάξης χωρίς να ακυρώνουν το βασικό μάθημα.
+Πίνακας: `teachers`
 
-**3.3. Teacher (Εκπαιδευτικός)**
+| Στήλη | Τύπος | Περιγραφή |
+|-------|-------|-----------|
+| `id` | text PK | UUID |
+| `firstName` | text | Όνομα |
+| `lastName` | text | Επώνυμο |
+| `specialty` | text | Ειδικότητα (π.χ. "ΠΕ70") |
+| `isSupport` | boolean | true = υποστηρικτική ειδικότητα |
+| `shortName` | text? | Συντομογραφία για εμφάνιση |
+| `isTeaching` | boolean | Αν διδάσκει ενεργά |
+| `isOnCall` | boolean | Εφημερεύων |
+| `isMorning` | boolean | Πρωινό ωράριο |
+| `isAllDay` | boolean | Ολοήμερο ωράριο |
+| `isActive` | boolean | Ενεργός/Ανενεργός |
+| `maxWeeklyHours` | int | Μέγιστες εβδομαδιαίες ώρες |
+| `color` | text | Χρώμα για UI |
+| `constraints` | text (JSON) | Διαθεσιμότητες, όρια ωρών, κενά |
+| `createdAt` / `updatedAt` | text | ISO timestamps |
 
-* **Προσωπικά:** Όνομα, Ειδικότητα, Κατηγορία (Core ή Support).
-* **Τοποθέτηση:** Συμμετοχή (Μόνο Πρωί / Μόνο Ολοήμερο / Και τα 2), Κατανομή ωρών.
-* **Διαθεσιμότητα:** Πίνακας με διαθέσιμες Ημέρες & Ώρες.
-* **Περιορισμοί (Nullable / "Αδιάφορο"):** Κάθε περιορισμός μπορεί να τεθεί ως "Αδιάφορο" για να μην μπλοκάρει τον Solver.
-  * Μέγιστες/Ελάχιστες ώρες ανά ημέρα.
-  * Μέγιστες συνεχόμενες ώρες μαθήματος.
-  * Μέγιστα συνεχόμενα κενά ανά ημέρα.
-  * Μέγιστα συνολικά κενά (ημέρας/εβδομάδας). 
-    *(Σημείωση: Η καθυστερημένη έναρξη ή η πρόωρη λήξη ωραρίου δεν προσμετρώνται ως κενά).*
-
-**3.4. Class / StudentGroup (Τμήμα & Υπο-ομάδες)**
-
-* Αντιμετώπιση του σχολείου ως 10 ανεξάρτητα τμήματα.
-* **Sub-groups:** Δυνατότητα διαχωρισμού (π.χ. "Τμήμα 1 - Ομάδα Α", "Τμήμα 1 - Ομάδα Β").
-* **Support Requirements:** Λίστα με τις υποστηρικτικές ειδικότητες που χρειάζεται το τμήμα.
-
-**3.5. Lesson Assignment (Ανάθεση / Απαίτηση Μαθήματος)**
-
-* Ορίζει τη σχέση: `[Εκπαιδευτικός] -> [Μάθημα] -> [Υπο-ομάδα] -> [Αριθμός Ωρών]`.
-* **Concurrent Link (Συγχρονισμός):** Αν δύο διαφορετικές αναθέσεις (π.χ. Πληροφορική Ομάδας Α και Γλώσσα Ομάδας Β) μοιράζονται το ίδιο `concurrentGroupId`, ο αλγόριθμος τα τοποθετεί αυστηρά την ίδια διδακτική ώρα.
-
-## 4. Business Logic, Constraints & Rule Builder
-
-**4.1. Multi-Layer Scheduling (Στρωματική Επίλυση)**
-
-* **Layer 1 - Core Schedule:** Επίλυση του βασικού προγράμματος. Εξασφαλίζει ότι όλα τα τμήματα καλύπτονται πλήρως από τις "Core" ειδικότητες χωρίς επικαλύψεις και κενά.
-* **Layer 2 - Support Overlay:** Τοποθέτηση των "Pull-out" ειδικοτήτων πάνω στο δομημένο πρόγραμμα. Μοναδικός αυστηρός περιορισμός: να μην υπάρχουν δύο θεραπευτές στο ίδιο τμήμα την ίδια ώρα.
-
-**4.2. Custom Constraint Builder & AI Rule Engine**
-Ένα σύστημα υπερίσχυσης των γενικών κανόνων για τη διαχείριση ειδικών περιπτώσεων.
-
-* **Visual Builder:** Οπτική δημιουργία κανόνων μέσω UI.
-* **AI-Assisted Rules:** Ενσωμάτωση LLM. Ο χρήστης περιγράφει την ανάγκη σε φυσική γλώσσα (π.χ. *"Ο Γιώργος θέλω την Τετάρτη να έχει 4ωρο τις 4 πρώτες ώρες"*). Το AI επιστρέφει ένα δομημένο JSON payload, το οποίο η Python/FastAPI μετατρέπει δυναμικά σε constraint για το OR-Tools.
-
-## 5. User Flow & UI/UX
-
-Η εφαρμογή ακολουθεί δομή ελεύθερης πλοήγησης (Dashboard/Tabs):
-
-1. **Global Settings:** Ορισμός παραμέτρων σχολείου, ζωνών και ωραρίων.
-2. **Directory:** Εισαγωγή εκπαιδευτικών και μαθημάτων (μελλοντικά μέσω CSV/Excel).
-3. **Classes & Requirements:** Δημιουργία τμημάτων, ορισμός υπο-ομάδων (Splits) και αντιστοίχιση αναθέσεων.
-4. **The Builder:** Εισαγωγή ειδικών/χειροκίνητων περιορισμών.
-5. **Solver Execution:** Αποστολή JSON state στο FastAPI. Προβολή Loading Screen με τα στάδια επίλυσης του OR-Tools.
-6. **Results (Master Grid):** 
-   * Προβολή προγράμματος ανά Τμήμα και ανά Εκπαιδευτικό.
-   * **Split Cells:** Οπτικός διαχωρισμός του κελιού στο UI όταν ένα τμήμα χωρίζεται σε υπο-ομάδες τη συγκεκριμένη ώρα.
-   * Δυνατότητα Drag & Drop μικροαλλαγών με live έλεγχο ορθότητας (validation) από το backend.
-
-## 6. Database Schema (Prisma)
-
-```prisma
-generator client {
-  provider = "prisma-client-js"
+**JSON `constraints` schema:**
+```json
+{
+  "availability": { "0": [true, false, true, ...] },
+  "availableDays": [0, 1, 2, 3, 4],
+  "maxHoursPerDay": 5,
+  "minHoursPerDay": 2,
+  "maxConsecutiveHours": 4,
+  "maxConsecutiveGaps": 1,
+  "maxTotalGapsPerDay": 2,
+  "maxTotalGapsPerWeek": 5
 }
+```
 
-datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+### 3.2. Subjects (Μαθήματα)
+
+Πίνακας: `subjects`
+
+| Στήλη | Τύπος | Περιγραφή |
+|-------|-------|-----------|
+| `id` | text PK | UUID |
+| `title` | text | Τίτλος μαθήματος |
+| `code` | text | Κωδικός (π.χ. "MAT") |
+| `color` | text | Χρώμα για grid |
+| `allowedSpecialties` | text (JSON) | Λίστα ειδικοτήτων που μπορούν να διδάξουν |
+| `defaultSpecialty` | text? | Κύρια ειδικότητα |
+| `classHours` | text (JSON) | `{ classId: [min, max] }` ώρες ανά τμήμα |
+
+### 3.3. Classes (Τμήματα)
+
+Πίνακας: `classes`
+
+| Στήλη | Τύπος | Περιγραφή |
+|-------|-------|-----------|
+| `id` | text PK | UUID |
+| `name` | text | Όνομα (π.χ. "Α1") |
+| `grade` | text | Τάξη |
+| `color` | text | Χρώμα τμήματος |
+| `shortName` | text? | Σύντομο όνομα |
+| `studentsCount` | int | Αριθμός μαθητών |
+| `headTeacherId` | text? | Υπεύθυνος δάσκαλος |
+| `room` | text? | Αίθουσα |
+| `isAllDay` | boolean | Ολοήμερο τμήμα |
+| `supportSpecialties` | text (JSON) | Ειδικότητες υποστήριξης που χρειάζεται |
+| `weeklyHoursTarget` | int | Στόχος εβδομαδιαίων ωρών |
+| `supportHoursMin` | int | Ελάχιστες ώρες υποστήριξης/εβδομάδα |
+| `supportHoursMax` | int | Μέγιστες ώρες υποστήριξης/εβδομάδα |
+| `orderIndex` | int | Σειρά εμφάνισης |
+
+### 3.4. SubGroups (Υπο-ομάδες)
+
+Πίνακας: `sub_groups`
+
+| Στήλη | Τύπος | Περιγραφή |
+|-------|-------|-----------|
+| `id` | text PK | UUID |
+| `classId` | text FK | → classes (cascade delete) |
+| `name` | text | Όνομα (π.χ. "Α1-Α", "Α1-Β") |
+| `isDefault` | boolean | true = ολομέλεια τμήματος |
+
+Κάθε τμήμα έχει πάντα τουλάχιστον μία default subgroup (η ολομέλεια). Τα splits δημιουργούν επιπλέον subgroups.
+
+### 3.5. LessonAssignments (Αναθέσεις)
+
+Πίνακας: `lesson_assignments`
+
+| Στήλη | Τύπος | Περιγραφή |
+|-------|-------|-----------|
+| `id` | text PK | UUID |
+| `teacherId` | text FK | → teachers |
+| `subjectId` | text FK | → subjects |
+| `subGroupId` | text FK | → sub_groups |
+| `hours` | int | Ώρες/εβδομάδα |
+| `isAllDay` | boolean | Ανήκει στο ολοήμερο |
+| `concurrentGroupId` | text? | Κοινό ID για ταυτόχρονα μαθήματα (splits) |
+
+### 3.6. TimetableSlots (Αποτέλεσμα Αλγορίθμου)
+
+Πίνακας: `timetable_slots`
+
+| Στήλη | Τύπος | Περιγραφή |
+|-------|-------|-----------|
+| `id` | text PK | UUID |
+| `day` | int | 0=Δευτέρα … 4=Παρασκευή |
+| `period` | int | 0=1η ώρα, 1=2η, … |
+| `assignmentId` | text FK | → lesson_assignments |
+| `classId` | text FK | → classes |
+| `subGroupId` | text FK | → sub_groups |
+| `teacherId` | text FK | → teachers |
+| `subjectId` | text FK | → subjects |
+| `isSupport` | boolean | Layer 2 slot |
+| `layer` | int | 1=Core, 2=Support |
+| `isLocked` | boolean | Κλειδωμένο χειροκίνητα |
+
+### 3.7. Rules (Κανόνες)
+
+Πίνακας: `rules`
+
+| Στήλη | Τύπος | Περιγραφή |
+|-------|-------|-----------|
+| `id` | text PK | UUID |
+| `name` | text | Ανθρωποαναγνώσιμο όνομα |
+| `description` | text? | Προαιρετική περιγραφή |
+| `type` | text | `"CONDITIONAL"` (κύριος) ή legacy flat types |
+| `enforcement` | text | `"hard"` \| `"soft"` |
+| `weight` | int | 1-100, μόνο για soft rules |
+| `params` | text (JSON) | `{ when: WhenClause, then: Action[] }` |
+| `isActive` | boolean | Ενεργός/Ανενεργός |
+| `source` | text | `"manual"` \| `"ai"` |
+| `createdAt` / `updatedAt` | text | ISO timestamps |
+
+### 3.8. AppSettings (Ρυθμίσεις)
+
+Πίνακας: `app_settings`
+
+Key-value store. Βασικό key: `"school_config"` με JSON:
+```json
+{
+  "schoolName": "...",
+  "schoolYear": "2026-2027",
+  "days": ["Δευτέρα", "Τρίτη", "Τετάρτη", "Πέμπτη", "Παρασκευή"],
+  "periods": [
+    { "index": 0, "label": "1η Ώρα", "startTime": "08:15", "endTime": "09:00" },
+    ...
+  ],
+  "allDayPeriods": []
 }
+```
 
-model Teacher {
-  id          String  @id @default(uuid())
-  firstName   String
-  lastName    String
-  specialty   String
-  isSupport   Boolean @default(false)
-  constraints String? // JSON payload για μέγιστες ώρες, κενά, διαθεσιμότητα
-  assignments LessonAssignment[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
+---
 
-model Subject {
-  id          String  @id @default(uuid())
-  title       String
-  color       String?
-  assignments LessonAssignment[]
-}
+## 4. Business Logic, Constraints & Rule Engine
 
-model Class {
-  id          String  @id @default(uuid())
-  name        String
-  subGroups   SubGroup[]
-}
+### 4.1. Multi-Layer Scheduling
 
-model SubGroup {
-  id          String  @id @default(uuid())
-  classId     String
-  name        String
-  class       Class   @relation(fields: [classId], references: [id], onDelete: Cascade)
-  assignments LessonAssignment[]
-}
+* **Layer 1 — Core Schedule:** Βασικό πρόγραμμα Core εκπαιδευτικών.
+* **Layer 2 — Support Overlay:** Τοποθέτηση Pull-out ειδικοτήτων *(προσωρινά disabled στον solver — `if False`)*.
 
-model LessonAssignment {
-  id              String  @id @default(uuid())
-  teacherId       String
-  subjectId       String
-  subGroupId      String
-  hours           Int
-  isAllDay        Boolean @default(false)
-  concurrentGroupId String? // Κοινό ID για μαθήματα που πρέπει να γίνουν την ίδια ώρα
-  teacher         Teacher  @relation(fields: [teacherId], references: [id])
-  subject         Subject  @relation(fields: [subjectId], references: [id])
-  subGroup        SubGroup @relation(fields: [subGroupId], references: [id])
-}
+### 4.2. Conditional Rule Engine (ΝΕΟΣ — Phase 1 Ενεργό)
 
-model AppSettings {
-  id          String  @id @default(uuid())
-  key         String  @unique
-  value       String  // JSON payload
-}
+Αντικατέστησε το παλαιό flat Rule Builder. Δείτε `rule_builder_spec.md` για πλήρη ανάλυση.
 
-model CustomRule {
-  id          String  @id @default(uuid())
-  name        String
-  description String?
-  rulePayload String  // Δομημένο JSON από το AI/Builder
-  isActive    Boolean @default(true)
-}
+Κάθε κανόνας ακολουθεί τη λογική:
 
+```
+ΟΤΑΝ [Συνθήκες με AND/OR groups] → ΤΟΤΕ [Αποτελέσματα]
+```
 
+Η εφαρμογή γίνεται μέσω OR-Tools **reification** (`OnlyEnforceIf`).
 
+---
 
+## 5. User Flow & UI/UX (Tabs)
 
-## 7. Development Roadmap
+| Tab | Περιεχόμενο |
+|-----|------------|
+| **Global Settings** | Σχολείο, ώρες, ημέρες |
+| **Εκπαιδευτικοί** | Directory, constraints, availability grid |
+| **Τμήματα** | Classes, subgroups, splits, support requirements |
+| **Μαθήματα** | Subjects, ειδικότητες, classHours |
+| **Αναθέσεις** | Assignments manager, concurrentGroupId |
+| **Κανόνες** | Conditional Rule Builder (ΟΤΑΝ→ΤΟΤΕ) |
+| **Solver** | Εκτέλεση, loading screen, diagnostics |
+| **Master Grid** | Αποτέλεσμα, Drag & Drop, Split Cells, Lock |
 
-- **Phase 1: Core Engine & Local App (MVP)**
-  
-  - Tauri + Next.js (Frontend), Python/FastAPI (Backend).
-  
-  - Υλοποίηση βασικού αλγορίθμου OR-Tools (Χωρίς ολοήμερο στην αρχή).
-  
-  - Σύστημα υπο-ομάδων και Split Cells UI.
+---
 
-- **Phase 2: Επεκτάσεις & Εργαλεία**
-  
-  - Ενσωμάτωση Ολοήμερου Προγράμματος.
-  
-  - AI Rule Builder.
-  
-  - Data Import/Export (CSV/Excel).
-  
-  - Αλγόριθμος Εφημεριών (υπολογισμός βάσει παραχθέντος προγράμματος).
+## 6. API Endpoints
 
-- **Phase 3: Cloud & SaaS**
-  
-  - Μετάβαση σε Supabase (PostgreSQL).
-  
-  - User Authentication & Multi-tenant architecture.
+### Frontend → Backend (Next.js API Routes)
+
+| Method | Path | Περιγραφή |
+|--------|------|-----------|
+| GET/POST/PATCH/DELETE | `/api/teachers` | CRUD εκπαιδευτικών |
+| GET/POST/DELETE | `/api/subjects` | CRUD μαθημάτων |
+| GET/POST/DELETE | `/api/classes` | CRUD τμημάτων |
+| GET/POST/DELETE | `/api/subgroups` | CRUD υπο-ομάδων |
+| GET/POST/DELETE | `/api/assignments` | CRUD αναθέσεων |
+| GET/POST/PATCH/DELETE | `/api/rules` | CRUD κανόνων |
+| GET/DELETE | `/api/timetable` | Εμφάνιση/Διαγραφή slots |
+| POST | `/api/timetable/solve` | Εκκίνηση αλγορίθμου |
+| POST | `/api/timetable/slots` | Validate/Save slots |
+
+### Python Sidecar (FastAPI — `http://127.0.0.1:8000`)
+
+| Method | Path | Περιγραφή |
+|--------|------|-----------|
+| POST | `/api/solve` | Κύρια επίλυση OR-Tools |
+| POST | `/api/validate-move` | Drag & Drop validation |
+
+---
+
+## 7. Backend Python Structure
+
+```
+backend/app/
+├── main.py              # FastAPI app, routes
+├── models.py            # Pydantic input/output models
+├── solver.py            # CP-SAT solver (Layer 1 + 2)
+└── conditional_rules.py # Conditional Rule Engine handler (ΝΕΟΣ)
+```
+
+---
+
+## 8. Frontend Structure
+
+```
+frontend/src/
+├── app/
+│   ├── page.tsx              # Main application shell
+│   └── api/                  # Next.js API routes
+├── components/
+│   ├── teachers-manager.tsx
+│   ├── classes-manager.tsx
+│   ├── subjects-manager.tsx
+│   ├── assignments-manager.tsx
+│   ├── rules-manager.tsx         # Ενημερωμένο — χρησιμοποιεί νέο builder
+│   ├── conditional-rule-builder.tsx  # ΝΕΟΣ — ΟΤΑΝ→ΤΟΤΕ UI
+│   ├── master-matrix.tsx
+│   ├── timetable-grid.tsx
+│   ├── split-cell.tsx
+│   └── move-slot-modal.tsx
+├── db/
+│   ├── schema.ts             # Drizzle ORM schema
+│   ├── init.ts               # DB initialization & migrations
+│   └── migrations/
+├── lib/
+│   ├── conditional-rules.ts  # ΝΕΟΣ — Type system & registries
+│   ├── rules.ts              # Legacy flat rule types (υπάρχει ακόμα)
+│   ├── specialties.ts
+│   └── palette.ts
+└── types/
+    └── index.ts              # Shared TypeScript interfaces
+```
+
+---
+
+## 9. Development Roadmap
+
+### ✅ Phase 1 — Core Engine & Local App (MVP — Ολοκληρωμένο)
+- [x] Next.js + FastAPI architecture
+- [x] OR-Tools CP-SAT Layer 1 (Core Schedule)
+- [x] Subgroups & Split Cells UI
+- [x] Teacher constraints (availability, max/min hours, gaps, consecutive)
+- [x] ConcurrentGroup synchronization
+- [x] Fixed/Locked slots
+- [x] Drag & Drop με validation
+- [x] **Conditional Rule Engine** (ΟΤΑΝ→ΤΟΤΕ, AND/OR, 16 predicates, 15 actions)
+- [x] Rule persistence στη SQLite
+- [x] Rules → Solver integration (customRules στο solve payload)
+
+### 🔄 Phase 2 — Επεκτάσεις (Σε εξέλιξη)
+- [ ] Layer 2: Support Overlay (επανενεργοποίηση)
+- [ ] Ολοήμερο Πρόγραμμα
+- [ ] AI Rule Builder (φυσική γλώσσα → JSON)
+- [ ] Data Import/Export (CSV/Excel)
+- [ ] Αλγόριθμος Εφημεριών
+
+### 🔮 Phase 3 — Cloud & SaaS
+- [ ] Supabase (PostgreSQL) migration
+- [ ] User Authentication & Multi-tenant

@@ -17,6 +17,7 @@ export async function POST(req: Request) {
       allAssignments,
       allSettings,
       allSlots,
+      allRules,
     ] = await Promise.all([
       db.select().from(schema.teachers),
       db.select().from(schema.subjects),
@@ -25,6 +26,7 @@ export async function POST(req: Request) {
       db.select().from(schema.lessonAssignments),
       db.select().from(schema.appSettings),
       db.select().from(schema.timetableSlots),
+      db.select().from(schema.rules),
     ]);
 
     const lockedFixedSlots = allSlots
@@ -99,6 +101,21 @@ export async function POST(req: Request) {
       })),
       schoolConfig,
       fixedSlots,
+      customRules: allRules
+        .filter((r) => r.isActive)
+        .map((r) => ({
+          id: r.id,
+          name: r.name,
+          description: r.description ?? null,
+          // rulePayload wraps type, enforcement, weight, and params (the when/then)
+          rulePayload: {
+            type: r.type,
+            enforcement: r.enforcement,
+            weight: r.weight ?? 100,
+            params: r.params ? JSON.parse(r.params) : {},
+          },
+          isActive: Boolean(r.isActive),
+        })),
     };
 
     // 3. Call FastAPI solver

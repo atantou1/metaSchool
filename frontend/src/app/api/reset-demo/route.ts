@@ -13,7 +13,7 @@ export async function POST() {
     await db.delete(schema.teachers);
     await db.delete(schema.subjects);
     await db.delete(schema.appSettings);
-    await db.delete(schema.customRules);
+    await db.delete(schema.rules);
 
     // Re-initialize with seed data
     await initializeDatabase();

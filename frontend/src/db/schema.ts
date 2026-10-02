@@ -27,7 +27,7 @@ export const subjects = sqliteTable("subjects", {
   color: text("color").default("#71717a").notNull(),
   allowedSpecialties: text("allowed_specialties"), // JSON string e.g. '["ΠΕ70","ΠΕ71"]'
   defaultSpecialty: text("default_specialty"), // Legacy single specialty e.g. "ΠΕ70"
-  weeklyHoursByGrade: text("weekly_hours_by_grade"), // JSON string e.g. '{"Α":[9,9],"Β":[1,3],...}'
+  classHours: text("class_hours"), // JSON string mapping classId to [min, max] hours
 });
 
 export const classes = sqliteTable("classes", {
@@ -83,12 +83,18 @@ export const appSettings = sqliteTable("app_settings", {
   value: text("value").notNull(), // JSON payload for periods, timings, school info
 });
 
-export const customRules = sqliteTable("custom_rules", {
+export const rules = sqliteTable("rules", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   description: text("description"),
-  rulePayload: text("rule_payload").notNull(), // JSON payload for solver
+  type: text("type").notNull(),           // "MUST_TEACH", "TIME_WINDOW", etc. (extensible string, not enum)
+  enforcement: text("enforcement").default("hard").notNull(), // "hard" | "soft"
+  weight: integer("weight").default(100),  // 1-100, relevance only for soft rules
+  params: text("params").notNull(),        // JSON payload — shape depends on rule type
   isActive: integer("is_active", { mode: "boolean" }).default(true).notNull(),
+  source: text("source").default("manual").notNull(), // "manual" | "ai"
+  createdAt: text("created_at").$defaultFn(() => new Date().toISOString()).notNull(),
+  updatedAt: text("updated_at").$defaultFn(() => new Date().toISOString()).notNull(),
 });
 
 // Relations

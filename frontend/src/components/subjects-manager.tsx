@@ -45,16 +45,14 @@ import { CLASS_15_PALETTE } from "@/lib/palette";
 interface SubjectsManagerProps {
   data: TimetableData;
   onRefresh: () => void;
-  activeTab?: "teachers" | "classes" | "subjects" | "assignments";
-  onTabChange?: (tab: "teachers" | "classes" | "subjects" | "assignments") => void;
+  activeTab?: "teachers" | "classes" | "subjects" | "rules";
+  onTabChange?: (tab: "teachers" | "classes" | "subjects" | "rules") => void;
 }
 
-const GRADE_KEYS = ["Α", "Β", "Γ", "Δ", "Ε", "ΣΤ", "Ολοήμερο"] as const;
-
-type GradeKey = (typeof GRADE_KEYS)[number];
+// Dynamic class usage instead of GRADE_KEYS
 
 // Helper to normalize any grade hours value to [min, max] tuple
-export function normalizeGradeHours(val: [number, number] | number | undefined | null): [number, number] {
+export function normalizeClassHours(val: [number, number] | number | undefined | null): [number, number] {
   if (val === undefined || val === null) return [0, 0];
   if (Array.isArray(val)) {
     const min = typeof val[0] === "number" ? val[0] : 0;
@@ -67,20 +65,46 @@ export function normalizeGradeHours(val: [number, number] | number | undefined |
   return [0, 0];
 }
 
+export function isLanguageSubject(title?: string | null, code?: string | null): boolean {
+  if (!title && !code) return false;
+  const t = (title || "")
+    .toLowerCase()
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, ""); // strip Greek accents
+  const c = (code || "")
+    .toUpperCase()
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+
+  return (
+    t.includes("γλωσσ") ||
+    t === "γλωσσα" ||
+    c === "ΓΛΩ" ||
+    c === "ΓΛΩΣ" ||
+    c === "ΓΛΩΣΣΑ" ||
+    c === "ΓΛΩΣΣ"
+  );
+}
+
 interface InlineSubjectEditState {
   id?: string;
   title: string;
   code: string;
   color: string;
   allowedSpecialties: string[];
-  weeklyHoursByGrade: Record<GradeKey, [number, number]>;
+  classHours: Record<string, [number, number]>;
 }
 
 /* ========================================================================== */
 /* DUAL-THUMB RANGE SLIDER POPOVER FOR GRADE HOURS IN EDIT ROW               */
 /* ========================================================================== */
-interface GradeHoursSliderPopoverProps {
-  gradeName: string;
+/* ========================================================================== */
+/* DUAL-THUMB RANGE SLIDER POPOVER FOR CLASS/SECTION HOURS IN EDIT ROW        */
+/* ========================================================================== */
+interface ClassHoursSliderPopoverProps {
+  classNameLabel: string;
   value: [number, number];
   onChange: (value: [number, number]) => void;
   min?: number;
@@ -90,21 +114,8 @@ interface GradeHoursSliderPopoverProps {
   className?: string;
 }
 
-const GRADE_HOURS_PRESETS: { label: string; range: [number, number] }[] = [
-  { label: "0ω", range: [0, 0] },
-  { label: "1ω", range: [1, 1] },
-  { label: "2ω", range: [2, 2] },
-  { label: "3ω", range: [3, 3] },
-  { label: "4ω", range: [4, 4] },
-  { label: "1-2ω", range: [1, 2] },
-  { label: "1-3ω", range: [1, 3] },
-  { label: "2-3ω", range: [2, 3] },
-  { label: "2-4ω", range: [2, 4] },
-  { label: "3-4ω", range: [3, 4] },
-];
-
-const GradeHoursSliderPopover: React.FC<GradeHoursSliderPopoverProps> = ({
-  gradeName,
+const ClassHoursSliderPopover: React.FC<ClassHoursSliderPopoverProps> = ({
+  classNameLabel,
   value,
   onChange,
   min = 0,
@@ -254,7 +265,7 @@ const GradeHoursSliderPopover: React.FC<GradeHoursSliderPopoverProps> = ({
             ? "bg-white border-zinc-300 text-zinc-900 hover:bg-zinc-50 hover:border-zinc-400"
             : "bg-zinc-50 border-zinc-200 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600"
         } ${className}`}
-        title={`Ώρες τάξης ${gradeName}: ${displayText} (Κλικ για επιλογή εύρους)`}
+        title={`Ώρες τμήματος ${classNameLabel}: ${displayText} (Κλικ για επεξεργασία)`}
       >
         <span>{displayText}</span>
         <ChevronDown className="w-2.5 h-2.5 opacity-40 shrink-0" />
@@ -263,14 +274,14 @@ const GradeHoursSliderPopover: React.FC<GradeHoursSliderPopoverProps> = ({
       <PopoverContent
         align="center"
         sideOffset={6}
-        className="w-72 p-3 shadow-xl border border-zinc-200 bg-white text-xs z-[80] rounded-xl animate-in fade-in"
+        className="w-76 p-3 shadow-xl border border-zinc-200 bg-white text-xs z-[80] rounded-xl animate-in fade-in"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between pb-2 mb-2 border-b border-zinc-100">
           <div className="flex items-center gap-1.5">
-            <span className="font-bold text-zinc-900 text-xs">Τάξη {gradeName}</span>
-            <span className="text-[10.5px] text-zinc-400 font-medium">— Ώρες Διδασκαλίας</span>
+            <span className="font-bold text-zinc-900 text-xs">Τμήμα {classNameLabel}</span>
+            <span className="text-[10.5px] text-zinc-400 font-medium">— Ώρες</span>
           </div>
           {!isZero && (
             <button
@@ -284,7 +295,7 @@ const GradeHoursSliderPopover: React.FC<GradeHoursSliderPopoverProps> = ({
         </div>
 
         {/* Current Active Range Tag Badge */}
-        <div className="flex items-center justify-center mb-3">
+        <div className="flex items-center justify-center mb-2.5">
           <div
             className={`px-3 py-1 rounded-lg border font-mono text-xs font-bold shadow-2xs flex items-center gap-1.5 ${
               isRange
@@ -303,7 +314,7 @@ const GradeHoursSliderPopover: React.FC<GradeHoursSliderPopoverProps> = ({
                 {localLow}
                 {unit}{" "}
                 <span className="text-[10px] font-sans font-normal text-indigo-600">
-                  (ακριβώς)
+                  (σταθερή τιμή)
                 </span>
               </span>
             ) : (
@@ -320,7 +331,7 @@ const GradeHoursSliderPopover: React.FC<GradeHoursSliderPopoverProps> = ({
         </div>
 
         {/* Dual Thumb Slider Bar */}
-        <div className="px-2 py-3 select-none">
+        <div className="px-2 py-2.5 select-none mb-1">
           <div
             ref={trackRef}
             onPointerDown={handleTrackPointerDown}
@@ -344,7 +355,7 @@ const GradeHoursSliderPopover: React.FC<GradeHoursSliderPopoverProps> = ({
             <div
               tabIndex={0}
               role="slider"
-              aria-label={`Τάξη ${gradeName} από`}
+              aria-label={`Τμήμα ${classNameLabel} από`}
               aria-valuemin={min}
               aria-valuemax={localHigh}
               aria-valuenow={localLow}
@@ -372,7 +383,7 @@ const GradeHoursSliderPopover: React.FC<GradeHoursSliderPopoverProps> = ({
             <div
               tabIndex={0}
               role="slider"
-              aria-label={`Τάξη ${gradeName} έως`}
+              aria-label={`Τμήμα ${classNameLabel} έως`}
               aria-valuemin={localLow}
               aria-valuemax={max}
               aria-valuenow={localHigh}
@@ -410,89 +421,143 @@ const GradeHoursSliderPopover: React.FC<GradeHoursSliderPopoverProps> = ({
           </div>
         </div>
 
-        {/* Quick Steppers & Input Fields */}
-        <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-zinc-100">
-          <div className="flex items-center justify-between bg-zinc-50 border border-zinc-200 rounded-lg p-1">
-            <span className="text-[10px] font-semibold text-zinc-500 pl-1">Από:</span>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => commitRange(localLow - step, localHigh)}
-                disabled={localLow <= min}
-                className="w-5 h-5 flex items-center justify-center rounded bg-white border border-zinc-200 text-zinc-700 hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer text-xs font-bold"
-              >
-                -
-              </button>
-              <span className="font-mono font-bold text-xs text-zinc-900 w-5 text-center">
-                {localLow}
+        {/* 1. Σταθερή Τιμή (Ορισμός ίδιας τιμής και για τα δύο άκρα) */}
+        <div className="bg-indigo-50/70 border border-indigo-200/80 rounded-lg p-2 mb-2">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[10.5px] font-bold text-indigo-950">Σταθερή Τιμή:</span>
+            {localLow === localHigh && !isZero ? (
+              <span className="text-[9.5px] text-emerald-700 font-bold bg-emerald-100/90 border border-emerald-300 px-1.5 py-0.2 rounded">
+                {localLow}{unit} Σταθερό
               </span>
-              <button
-                type="button"
-                onClick={() => commitRange(localLow + step, localHigh)}
-                disabled={localLow >= localHigh}
-                className="w-5 h-5 flex items-center justify-center rounded bg-white border border-zinc-200 text-zinc-700 hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer text-xs font-bold"
-              >
-                +
-              </button>
-            </div>
+            ) : isRange ? (
+              <span className="text-[9.5px] text-amber-800 font-medium bg-amber-100/70 border border-amber-200 px-1.5 py-0.2 rounded">
+                (Κλικ για ενοποίηση)
+              </span>
+            ) : null}
           </div>
-
-          <div className="flex items-center justify-between bg-zinc-50 border border-zinc-200 rounded-lg p-1">
-            <span className="text-[10px] font-semibold text-zinc-500 pl-1">Έως:</span>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => commitRange(localLow, localHigh - step)}
-                disabled={localHigh <= localLow}
-                className="w-5 h-5 flex items-center justify-center rounded bg-white border border-zinc-200 text-zinc-700 hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer text-xs font-bold"
-              >
-                -
-              </button>
-              <span className="font-mono font-bold text-xs text-zinc-900 w-5 text-center">
-                {localHigh}
-              </span>
-              <button
-                type="button"
-                onClick={() => commitRange(localLow, localHigh + step)}
-                disabled={localHigh >= max}
-                className="w-5 h-5 flex items-center justify-center rounded bg-white border border-zinc-200 text-zinc-700 hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer text-xs font-bold"
-              >
-                +
-              </button>
+          <div className="flex items-center justify-between gap-1.5 bg-white border border-indigo-200/80 rounded-md p-1 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => {
+                const base = localLow === localHigh ? localLow : localLow;
+                const next = Math.max(min, base - step);
+                commitRange(next, next);
+              }}
+              disabled={localLow <= min && localHigh <= min}
+              className="w-6 h-6 flex items-center justify-center rounded bg-zinc-50 border border-zinc-200 text-zinc-700 hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer text-xs font-bold transition-colors"
+              title="Μείωση σταθερής τιμής"
+            >
+              -
+            </button>
+            <div className="flex items-center justify-center gap-1 flex-1">
+              <input
+                type="number"
+                min={min}
+                max={max}
+                step={step}
+                value={localLow === localHigh ? localLow : ""}
+                placeholder={localLow === localHigh ? "" : `${localLow}-${localHigh}`}
+                onChange={(e) => {
+                  const valStr = e.target.value;
+                  if (valStr === "") return;
+                  const parsed = parseInt(valStr, 10);
+                  if (!isNaN(parsed)) {
+                    const clamped = Math.max(min, Math.min(max, parsed));
+                    commitRange(clamped, clamped);
+                  }
+                }}
+                className="w-16 h-6 text-center font-mono font-bold text-xs bg-zinc-50 border border-zinc-200 rounded text-zinc-900 focus:bg-white focus:border-indigo-400 focus:outline-hidden"
+              />
+              <span className="text-zinc-500 font-mono text-xs font-semibold">{unit}</span>
             </div>
+            <button
+              type="button"
+              onClick={() => {
+                const base = localLow === localHigh ? localLow : localHigh;
+                const next = Math.min(max, base + step);
+                commitRange(next, next);
+              }}
+              disabled={localLow >= max && localHigh >= max}
+              className="w-6 h-6 flex items-center justify-center rounded bg-zinc-50 border border-zinc-200 text-zinc-700 hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer text-xs font-bold transition-colors"
+              title="Αύξηση σταθερής τιμής"
+            >
+              +
+            </button>
           </div>
         </div>
 
-        {/* Quick Preset Buttons */}
-        <div className="mt-2.5 pt-2 border-t border-zinc-100">
-          <div className="text-[10px] font-semibold text-zinc-500 mb-1.5">Γρήγορες Επιλογές:</div>
-          <div className="flex flex-wrap gap-1">
-            {GRADE_HOURS_PRESETS.map((preset) => {
-              const isMatch = localLow === preset.range[0] && localHigh === preset.range[1];
-              return (
+        {/* 2. Εύρος Ωρών (Από — Έως) */}
+        <div className="bg-zinc-50/80 border border-zinc-200 rounded-lg p-2">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[10.5px] font-bold text-zinc-700">Εύρος Ωρών (Από — Έως):</span>
+            {isRange && (
+              <span className="text-[9.5px] text-amber-800 font-bold bg-amber-100/90 border border-amber-300 px-1.5 py-0.2 rounded">
+                Ενεργό
+              </span>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {/* Low bound */}
+            <div className="flex items-center justify-between bg-white border border-zinc-200 rounded-md p-1 shadow-2xs">
+              <span className="text-[10px] font-semibold text-zinc-500 pl-1">Από:</span>
+              <div className="flex items-center gap-1">
                 <button
-                  key={preset.label}
                   type="button"
-                  onClick={() => commitRange(preset.range[0], preset.range[1])}
-                  className={`px-2 py-0.5 rounded text-[10.5px] font-mono font-semibold transition-all cursor-pointer border ${
-                    isMatch
-                      ? "bg-zinc-900 text-white border-zinc-900 shadow-2xs"
-                      : "bg-zinc-50 text-zinc-700 hover:bg-zinc-100 border-zinc-200"
-                  }`}
+                  onClick={() => commitRange(localLow - step, localHigh)}
+                  disabled={localLow <= min}
+                  className="w-5 h-5 flex items-center justify-center rounded bg-zinc-50 border border-zinc-200 text-zinc-700 hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer text-xs font-bold"
                 >
-                  {preset.label}
+                  -
                 </button>
-              );
-            })}
+                <span className="font-mono font-bold text-xs text-zinc-900 w-5 text-center">
+                  {localLow}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => commitRange(localLow + step, localHigh)}
+                  disabled={localLow >= localHigh}
+                  className="w-5 h-5 flex items-center justify-center rounded bg-zinc-50 border border-zinc-200 text-zinc-700 hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer text-xs font-bold"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+
+            {/* High bound */}
+            <div className="flex items-center justify-between bg-white border border-zinc-200 rounded-md p-1 shadow-2xs">
+              <span className="text-[10px] font-semibold text-zinc-500 pl-1">Έως:</span>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => commitRange(localLow, localHigh - step)}
+                  disabled={localHigh <= localLow}
+                  className="w-5 h-5 flex items-center justify-center rounded bg-zinc-50 border border-zinc-200 text-zinc-700 hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer text-xs font-bold"
+                >
+                  -
+                </button>
+                <span className="font-mono font-bold text-xs text-zinc-900 w-5 text-center">
+                  {localHigh}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => commitRange(localLow, localHigh + step)}
+                  disabled={localHigh >= max}
+                  className="w-5 h-5 flex items-center justify-center rounded bg-zinc-50 border border-zinc-200 text-zinc-700 hover:bg-zinc-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer text-xs font-bold"
+                >
+                  +
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="mt-3 pt-2 border-t border-zinc-100 flex justify-end">
+        {/* Footer */}
+        <div className="mt-2.5 pt-2 border-t border-zinc-100 flex justify-end">
           <Button
             type="button"
             size="sm"
             onClick={() => setIsOpen(false)}
-            className="h-6 px-2.5 text-[11px] bg-zinc-900 hover:bg-zinc-800 text-white font-medium cursor-pointer"
+            className="h-6 px-3 text-[11px] bg-zinc-900 hover:bg-zinc-800 text-white font-semibold cursor-pointer shadow-2xs"
           >
             Έτοιμο
           </Button>
@@ -701,6 +766,10 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
     return getSpecialties({ level: "primary" });
   }, []);
 
+  const sortedClasses = useMemo(() => {
+    return [...data.classes].sort((a, b) => a.orderIndex - b.orderIndex);
+  }, [data.classes]);
+
   // Calculate assignments count per subject
   const subjectAssignmentsCountMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -812,22 +881,17 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
       CLASS_15_PALETTE.find((c) => !usedColors.includes(c.hex.toLowerCase()))?.hex ||
       CLASS_15_PALETTE[data.subjects.length % CLASS_15_PALETTE.length].hex;
 
-    const initialHours: Record<GradeKey, [number, number]> = {
-      Α: [1, 1],
-      Β: [1, 1],
-      Γ: [1, 1],
-      Δ: [1, 1],
-      Ε: [1, 1],
-      ΣΤ: [1, 1],
-      Ολοήμερο: [0, 0],
-    };
+    const initialHours: Record<string, [number, number]> = {};
+    sortedClasses.forEach((c) => {
+      initialHours[c.id] = [0, 0];
+    });
 
     setInlineData({
       title: "",
       code: "",
       color: nextColor,
       allowedSpecialties: ["ΠΕ70"],
-      weeklyHoursByGrade: initialHours,
+      classHours: initialHours,
     });
     setEditingRowId("__new__");
     setSelectedSubjectId(null);
@@ -841,17 +905,9 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
       return;
     }
 
-    const targetHours: Record<GradeKey, [number, number]> = {
-      Α: [0, 0],
-      Β: [0, 0],
-      Γ: [0, 0],
-      Δ: [0, 0],
-      Ε: [0, 0],
-      ΣΤ: [0, 0],
-      Ολοήμερο: [0, 0],
-    };
-    GRADE_KEYS.forEach((g) => {
-      targetHours[g] = normalizeGradeHours(target.weeklyHoursByGrade?.[g]);
+    const targetHours: Record<string, [number, number]> = {};
+    sortedClasses.forEach((c) => {
+      targetHours[c.id] = normalizeClassHours(target.classHours?.[c.id]);
     });
 
     const targetSpecs =
@@ -866,7 +922,7 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
       code: `${target.code}2`,
       color: target.color || "#3b82f6",
       allowedSpecialties: targetSpecs,
-      weeklyHoursByGrade: targetHours,
+      classHours: targetHours,
     });
     setEditingRowId("__new__");
     setSelectedSubjectId(null);
@@ -875,17 +931,9 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
 
   // Start editing existing subject row
   const startInlineEdit = (subj: Subject) => {
-    const hours: Record<GradeKey, [number, number]> = {
-      Α: [0, 0],
-      Β: [0, 0],
-      Γ: [0, 0],
-      Δ: [0, 0],
-      Ε: [0, 0],
-      ΣΤ: [0, 0],
-      Ολοήμερο: [0, 0],
-    };
-    GRADE_KEYS.forEach((g) => {
-      hours[g] = normalizeGradeHours(subj.weeklyHoursByGrade?.[g]);
+    const hours: Record<string, [number, number]> = {};
+    sortedClasses.forEach((c) => {
+      hours[c.id] = normalizeClassHours(subj.classHours?.[c.id]);
     });
 
     const specs =
@@ -901,7 +949,7 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
       code: subj.code,
       color: subj.color || "#3b82f6",
       allowedSpecialties: specs,
-      weeklyHoursByGrade: hours,
+      classHours: hours,
     });
     setEditingRowId(subj.id);
     setSelectedSubjectId(subj.id);
@@ -924,8 +972,8 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
     const finalCode = normalizeGreekUpper(inlineData.code.trim());
 
     const cleanHours: Record<string, [number, number]> = {};
-    GRADE_KEYS.forEach((g) => {
-      cleanHours[g] = inlineData.weeklyHoursByGrade[g] || [0, 0];
+    sortedClasses.forEach((c) => {
+      cleanHours[c.id] = inlineData.classHours[c.id] || [0, 0];
     });
 
     const payload = {
@@ -935,7 +983,7 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
       color: inlineData.color,
       allowedSpecialties: inlineData.allowedSpecialties,
       defaultSpecialty: inlineData.allowedSpecialties[0] || "ΠΕ70",
-      weeklyHoursByGrade: cleanHours,
+      classHours: cleanHours,
     };
 
     try {
@@ -1097,26 +1145,31 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
           />
         </td>
 
-        {/* Grade Hours Range Sliders (Α, Β, Γ, Δ, Ε, ΣΤ, Ολοήμερο) */}
-        {GRADE_KEYS.map((g) => (
-          <td key={g} className="py-1.5 px-1 text-center">
-            <div className="flex justify-center">
-              <GradeHoursSliderPopover
-                gradeName={g}
-                value={inlineData.weeklyHoursByGrade[g] || [0, 0]}
-                onChange={(range) => {
-                  setInlineData({
-                    ...inlineData,
-                    weeklyHoursByGrade: {
-                      ...inlineData.weeklyHoursByGrade,
-                      [g]: range,
-                    },
-                  });
-                }}
-              />
-            </div>
-          </td>
-        ))}
+        {/* Class Hours Range Sliders */}
+        {sortedClasses.map((c) => {
+          const isLanguage = isLanguageSubject(inlineData.title, inlineData.code);
+          const maxAllowed = isLanguage ? 24 : 10;
+          return (
+            <td key={c.id} className="py-1.5 px-1 text-center">
+              <div className="flex justify-center">
+                <ClassHoursSliderPopover
+                  classNameLabel={c.name}
+                  value={inlineData.classHours[c.id] || [0, 0]}
+                  max={maxAllowed}
+                  onChange={(range) => {
+                    setInlineData({
+                      ...inlineData,
+                      classHours: {
+                        ...inlineData.classHours,
+                        [c.id]: range,
+                      },
+                    });
+                  }}
+                />
+              </div>
+            </td>
+          );
+        })}
       </tr>
     );
   };
@@ -1166,15 +1219,15 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => onTabChange?.("assignments")}
+              onClick={() => onTabChange?.("rules")}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-                activeTab === "assignments"
+                activeTab === "rules"
                   ? "bg-white text-zinc-900 shadow-2xs border border-zinc-200/60"
                   : "text-zinc-600 hover:text-zinc-900"
               }`}
             >
               <CalendarDays className="w-3.5 h-3.5" />
-              <span>Αναθέσεις</span>
+              <span>Κανόνες</span>
             </button>
           </div>
 
@@ -1351,8 +1404,8 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
                 <th colSpan={4} className="py-2 px-3 border-r border-zinc-200 bg-zinc-100/80 text-left">
                   ΒΑΣΙΚΑ ΣΤΟΙΧΕΙΑ ΜΑΘΗΜΑΤΟΣ
                 </th>
-                <th colSpan={7} className="py-2 px-3 bg-zinc-100/80 text-center">
-                  ΕΒΔΟΜΑΔΙΑΙΕΣ ΩΡΕΣ ΑΝΑ ΤΑΞΗ (ΩΡΟΛΟΓΙΟ ΠΡΟΓΡΑΜΜΑ)
+                <th colSpan={sortedClasses.length || 1} className="py-2 px-3 bg-zinc-100/80 text-center">
+                  ΕΒΔΟΜΑΔΙΑΙΕΣ ΩΡΕΣ ΑΝΑ ΤΜΗΜΑ
                 </th>
               </tr>
 
@@ -1364,14 +1417,11 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
                 <th className="py-2.5 px-3 min-w-[180px] text-center border-r border-zinc-200" title="Ειδικότητες εκπαιδευτικών που μπορούν να το διδάξουν">
                   Ειδικότητες Διδασκαλίας
                 </th>
-
-                <th className="py-2.5 px-1.5 w-14 text-center" title="Ώρες διδασκαλίας στην Α' Τάξη">Α'</th>
-                <th className="py-2.5 px-1.5 w-14 text-center" title="Ώρες διδασκαλίας στη Β' Τάξη">Β'</th>
-                <th className="py-2.5 px-1.5 w-14 text-center" title="Ώρες διδασκαλίας στη Γ' Τάξη">Γ'</th>
-                <th className="py-2.5 px-1.5 w-14 text-center" title="Ώρες διδασκαλίας στη Δ' Τάξη">Δ'</th>
-                <th className="py-2.5 px-1.5 w-14 text-center" title="Ώρες διδασκαλίας στην Ε' Τάξη">Ε'</th>
-                <th className="py-2.5 px-1.5 w-14 text-center" title="Ώρες διδασκαλίας στη ΣΤ' Τάξη">ΣΤ'</th>
-                <th className="py-2.5 px-2 w-20 text-center" title="Ώρες διδασκαλίας στο Ολοήμερο Πρόγραμμα">Ολοήμερο</th>
+                {sortedClasses.map((c) => (
+                  <th key={c.id} className="py-2.5 px-1.5 w-14 text-center" title={`Ώρες διδασκαλίας: ${c.name}`}>
+                    {c.name}
+                  </th>
+                ))}
               </tr>
 
               {/* Row 3: Dedicated Inline Column Filters Row */}
@@ -1556,8 +1606,7 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
                     </Popover>
                   </th>
 
-                  {/* 5-11. Grade columns spacer */}
-                  <th colSpan={7} className="py-1 px-2 text-center text-zinc-400 text-[10px] font-mono">
+                  <th colSpan={sortedClasses.length || 1} className="py-1 px-2 text-center text-zinc-400 text-[10px] font-mono">
                     —
                   </th>
                 </tr>
@@ -1643,16 +1692,16 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
                       )}
                     </td>
 
-                    {/* Hours Per Grade (Α, Β, Γ, Δ, Ε, ΣΤ, Ολοήμερο) */}
-                    {GRADE_KEYS.map((g) => {
-                      const range = normalizeGradeHours(subj.weeklyHoursByGrade?.[g]);
+                    {/* Hours Per Class */}
+                    {sortedClasses.map((c) => {
+                      const range = normalizeClassHours(subj.classHours?.[c.id]);
                       const [low, high] = range;
                       const isZero = low === 0 && high === 0;
                       const isRange = low !== high;
 
                       return (
                         <td
-                          key={g}
+                          key={c.id}
                           className="py-2.5 px-1.5 text-center font-mono text-[11px]"
                         >
                           {isZero ? (

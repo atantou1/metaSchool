@@ -33,7 +33,7 @@ export interface Subject {
   color: string;
   allowedSpecialties?: string[] | null; // e.g. ["ΠΕ70", "ΠΕ71"]
   defaultSpecialty?: string | null;
-  weeklyHoursByGrade?: Record<string, [number, number] | number> | null;
+  classHours?: Record<string, [number, number] | number> | null;
 }
 
 export interface ClassEntity {
@@ -107,7 +107,21 @@ export interface TimetableData {
   assignments: LessonAssignment[];
   slots: TimetableSlot[];
   schoolConfig: SchoolConfig | null;
+  rules: Rule[];
+}
+
+export interface Rule {
+  id: string;
+  name: string;
+  description?: string | null;
+  type: string;
+  enforcement: "hard" | "soft";
+  weight?: number;
+  params: Record<string, any>;
+  isActive: boolean;
+  source: "manual" | "ai";
+  createdAt: string;
+  updatedAt: string;
 }
 
 export type { Specialty, SpecialtyType } from "@/lib/specialties";
-

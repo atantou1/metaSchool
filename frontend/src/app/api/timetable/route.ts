@@ -16,6 +16,7 @@ export async function GET() {
       allAssignments,
       allSlots,
       allSettings,
+      allRules,
     ] = await Promise.all([
       db.select().from(schema.teachers),
       db.select().from(schema.subjects),
@@ -24,6 +25,7 @@ export async function GET() {
       db.select().from(schema.lessonAssignments),
       db.select().from(schema.timetableSlots),
       db.select().from(schema.appSettings),
+      db.select().from(schema.rules),
     ]);
 
     // Parse school config
@@ -58,7 +60,7 @@ export async function GET() {
             ? [s.defaultSpecialty]
             : [],
           defaultSpecialty: s.defaultSpecialty || null,
-          weeklyHoursByGrade: s.weeklyHoursByGrade ? JSON.parse(s.weeklyHoursByGrade) : null,
+          classHours: s.classHours ? JSON.parse(s.classHours) : null,
         })),
         classes: allClasses.map((c) => ({
           ...c,
@@ -79,6 +81,11 @@ export async function GET() {
           isLocked: Boolean(s.isLocked),
         })),
         schoolConfig,
+        rules: allRules.map((r) => ({
+          ...r,
+          isActive: Boolean(r.isActive),
+          params: r.params ? JSON.parse(r.params) : {},
+        })),
       },
     });
   } catch (error: any) {

@@ -9,6 +9,7 @@ from .models import (
     ValidateMoveRequest,
     ValidateMoveResponse,
 )
+from .conditional_rules import apply_conditional_rules
 
 def solve_timetable(req: SolveRequest) -> SolveResponse:
     start_time = time.time()
@@ -175,6 +176,34 @@ def solve_timetable(req: SolveRequest) -> SolveResponse:
         for fixed in req.fixedSlots:
             if (fixed.assignmentId, fixed.day, fixed.period) in x:
                 model.Add(x[(fixed.assignmentId, fixed.day, fixed.period)] == 1)
+
+    # 5. Apply custom conditional rules from the Rule Builder
+    if req.customRules:
+        active_custom = [
+            {
+                "id": r.id,
+                "name": r.name,
+                "type": r.rulePayload.get("type", ""),
+                "enforcement": r.rulePayload.get("enforcement", "hard"),
+                "weight": r.rulePayload.get("weight", 100),
+                "params": r.rulePayload.get("params", {}),
+                "isActive": r.isActive,
+            }
+            for r in req.customRules
+            if r.isActive
+        ]
+        apply_conditional_rules(
+            model=model,
+            x=x,
+            rules=active_custom,
+            assignments=core_assignments,
+            teachers=req.teachers,
+            classes=req.classes,
+            subgroups=req.subGroups,
+            num_days=num_days,
+            num_periods=num_periods,
+            objective_terms=objective_terms,
+        )
 
     # Gap calculation and objective
     objective_terms = []
