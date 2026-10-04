@@ -67,6 +67,11 @@ export async function POST(req: Request) {
         lastName: t.lastName,
         specialty: t.specialty,
         isSupport: Boolean(t.isSupport),
+        isMorning: t.isMorning !== undefined && t.isMorning !== null ? Boolean(t.isMorning) : true,
+        isAllDay: Boolean(t.isAllDay),
+        isTeaching: Boolean(t.isTeaching),
+        isActive: Boolean(t.isActive),
+        maxWeeklyHours: t.maxWeeklyHours ?? 24,
         color: t.color,
         constraints: t.constraints ? JSON.parse(t.constraints) : null,
       })),
@@ -75,11 +80,16 @@ export async function POST(req: Request) {
         title: s.title,
         code: s.code,
         color: s.color,
+        allowedSpecialties: s.allowedSpecialties ? JSON.parse(s.allowedSpecialties) : (s.defaultSpecialty ? [s.defaultSpecialty] : []),
+        classHours: s.classHours ? JSON.parse(s.classHours) : {},
       })),
       classes: allClasses.map((c) => ({
         id: c.id,
         name: c.name,
         grade: c.grade,
+        headTeacherId: c.headTeacherId ?? null,
+        isAllDay: Boolean(c.isAllDay),
+        weeklyHoursTarget: c.weeklyHoursTarget ?? 30,
         supportHoursMin: c.supportHoursMin,
         supportHoursMax: c.supportHoursMax,
         orderIndex: c.orderIndex,
@@ -107,7 +117,6 @@ export async function POST(req: Request) {
           id: r.id,
           name: r.name,
           description: r.description ?? null,
-          // rulePayload wraps type, enforcement, weight, and params (the when/then)
           rulePayload: {
             type: r.type,
             enforcement: r.enforcement,
@@ -160,6 +169,27 @@ export async function POST(req: Request) {
     }
 
     // 4. Save slots to SQLite
+    // Ensure all subGroups referenced in slots exist in DB
+    const existingSubGroupIds = new Set(allSubGroups.map((sg) => sg.id));
+    if (result.slots && result.slots.length > 0) {
+      for (const slot of result.slots) {
+        if (!existingSubGroupIds.has(slot.subGroupId)) {
+          const isA = slot.subGroupId.endsWith("subA");
+          const isB = slot.subGroupId.endsWith("subB");
+          const name = isA ? "Ομάδα Α" : isB ? "Ομάδα Β" : "Ολομέλεια";
+          try {
+            await db.insert(schema.subGroups).values({
+              id: slot.subGroupId,
+              classId: slot.classId,
+              name,
+              isDefault: !isA && !isB,
+            });
+            existingSubGroupIds.add(slot.subGroupId);
+          } catch (e) {}
+        }
+      }
+    }
+
     // Clear old timetable slots
     await db.delete(schema.timetableSlots);
 
@@ -170,12 +200,12 @@ export async function POST(req: Request) {
           id: slot.id || `slot-${crypto.randomUUID().slice(0, 8)}`,
           day: slot.day,
           period: slot.period,
-          assignmentId: slot.assignmentId,
+          assignmentId: slot.assignmentId ?? null,
           classId: slot.classId,
           subGroupId: slot.subGroupId,
           teacherId: slot.teacherId,
           subjectId: slot.subjectId,
-          isSupport: slot.isSupport,
+          isSupport: slot.isSupport ?? false,
           layer: slot.layer || 1,
         });
       }

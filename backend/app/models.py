@@ -17,6 +17,11 @@ class TeacherInput(BaseModel):
     lastName: str
     specialty: str
     isSupport: bool = False
+    isMorning: bool = True
+    isAllDay: bool = False
+    isTeaching: bool = True
+    isActive: bool = True
+    maxWeeklyHours: int = 24
     color: str = "#71717a"
     constraints: Optional[TeacherConstraints] = None
 
@@ -25,11 +30,16 @@ class SubjectInput(BaseModel):
     title: str
     code: str
     color: str = "#71717a"
+    allowedSpecialties: Optional[List[str]] = []
+    classHours: Optional[Dict[str, List[int]]] = {}
 
 class ClassInput(BaseModel):
     id: str
     name: str
     grade: str
+    headTeacherId: Optional[str] = None
+    isAllDay: bool = False
+    weeklyHoursTarget: int = 30
     supportHoursMin: int = 0
     supportHoursMax: int = 0
     orderIndex: int = 0
@@ -72,14 +82,18 @@ class CustomRuleInput(BaseModel):
 class FixedSlotInput(BaseModel):
     day: int
     period: int
-    assignmentId: str
+    assignmentId: Optional[str] = None
+    teacherId: Optional[str] = None
+    subjectId: Optional[str] = None
+    classId: Optional[str] = None
+    subGroupId: Optional[str] = None
 
 class SolveRequest(BaseModel):
     teachers: List[TeacherInput]
     subjects: List[SubjectInput]
     classes: List[ClassInput]
     subGroups: List[SubGroupInput]
-    assignments: List[AssignmentInput]
+    assignments: Optional[List[AssignmentInput]] = []
     schoolConfig: SchoolConfigInput
     customRules: Optional[List[CustomRuleInput]] = []
     fixedSlots: Optional[List[FixedSlotInput]] = []
@@ -88,7 +102,7 @@ class SlotResult(BaseModel):
     id: str
     day: int
     period: int
-    assignmentId: str
+    assignmentId: Optional[str] = None
     classId: str
     subGroupId: str
     teacherId: str

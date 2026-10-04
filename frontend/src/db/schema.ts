@@ -68,7 +68,7 @@ export const timetableSlots = sqliteTable("timetable_slots", {
   id: text("id").primaryKey(),
   day: integer("day").notNull(), // 0 = Δευτέρα ... 4 = Παρασκευή
   period: integer("period").notNull(), // 0 = 1η ώρα, etc.
-  assignmentId: text("assignment_id").notNull().references(() => lessonAssignments.id, { onDelete: "cascade" }),
+  assignmentId: text("assignment_id"),
   classId: text("class_id").notNull().references(() => classes.id, { onDelete: "cascade" }),
   subGroupId: text("sub_group_id").notNull().references(() => subGroups.id, { onDelete: "cascade" }),
   teacherId: text("teacher_id").notNull().references(() => teachers.id, { onDelete: "cascade" }),

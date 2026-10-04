@@ -9,295 +9,258 @@ from .models import (
     ValidateMoveRequest,
     ValidateMoveResponse,
 )
-from .conditional_rules import apply_conditional_rules
 
 def solve_timetable(req: SolveRequest) -> SolveResponse:
     start_time = time.time()
     model = cp_model.CpModel()
 
+    # Dynamic periods and days from school configuration
     num_days = len(req.schoolConfig.days) if req.schoolConfig.days else 5
-    num_periods = len(req.schoolConfig.periods) if req.schoolConfig.periods else 6
+    morning_periods = [p.index for p in req.schoolConfig.periods] if req.schoolConfig.periods else list(range(6))
+    allday_periods = [p.index for p in req.schoolConfig.allDayPeriods] if req.schoolConfig.allDayPeriods else [6, 7, 8, 9]
+    all_periods = sorted(list(set(morning_periods + allday_periods)))
 
-    # Build lookup dictionaries
-    subgroup_to_class = {sg.id: sg.classId for sg in req.subGroups}
-    subgroup_is_default = {sg.id: sg.isDefault for sg in req.subGroups}
-    teacher_dict = {t.id: t for t in req.teachers}
-    class_dict = {c.id: c for c in req.classes}
+    # 1. Filter active core teachers
+    teachers = [t for t in req.teachers if not t.isSupport and t.isActive and t.maxWeeklyHours > 0]
+    classes = req.classes
+    subjects = req.subjects
 
-    # Separate Core vs Support assignments
-    core_assignments = []
-    support_assignments = []
+    class_by_id = {c.id: c for c in classes}
+    teacher_by_id = {t.id: t for t in teachers}
 
-    for asg in req.assignments:
-        teacher = teacher_dict.get(asg.teacherId)
-        if teacher and teacher.isSupport:
-            support_assignments.append(asg)
-        else:
-            core_assignments.append(asg)
+    # Head teacher mapping
+    teacher_is_ht_of = {
+        t.id: next((c.id for c in classes if c.headTeacherId == t.id), None)
+        for t in teachers
+    }
 
-    # -------------------------------------------------------------
-    # LAYER 1: Core Schedule CP-SAT Formulation
-    # -------------------------------------------------------------
-    # x[(asg_id, d, p)] is binary
-    x: Dict[Tuple[str, int, int], cp_model.IntVar] = {}
+    # 2. Build subgroup mappings (default group 0, split A group 1, split B group 2)
+    subgroups_by_class = {}
+    for c in classes:
+        c_sgs = [sg for sg in req.subGroups if sg.classId == c.id]
+        sg_def = next((sg for sg in c_sgs if sg.isDefault), None)
+        sg_def_id = sg_def.id if sg_def else f"grp-{c.id}-main"
 
-    for asg in core_assignments:
-        for d in range(num_days):
-            for p in range(num_periods):
-                var_name = f"x_{asg.id}_d{d}_p{p}"
-                x[(asg.id, d, p)] = model.NewBoolVar(var_name)
+        sg_splits = [sg for sg in c_sgs if not sg.isDefault]
+        sg_a_id = sg_splits[0].id if len(sg_splits) > 0 else f"grp-{c.id}-subA"
+        sg_b_id = sg_splits[1].id if len(sg_splits) > 1 else f"grp-{c.id}-subB"
 
-    # 1. Total hours required for each core assignment
-    for asg in core_assignments:
-        model.Add(
-            sum(x[(asg.id, d, p)] for d in range(num_days) for p in range(num_periods))
-            == asg.hours
-        )
+        subgroups_by_class[c.id] = {
+            0: sg_def_id,
+            1: sg_a_id,
+            2: sg_b_id,
+        }
 
-    # 2. Teacher collisions, availability, and workload constraints for Core
-    for teacher in req.teachers:
-        if teacher.isSupport:
-            continue
-        
-        t_assignments = [a for a in core_assignments if a.teacherId == teacher.id]
-        if not t_assignments:
-            continue
+    # 3. Build subject eligibility and class hours
+    subject_allowed_spec = {}
+    subject_class_hours = {}
+    for s in subjects:
+        allowed = s.allowedSpecialties if s.allowedSpecialties else []
+        subject_allowed_spec[s.id] = allowed
+        subject_class_hours[s.id] = s.classHours if s.classHours else {}
 
-        total_t_hours = sum(a.hours for a in t_assignments)
-        cons = teacher.constraints
+    # 4. Create decision variables
+    # y[(t_id, s_id, c_id, g_idx, d, p)]
+    y: Dict[Tuple[str, str, str, int, int, int], cp_model.IntVar] = {}
+    eligible_tuples: List[Tuple[str, str, str, int, int, int]] = []
 
-        for d in range(num_days):
-            # Check available days (e.g. availableDays = [0, 1, 2, 3, 4] or [1, 2, 3])
-            if cons and cons.availableDays is not None and d not in cons.availableDays:
-                for a in t_assignments:
-                    for p in range(num_periods):
-                        model.Add(x[(a.id, d, p)] == 0)
+    for t in teachers:
+        t_id = t.id
+        t_spec = t.specialty
+        t_is_morning = t.isMorning
+        t_is_allday = t.isAllDay
+
+        c_ht = teacher_is_ht_of.get(t_id)
+        c_ht_obj = class_by_id.get(c_ht) if c_ht else None
+        is_morning_ht = (c_ht_obj is not None and not c_ht_obj.isAllDay)
+
+        for s in subjects:
+            s_id = s.id
+            if subject_allowed_spec[s_id] and t_spec not in subject_allowed_spec[s_id]:
                 continue
 
-            daily_p_vars = []
-            for p in range(num_periods):
-                # Check teacher availability per period
-                is_available = True
-                if cons and cons.availability:
-                    day_key = str(d)
-                    avail_list = cons.availability.get(day_key)
-                    if avail_list and p < len(avail_list):
-                        is_available = avail_list[p]
+            for c in classes:
+                c_id = c.id
+                c_is_allday = c.isAllDay
 
-                if not is_available:
-                    for a in t_assignments:
-                        model.Add(x[(a.id, d, p)] == 0)
+                # If teacher is head teacher of a morning class (e.g. A1, A2..), they can only teach in their own class!
+                if is_morning_ht and c_ht != c_id:
+                    continue
+
+                # Class period & teacher availability compatibility:
+                # Morning classes run during morning_periods (require t.isMorning)
+                # All-day classes run during allday_periods (require t.isAllDay)
+                if not c_is_allday:
+                    if not t_is_morning:
+                        continue
+                    valid_periods = morning_periods
                 else:
-                    # At most 1 lesson simultaneously
-                    model.Add(
-                        sum(x[(a.id, d, p)] for a in t_assignments) <= 1
-                    )
-                
-                # Active indicator for this period
-                p_active = model.NewBoolVar(f"p_act_t{teacher.id}_d{d}_p{p}")
-                model.Add(p_active == sum(x[(a.id, d, p)] for a in t_assignments))
-                daily_p_vars.append(p_active)
+                    if not t_is_allday:
+                        continue
+                    valid_periods = allday_periods
 
-            daily_hours = sum(daily_p_vars)
+                for g_idx in [0, 1, 2]:
+                    for d in range(num_days):
+                        for p in valid_periods:
+                            var = model.NewBoolVar(f"y_{t_id[:4]}_{s_id[:4]}_{c_id[:4]}_g{g_idx}_d{d}_p{p}")
+                            y[(t_id, s_id, c_id, g_idx, d, p)] = var
+                            eligible_tuples.append((t_id, s_id, c_id, g_idx, d, p))
 
-            # Max hours per day for teacher
-            if cons and cons.maxHoursPerDay is not None:
-                model.Add(daily_hours <= cons.maxHoursPerDay)
+    # 5. Teacher constraints
+    objective_terms = []
 
-            # Min hours per day: if teacher teaches on day d, teach at least minHoursPerDay (e.g. 2 hours)
-            if cons and cons.minHoursPerDay is not None:
-                min_h = cons.minHoursPerDay
-                effective_min_h = min(min_h, total_t_hours)
-                if effective_min_h > 1:
-                    is_working = model.NewBoolVar(f"working_t{teacher.id}_d{d}")
-                    model.Add(daily_hours >= effective_min_h * is_working)
-                    model.Add(daily_hours <= num_periods * is_working)
+    for t in teachers:
+        t_id = t.id
+        t_max_h = t.maxWeeklyHours
+        t_vars = [y[key] for key in eligible_tuples if key[0] == t_id]
 
-            # Max consecutive hours without break
-            if cons and cons.maxConsecutiveHours is not None:
-                max_consec = cons.maxConsecutiveHours
-                if max_consec and max_consec < num_periods:
-                    window_size = max_consec + 1
-                    for p_idx in range(num_periods - window_size + 1):
-                        model.Add(sum(daily_p_vars[p_idx : p_idx + window_size]) <= max_consec)
+        # 5a. Exactly fulfill teacher's weekly hours
+        if t_vars:
+            model.Add(sum(t_vars) == t_max_h)
 
-    # 3. Class & Sub-Group Concurrency
-    # Group assignments by class
-    class_assignments: Dict[str, List[Any]] = {c.id: [] for c in req.classes}
-    for asg in core_assignments:
-        cid = subgroup_to_class.get(asg.subGroupId)
-        if cid and cid in class_assignments:
-            class_assignments[cid].append(asg)
+        # 5b. Head teacher of All-Day (e.g. Kazakis):
+        # Teaches up to all-day capacity (e.g. 20h) in all-day class, and remaining hours (e.g. 4h) in morning classes
+        c_ht = teacher_is_ht_of.get(t_id)
+        c_ht_obj = class_by_id.get(c_ht) if c_ht else None
+        if c_ht_obj and c_ht_obj.isAllDay:
+            t_allday_vars = [y[k] for k in eligible_tuples if k[0] == t_id and k[2] == c_ht]
+            t_morning_vars = [y[k] for k in eligible_tuples if k[0] == t_id and k[2] != c_ht]
+            max_ad_capacity = num_days * len(allday_periods)
+            ad_target = min(t_max_h, max_ad_capacity)
+            morning_target = t_max_h - ad_target
+            if t_allday_vars:
+                model.Add(sum(t_allday_vars) == ad_target)
+            if t_morning_vars:
+                model.Add(sum(t_morning_vars) == morning_target)
 
-    # Concurrency grouping (concurrentGroupId)
-    concurrent_groups: Dict[str, List[Any]] = {}
-    for asg in core_assignments:
-        if asg.concurrentGroupId:
-            concurrent_groups.setdefault(asg.concurrentGroupId, []).append(asg)
+        # 5c. Teacher availability & daily workload
+        cons = t.constraints
+        avail_days = cons.availableDays if cons and cons.availableDays is not None else list(range(num_days))
+        avail_grid = cons.availability if cons and cons.availability else {}
+        max_h = cons.maxHoursPerDay if cons and cons.maxHoursPerDay is not None else len(all_periods)
+        min_h = cons.minHoursPerDay if cons and cons.minHoursPerDay is not None else 0
 
-    # Add strict synchronization constraint for concurrent groups
-    for cg_id, cg_asgs in concurrent_groups.items():
-        if len(cg_asgs) > 1:
-            base_asg = cg_asgs[0]
-            for other_asg in cg_asgs[1:]:
-                for d in range(num_days):
-                    for p in range(num_periods):
-                        model.Add(x[(base_asg.id, d, p)] == x[(other_asg.id, d, p)])
+        max_cg = cons.maxConsecutiveGaps if cons and cons.maxConsecutiveGaps is not None else 1
 
-    # For each class, at each (d, p), ensure no conflicting lessons
-    for c in req.classes:
-        c_asgs = class_assignments.get(c.id, [])
-        if not c_asgs:
-            continue
-
-        default_asgs = [a for a in c_asgs if subgroup_is_default.get(a.subGroupId, False)]
-        split_asgs = [a for a in c_asgs if not subgroup_is_default.get(a.subGroupId, False)]
-
-        # Group split assignments by subgroup
-        split_by_subgroup: Dict[str, List[Any]] = {}
-        for a in split_asgs:
-            split_by_subgroup.setdefault(a.subGroupId, []).append(a)
+        t_periods = []
+        if t.isMorning:
+            t_periods.extend(morning_periods)
+        if t.isAllDay:
+            t_periods.extend(allday_periods)
+        t_periods = sorted(list(set(t_periods)))
 
         for d in range(num_days):
-            for p in range(num_periods):
-                # Default (whole class) assignment count at this period
-                default_sum = sum(x[(a.id, d, p)] for a in default_asgs)
-                model.Add(default_sum <= 1)
+            daily_p_dict = {}
+            for p in t_periods:
+                p_vars = [y[k] for k in eligible_tuples if k[0] == t_id and k[4] == d and k[5] == p]
+                if not p_vars:
+                    p_act = model.NewBoolVar(f"p0_{t_id[:4]}_{d}_{p}")
+                    model.Add(p_act == 0)
+                    daily_p_dict[p] = p_act
+                    continue
 
-                # Each subgroup can have at most 1 lesson
-                for sg_id, sg_asgs in split_by_subgroup.items():
-                    sg_sum = sum(x[(a.id, d, p)] for a in sg_asgs)
-                    model.Add(sg_sum <= 1)
-                    # If whole class is active, split subgroup cannot be active
-                    model.Add(default_sum + sg_sum <= 1)
+                is_avail = True
+                if avail_days is not None and d not in avail_days:
+                    is_avail = False
+                if is_avail and avail_grid:
+                    d_list = avail_grid.get(str(d))
+                    if d_list and p < len(d_list):
+                        is_avail = d_list[p]
 
-    # 4. Respect fixed/locked slots if provided
+                if not is_avail:
+                    for v in p_vars:
+                        model.Add(v == 0)
+                    p_act = model.NewBoolVar(f"pun_{t_id[:4]}_{d}_{p}")
+                    model.Add(p_act == 0)
+                    daily_p_dict[p] = p_act
+                else:
+                    # Teacher can teach at most 1 lesson at any period
+                    model.Add(sum(p_vars) <= 1)
+                    p_act = model.NewBoolVar(f"pact_{t_id[:4]}_{d}_{p}")
+                    model.Add(p_act == sum(p_vars))
+                    daily_p_dict[p] = p_act
+
+            daily_hours = sum(daily_p_dict.values())
+
+            if max_h:
+                eff_max_h = max_h if not (t.isMorning and t.isAllDay) else max(max_h, len(morning_periods))
+                model.Add(daily_hours <= eff_max_h)
+
+            if min_h and min_h > 1:
+                eff_min = min(min_h, t_max_h)
+                if eff_min > 1:
+                    is_working = model.NewBoolVar(f"w_{t_id[:4]}_{d}")
+                    model.Add(daily_hours >= eff_min * is_working)
+                    model.Add(daily_hours <= len(t_periods) * is_working)
+
+            # HARD CONSTRAINT: Max consecutive gaps across teacher's full timeline (Morning + All-Day)
+            if max_cg is not None:
+                for i, p1 in enumerate(t_periods):
+                    for j, p2 in enumerate(t_periods):
+                        if j >= i + max_cg + 2:
+                            intermediate = [daily_p_dict[t_periods[k]] for k in range(i + 1, j) if t_periods[k] in daily_p_dict]
+                            if intermediate and p1 in daily_p_dict and p2 in daily_p_dict:
+                                model.Add(sum(intermediate) >= daily_p_dict[p1] + daily_p_dict[p2] - 1)
+
+    # 6. Class schedule & subgroup concurrency constraints
+    for c in classes:
+        c_id = c.id
+        c_is_allday = c.isAllDay
+        valid_periods = allday_periods if c_is_allday else morning_periods
+
+        for d in range(num_days):
+            for p in valid_periods:
+                def_vars = [y[k] for k in eligible_tuples if k[2] == c_id and k[3] == 0 and k[4] == d and k[5] == p]
+                sg1_vars = [y[k] for k in eligible_tuples if k[2] == c_id and k[3] == 1 and k[4] == d and k[5] == p]
+                sg2_vars = [y[k] for k in eligible_tuples if k[2] == c_id and k[3] == 2 and k[4] == d and k[5] == p]
+
+                def_sum = sum(def_vars)
+                sg1_sum = sum(sg1_vars)
+                sg2_sum = sum(sg2_vars)
+
+                # HARD CONSTRAINT: Every class period must have EXACTLY 1 active session (NO EMPTY PERIODS!)
+                # Either exactly 1 whole-class lesson (def_sum == 1, sg1_sum == 0, sg2_sum == 0)
+                # OR exactly 1 split session where both subgroups are active (def_sum == 0, sg1_sum == 1, sg2_sum == 1)
+                model.Add(def_sum + sg1_sum == 1)
+                model.Add(sg1_sum == sg2_sum)
+                model.Add(def_sum <= 1)
+
+        # 7. Head teacher & Subject hours per class
+        for s in subjects:
+            s_id = s.id
+            ch = subject_class_hours[s_id].get(c_id, [0, 0])
+            s_c_vars = [y[k] for k in eligible_tuples if k[2] == c_id and k[1] == s_id]
+
+            # If subject is primary (ΓΛΩΣ) and class has a morning head teacher, ensure head teacher teaches their hours:
+            if s.code == "ΓΛΩΣ" and c.headTeacherId and not c_is_allday:
+                ht = teacher_by_id.get(c.headTeacherId)
+                if ht and ht.maxWeeklyHours > 0:
+                    ht_vars = [y[k] for k in eligible_tuples if k[0] == ht.id and k[2] == c_id]
+                    model.Add(sum(ht_vars) == ht.maxWeeklyHours)
+            elif ch and len(ch) >= 2 and ch[1] > 0:
+                min_h = ch[0]
+                model.Add(sum(s_c_vars) >= min_h)
+
+    # 8. Locked / Fixed slots
     if req.fixedSlots:
         for fixed in req.fixedSlots:
-            if (fixed.assignmentId, fixed.day, fixed.period) in x:
-                model.Add(x[(fixed.assignmentId, fixed.day, fixed.period)] == 1)
-
-    # 5. Apply custom conditional rules from the Rule Builder
-    if req.customRules:
-        active_custom = [
-            {
-                "id": r.id,
-                "name": r.name,
-                "type": r.rulePayload.get("type", ""),
-                "enforcement": r.rulePayload.get("enforcement", "hard"),
-                "weight": r.rulePayload.get("weight", 100),
-                "params": r.rulePayload.get("params", {}),
-                "isActive": r.isActive,
-            }
-            for r in req.customRules
-            if r.isActive
-        ]
-        apply_conditional_rules(
-            model=model,
-            x=x,
-            rules=active_custom,
-            assignments=core_assignments,
-            teachers=req.teachers,
-            classes=req.classes,
-            subgroups=req.subGroups,
-            num_days=num_days,
-            num_periods=num_periods,
-            objective_terms=objective_terms,
-        )
-
-    # Gap calculation and objective
-    objective_terms = []
-    
-    for teacher in req.teachers:
-        if teacher.isSupport:
-            continue
-        t_assignments = [a for a in core_assignments if a.teacherId == teacher.id]
-        if not t_assignments:
-            continue
-            
-        cons = teacher.constraints
-        weekly_gaps_vars = []
-
-        for d in range(num_days):
-            daily_active = [
-                sum(x[(a.id, d, p)] for a in t_assignments)
-                for p in range(num_periods)
+            matching_keys = [
+                k for k in eligible_tuples
+                if k[4] == fixed.day and k[5] == fixed.period
+                and (not fixed.teacherId or k[0] == fixed.teacherId)
+                and (not fixed.subjectId or k[1] == fixed.subjectId)
+                and (not fixed.classId or k[2] == fixed.classId)
             ]
-            daily_hours = sum(daily_active)
-            
-            # To calculate span, we find first and last active periods
-            is_working_day = model.NewBoolVar(f"work_day_t{teacher.id}_d{d}")
-            model.Add(daily_hours > 0).OnlyEnforceIf(is_working_day)
-            model.Add(daily_hours == 0).OnlyEnforceIf(is_working_day.Not())
-
-            first_p = model.NewIntVar(0, num_periods - 1, f"first_t{teacher.id}_d{d}")
-            last_p = model.NewIntVar(0, num_periods - 1, f"last_t{teacher.id}_d{d}")
-            
-            # If not working, first_p and last_p are 0 (and span is 0)
-            model.Add(first_p == 0).OnlyEnforceIf(is_working_day.Not())
-            model.Add(last_p == 0).OnlyEnforceIf(is_working_day.Not())
-            
-            # AddMinEquality and AddMaxEquality for finding boundaries
-            first_exprs = []
-            last_exprs = []
-            for p in range(num_periods):
-                p_active_bool = model.NewBoolVar(f"p_act_bool_t{teacher.id}_d{d}_p{p}")
-                model.Add(daily_active[p] == 1).OnlyEnforceIf(p_active_bool)
-                model.Add(daily_active[p] == 0).OnlyEnforceIf(p_active_bool.Not())
-                
-                # For first: if active -> p, else -> M
-                first_exprs.append(p * p_active_bool + num_periods * p_active_bool.Not())
-                # For last: if active -> p, else -> 0
-                last_exprs.append(p * p_active_bool)
-                
-            model.AddMinEquality(first_p, first_exprs)
-            model.AddMaxEquality(last_p, last_exprs)
-            
-            span = model.NewIntVar(0, num_periods, f"span_t{teacher.id}_d{d}")
-            model.Add(span == last_p - first_p + 1).OnlyEnforceIf(is_working_day)
-            model.Add(span == 0).OnlyEnforceIf(is_working_day.Not())
-            
-            daily_gaps = model.NewIntVar(0, num_periods, f"gaps_t{teacher.id}_d{d}")
-            model.Add(daily_gaps == span - daily_hours)
-            weekly_gaps_vars.append(daily_gaps)
-            
-            # Penalize gaps to minimize them globally
-            objective_terms.append(daily_gaps * 10)
-
-            # Hard Constraint: Max Total Gaps Per Day
-            if cons and cons.maxTotalGapsPerDay is not None:
-                model.Add(daily_gaps <= cons.maxTotalGapsPerDay)
-                
-            # Hard Constraint: Max Consecutive Gaps
-            if cons and cons.maxConsecutiveGaps is not None:
-                max_cg = cons.maxConsecutiveGaps
-                if max_cg < num_periods:
-                    # Forbid sequences of (active, empty x (max_cg+1), active)
-                    # A simpler way: inside the span, we cannot have max_cg + 1 consecutive zeros
-                    window = max_cg + 1
-                    for p in range(num_periods - window + 1):
-                        # If p >= first_p and p + window <= last_p, then the sum of active in window > 0
-                        # Equivalently, sum(active in window) == 0 implies it's outside the span
-                        window_sum = sum(daily_active[p + i] for i in range(window))
-                        is_empty_window = model.NewBoolVar(f"empty_win_t{teacher.id}_d{d}_p{p}")
-                        model.Add(window_sum == 0).OnlyEnforceIf(is_empty_window)
-                        model.Add(window_sum > 0).OnlyEnforceIf(is_empty_window.Not())
-                        
-                        # If window is entirely empty, it must be either before first_p or after last_p
-                        model.Add(first_p > p).OnlyEnforceIf(is_empty_window)
-                        model.Add(last_p < p + window).OnlyEnforceIf(is_empty_window)
-
-        # Hard Constraint: Max Total Gaps Per Week
-        if cons and cons.maxTotalGapsPerWeek is not None:
-            model.Add(sum(weekly_gaps_vars) <= cons.maxTotalGapsPerWeek)
+            for mk in matching_keys:
+                model.Add(y[mk] == 1)
 
     if objective_terms:
         model.Minimize(sum(objective_terms))
 
-    # Solve Layer 1
+    # 9. Solve CP-SAT Model
     solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = 15.0
-    solver.parameters.num_search_workers = 4
+    solver.parameters.max_time_in_seconds = 30.0
+    solver.parameters.num_search_workers = 8
 
     status_1 = solver.Solve(model)
 
@@ -305,157 +268,38 @@ def solve_timetable(req: SolveRequest) -> SolveResponse:
         elapsed = time.time() - start_time
         return SolveResponse(
             status="INFEASIBLE",
-            solveTimeSeconds=elapsed,
+            solveTimeSeconds=round(elapsed, 3),
             slots=[],
             conflicts=[
-                "Δεν βρέθηκε έγκυρη λύση για το βασικό πρόγραμμα (Layer 1).",
+                "Δεν βρέθηκε έγκυρη λύση για το πρόγραμμα.",
                 "Ελέγξτε τις διαθεσιμότητες των εκπαιδευτικών ή το σύνολο των απαιτούμενων ωρών ανά τμήμα.",
             ],
             diagnostics={
-                "coreAssignmentsCount": len(core_assignments),
-                "totalHoursRequired": sum(a.hours for a in core_assignments),
-                "availableSlots": len(req.classes) * num_days * num_periods,
+                "teachersCount": len(teachers),
+                "totalTeacherHours": sum(t.maxWeeklyHours for t in teachers),
+                "classesCount": len(classes),
             }
         )
 
-    # Collect Layer 1 results
+    # 10. Collect solution slots
     results: List[SlotResult] = []
-    for asg in core_assignments:
-        cid = subgroup_to_class.get(asg.subGroupId, "")
-        for d in range(num_days):
-            for p in range(num_periods):
-                if solver.Value(x[(asg.id, d, p)]) == 1:
-                    results.append(
-                        SlotResult(
-                            id=f"slot-{uuid.uuid4().hex[:8]}",
-                            day=d,
-                            period=p,
-                            assignmentId=asg.id,
-                            classId=cid,
-                            subGroupId=asg.subGroupId,
-                            teacherId=asg.teacherId,
-                            subjectId=asg.subjectId,
-                            isSupport=False,
-                            layer=1,
-                        )
-                    )
-
-    # -------------------------------------------------------------
-    # LAYER 2: Support Overlay CP-SAT Formulation
-    # -------------------------------------------------------------
-    if False and support_assignments:  # Temporarily disabled Layer 2
-        model_2 = cp_model.CpModel()
-        y: Dict[Tuple[str, int, int], cp_model.IntVar] = {}
-
-        for asg in support_assignments:
-            for d in range(num_days):
-                for p in range(num_periods):
-                    y[(asg.id, d, p)] = model_2.NewBoolVar(f"y_{asg.id}_d{d}_p{p}")
-
-        # 1. Hours required for support assignments
-        for asg in support_assignments:
-            model_2.Add(
-                sum(y[(asg.id, d, p)] for d in range(num_days) for p in range(num_periods))
-                == asg.hours
-            )
-
-        # 2. Therapist collision & availability (a therapist cannot be in 2 classes at once)
-        for teacher in req.teachers:
-            if not teacher.isSupport:
-                continue
-            sup_t_asgs = [a for a in support_assignments if a.teacherId == teacher.id]
-            if not sup_t_asgs:
-                continue
-            
-            total_sup_hours = sum(a.hours for a in sup_t_asgs)
-            cons = teacher.constraints
-
-            for d in range(num_days):
-                # Check available days
-                if cons and cons.availableDays is not None and d not in cons.availableDays:
-                    for a in sup_t_asgs:
-                        for p in range(num_periods):
-                            model_2.Add(y[(a.id, d, p)] == 0)
-                    continue
-
-                daily_p_vars = []
-                for p in range(num_periods):
-                    # Check availability
-                    is_available = True
-                    if cons and cons.availability:
-                        day_key = str(d)
-                        avail_list = cons.availability.get(day_key)
-                        if avail_list and p < len(avail_list):
-                            is_available = avail_list[p]
-                    if not is_available:
-                        for a in sup_t_asgs:
-                            model_2.Add(y[(a.id, d, p)] == 0)
-                    else:
-                        model_2.Add(sum(y[(a.id, d, p)] for a in sup_t_asgs) <= 1)
-
-                    p_act = model_2.NewBoolVar(f"sup_p_act_t{teacher.id}_d{d}_p{p}")
-                    model_2.Add(p_act == sum(y[(a.id, d, p)] for a in sup_t_asgs))
-                    daily_p_vars.append(p_act)
-
-                daily_hours = sum(daily_p_vars)
-                if cons and cons.maxHoursPerDay is not None:
-                    model_2.Add(daily_hours <= cons.maxHoursPerDay)
-
-                if cons and cons.minHoursPerDay is not None:
-                    min_h = cons.minHoursPerDay
-                    effective_min_h = min(min_h, total_sup_hours)
-                    if effective_min_h > 1:
-                        is_working = model_2.NewBoolVar(f"sup_working_t{teacher.id}_d{d}")
-                        model_2.Add(daily_hours >= effective_min_h * is_working)
-                        model_2.Add(daily_hours <= num_periods * is_working)
-
-        # 3. Class collision: At most 1 therapist per class at the same time!
-        for c in req.classes:
-            c_sup_asgs = [
-                a for a in support_assignments
-                if subgroup_to_class.get(a.subGroupId) == c.id
-            ]
-            for d in range(num_days):
-                for p in range(num_periods):
-                    model_2.Add(sum(y[(a.id, d, p)] for a in c_sup_asgs) <= 1)
-
-            # Class flexible support hours constraint
-            if c.supportHoursMin > 0 or c.supportHoursMax > 0:
-                tot_c_sup = sum(
-                    y[(a.id, d, p)]
-                    for a in c_sup_asgs
-                    for d in range(num_days)
-                    for p in range(num_periods)
+    for (t_id, s_id, c_id, g_idx, d, p), var in y.items():
+        if solver.Value(var) == 1:
+            sg_id = subgroups_by_class[c_id][g_idx]
+            results.append(
+                SlotResult(
+                    id=f"slot-{uuid.uuid4().hex[:8]}",
+                    day=d,
+                    period=p,
+                    assignmentId=None,
+                    classId=c_id,
+                    subGroupId=sg_id,
+                    teacherId=t_id,
+                    subjectId=s_id,
+                    isSupport=False,
+                    layer=1,
                 )
-                if c.supportHoursMin > 0:
-                    model_2.Add(tot_c_sup >= c.supportHoursMin)
-                if c.supportHoursMax > 0:
-                    model_2.Add(tot_c_sup <= c.supportHoursMax)
-
-        solver_2 = cp_model.CpSolver()
-        solver_2.parameters.max_time_in_seconds = 10.0
-        status_2 = solver_2.Solve(model_2)
-
-        if status_2 in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-            for asg in support_assignments:
-                cid = subgroup_to_class.get(asg.subGroupId, "")
-                for d in range(num_days):
-                    for p in range(num_periods):
-                        if solver_2.Value(y[(asg.id, d, p)]) == 1:
-                            results.append(
-                                SlotResult(
-                                    id=f"slot-sup-{uuid.uuid4().hex[:8]}",
-                                    day=d,
-                                    period=p,
-                                    assignmentId=asg.id,
-                                    classId=cid,
-                                    subGroupId=asg.subGroupId,
-                                    teacherId=asg.teacherId,
-                                    subjectId=asg.subjectId,
-                                    isSupport=True,
-                                    layer=2,
-                                )
-                            )
+            )
 
     elapsed = time.time() - start_time
     status_str = "OPTIMAL" if status_1 == cp_model.OPTIMAL else "FEASIBLE"
@@ -467,8 +311,8 @@ def solve_timetable(req: SolveRequest) -> SolveResponse:
         conflicts=[],
         diagnostics={
             "totalSlotsAssigned": len(results),
-            "coreSlots": len([s for s in results if not s.isSupport]),
-            "supportSlots": len([s for s in results if s.isSupport]),
+            "coreSlots": len(results),
+            "supportSlots": 0,
         }
     )
 
@@ -499,14 +343,12 @@ def validate_move(req: ValidateMoveRequest) -> ValidateMoveResponse:
 
         # 2. Class collision check
         if other.classId == target_class_id:
-            # If both are support, max 1 therapist per class
             if is_support and other.isSupport:
                 return ValidateMoveResponse(
                     valid=False,
                     clashReason="Υπάρχει ήδη υποστηρικτική ειδικότητα στο τμήμα την ίδια ώρα."
                 )
 
-            # If core: check whole-class vs split
             if not is_support and not other.isSupport:
                 tgt_is_def = subgroup_is_default.get(target_slot.subGroupId, False)
                 oth_is_def = subgroup_is_default.get(other.subGroupId, False)
