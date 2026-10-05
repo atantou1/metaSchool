@@ -117,6 +117,8 @@ export async function PATCH(req: Request) {
       // Merge only modified constraint fields
       const constraintKeys = [
         "availableDays",
+        "availability",
+        "dayHours",
         "maxHoursPerDay",
         "minHoursPerDay",
         "maxConsecutiveHours",

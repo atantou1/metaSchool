@@ -1,10 +1,17 @@
 "use client";
 
 import React, { useState, useMemo, useEffect, useRef } from "react";
-import { TimetableData, Teacher, TeacherConstraints } from "@/types";
+import { TimetableData, Teacher, TeacherConstraints, DayAvailabilityConfig } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   UserPlus,
   Trash2,
@@ -24,6 +31,10 @@ import {
   CalendarDays,
   Lock,
   ChevronDown,
+  Clock,
+  Sun,
+  Moon,
+  CopyCheck,
 } from "lucide-react";
 import {
   Dialog,
@@ -130,7 +141,734 @@ interface InlineEditState {
   maxTotalGapsPerDay: number | "";
   maxTotalGapsPerWeek: number | "";
   availableDays: number[];
+  dayHours: Record<string, DayAvailabilityConfig>;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HELPER FUNCTIONS FOR DAY AVAILABILITY & HOURS
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function extractDayHours(
+  c?: TeacherConstraints | null,
+  isAllDayTeacher = false,
+  numMorning = 6,
+  numAllDay = 4
+): Record<string, DayAvailabilityConfig> {
+  const res: Record<string, DayAvailabilityConfig> = {};
+
+  ALL_DAYS_INDICES.forEach((d) => {
+    const key = String(d);
+    if (c?.dayHours && c.dayHours[key]) {
+      res[key] = {
+        start: c.dayHours[key].start ?? 1,
+        end: c.dayHours[key].end ?? numMorning,
+        allDayActive: c.dayHours[key].allDayActive ?? false,
+        allDayStart: c.dayHours[key].allDayStart ?? 1,
+        allDayEnd: c.dayHours[key].allDayEnd ?? numAllDay,
+      };
+    } else if (c?.availability && c.availability[key]) {
+      const arr = c.availability[key];
+      const morningArr = arr.slice(0, numMorning);
+      const allDayArr = arr.slice(numMorning, numMorning + numAllDay);
+
+      const firstTrueM = morningArr.indexOf(true);
+      const lastTrueM = morningArr.lastIndexOf(true);
+
+      const firstTrueA = allDayArr.indexOf(true);
+      const lastTrueA = allDayArr.lastIndexOf(true);
+
+      res[key] = {
+        start: firstTrueM !== -1 ? firstTrueM + 1 : 1,
+        end: lastTrueM !== -1 ? lastTrueM + 1 : numMorning,
+        allDayActive: firstTrueA !== -1,
+        allDayStart: firstTrueA !== -1 ? firstTrueA + 1 : 1,
+        allDayEnd: lastTrueA !== -1 ? lastTrueA + 1 : numAllDay,
+      };
+    } else {
+      res[key] = {
+        start: 1,
+        end: numMorning,
+        allDayActive: isAllDayTeacher,
+        allDayStart: 1,
+        allDayEnd: numAllDay,
+      };
+    }
+  });
+
+  return res;
+}
+
+export function computeAvailabilityGrid(
+  availableDays: number[],
+  dayHours: Record<string, DayAvailabilityConfig> | undefined,
+  isTeacherAllDay = false,
+  numMorning = 6,
+  numAllDay = 4
+): Record<string, boolean[]> {
+  const availabilityGrid: Record<string, boolean[]> = {};
+
+  ALL_DAYS_INDICES.forEach((d) => {
+    const dayKey = String(d);
+    const isDayEnabled = (availableDays || []).includes(d);
+    const cfg = dayHours?.[dayKey] || {
+      start: 1,
+      end: numMorning,
+      allDayActive: isTeacherAllDay,
+      allDayStart: 1,
+      allDayEnd: numAllDay,
+    };
+
+    const slots: boolean[] = [];
+    // Morning periods (1 .. numMorning)
+    for (let m = 1; m <= numMorning; m++) {
+      slots.push(isDayEnabled && m >= (cfg.start ?? 1) && m <= (cfg.end ?? numMorning));
+    }
+    // All-day periods (1 .. numAllDay)
+    for (let a = 1; a <= numAllDay; a++) {
+      slots.push(
+        isDayEnabled &&
+          Boolean(cfg.allDayActive) &&
+          a >= (cfg.allDayStart ?? 1) &&
+          a <= (cfg.allDayEnd ?? numAllDay)
+      );
+    }
+    availabilityGrid[dayKey] = slots;
+  });
+
+  return availabilityGrid;
+}
+
+export function isDayCustom(
+  cfg: DayAvailabilityConfig | undefined,
+  numMorning = 6
+): boolean {
+  if (!cfg) return false;
+  if (cfg.start > 1 || cfg.end < numMorning) return true;
+  if (cfg.allDayActive) return true;
+  return false;
+}
+
+export function getDaySummaryText(
+  dayIndex: number,
+  isAvailable: boolean,
+  cfg: DayAvailabilityConfig | undefined,
+  numMorning = 6,
+  numAllDay = 4
+): string {
+  const dayName = DAY_LABELS[dayIndex]?.name || `Ημέρα ${dayIndex + 1}`;
+  if (!isAvailable) return `${dayName}: Μη διαθέσιμος`;
+  if (!cfg) return `${dayName}: Πλήρες ωράριο (1η–${numMorning}η)`;
+
+  const hasCustomMorning = cfg.start > 1 || cfg.end < numMorning;
+  const morningText = hasCustomMorning
+    ? `${cfg.start}η–${cfg.end}η ώρα`
+    : `1η–${numMorning}η (Πλήρες)`;
+
+  if (cfg.allDayActive) {
+    const allDayText = `Ολοήμερο: ${cfg.allDayStart ?? 1}η–${cfg.allDayEnd ?? numAllDay}η`;
+    return `${dayName}: ${morningText} + ${allDayText}`;
+  }
+
+  return `${dayName}: ${morningText}`;
+}
+
+export function getDayBackgroundStyle(
+  isAvailable: boolean,
+  dayCfg: DayAvailabilityConfig | undefined,
+  numMorning = 6,
+  numAllDay = 4
+): React.CSSProperties {
+  if (!isAvailable) {
+    return {};
+  }
+
+  const start = dayCfg?.start ?? 1;
+  const end = dayCfg?.end ?? numMorning;
+  const allDayActive = Boolean(dayCfg?.allDayActive);
+  const allDayStart = dayCfg?.allDayStart ?? 1;
+  const allDayEnd = dayCfg?.allDayEnd ?? numAllDay;
+
+  const hourActive: boolean[] = [];
+
+  for (let h = 1; h <= numMorning; h++) {
+    hourActive.push(h >= start && h <= end);
+  }
+
+  if (allDayActive) {
+    for (let h = 1; h <= numAllDay; h++) {
+      hourActive.push(h >= allDayStart && h <= allDayEnd);
+    }
+  }
+
+  const allActive = hourActive.every(Boolean);
+  if (allActive) {
+    return {
+      backgroundColor: "#0284c7", // solid sky blue
+    };
+  }
+
+  const noneActive = hourActive.every((a) => !a);
+  if (noneActive) {
+    return {
+      backgroundColor: "#bae6fd", // light sky blue
+    };
+  }
+
+  const activeColor = "#0284c7"; // solid blue
+  const inactiveColor = "#bae6fd"; // light blue
+
+  const stops: string[] = [];
+  const N = hourActive.length;
+
+  for (let i = 0; i < N; i++) {
+    const p1 = ((i / N) * 100).toFixed(2);
+    const p2 = (((i + 1) / N) * 100).toFixed(2);
+    const color = hourActive[i] ? activeColor : inactiveColor;
+    stops.push(`${color} ${p1}%`, `${color} ${p2}%`);
+  }
+
+  return {
+    background: `linear-gradient(to right, ${stops.join(", ")})`,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DUAL RANGE SLIDER (Smooth pointer-drag & track clicks for hour intervals)
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface DualRangeSliderProps {
+  min: number;
+  max: number;
+  value: [number, number];
+  onChange: (val: [number, number]) => void;
+  colorScheme?: "sky" | "violet" | "amber";
+  unit?: string;
+  labels?: string[];
+  disabled?: boolean;
+}
+
+const DualRangeSlider: React.FC<DualRangeSliderProps> = ({
+  min,
+  max,
+  value,
+  onChange,
+  colorScheme = "sky",
+  unit = "η",
+  labels,
+  disabled = false,
+}) => {
+  const low = Math.max(min, Math.min(value[0], max));
+  const high = Math.max(min, Math.min(value[1], max));
+  const [localLow, setLocalLow] = useState(low);
+  const [localHigh, setLocalHigh] = useState(high);
+  const [activeDrag, setActiveDrag] = useState<"low" | "high" | null>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setLocalLow(Math.max(min, Math.min(value[0], max)));
+    setLocalHigh(Math.max(min, Math.min(value[1], max)));
+  }, [value, min, max]);
+
+  const commitRange = (newLow: number, newHigh: number) => {
+    const clLow = Math.max(min, Math.min(newLow, max));
+    const clHigh = Math.max(min, Math.min(newHigh, max));
+    const finalLow = Math.min(clLow, clHigh);
+    const finalHigh = Math.max(clLow, clHigh);
+    setLocalLow(finalLow);
+    setLocalHigh(finalHigh);
+    onChange([finalLow, finalHigh]);
+  };
+
+  const span = Math.max(1, max - min);
+  const leftPercent = ((localLow - min) / span) * 100;
+  const rightPercent = ((localHigh - min) / span) * 100;
+
+  const getValueFromPointer = (clientX: number) => {
+    if (!trackRef.current) return min;
+    const rect = trackRef.current.getBoundingClientRect();
+    if (rect.width <= 0) return min;
+    const pos = (clientX - rect.left) / rect.width;
+    const clampedPos = Math.max(0, Math.min(1, pos));
+    const rawVal = min + clampedPos * span;
+    const steppedVal = Math.round(rawVal);
+    return Math.max(min, Math.min(max, steppedVal));
+  };
+
+  const startDrag = (type: "low" | "high", e: React.PointerEvent) => {
+    if (disabled) return;
+    e.stopPropagation();
+    e.preventDefault();
+    setActiveDrag(type);
+
+    let curLow = localLow;
+    let curHigh = localHigh;
+
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      const val = getValueFromPointer(moveEvent.clientX);
+      if (type === "low") {
+        const nextLow = Math.min(val, curHigh);
+        curLow = nextLow;
+        commitRange(nextLow, curHigh);
+      } else {
+        const nextHigh = Math.max(val, curLow);
+        curHigh = nextHigh;
+        commitRange(curLow, nextHigh);
+      }
+    };
+
+    const onPointerUp = () => {
+      setActiveDrag(null);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerUp);
+    };
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerUp);
+  };
+
+  const handleTrackPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (disabled) return;
+    e.stopPropagation();
+    e.preventDefault();
+    const val = getValueFromPointer(e.clientX);
+    const distLow = Math.abs(val - localLow);
+    const distHigh = Math.abs(val - localHigh);
+    const chosenType: "low" | "high" = distLow <= distHigh ? "low" : "high";
+
+    setActiveDrag(chosenType);
+
+    if (chosenType === "low") {
+      commitRange(Math.min(val, localHigh), localHigh);
+    } else {
+      commitRange(localLow, Math.max(val, localLow));
+    }
+
+    let curLow = chosenType === "low" ? Math.min(val, localHigh) : localLow;
+    let curHigh = chosenType === "high" ? Math.max(val, localLow) : localHigh;
+
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      const moveVal = getValueFromPointer(moveEvent.clientX);
+      if (chosenType === "low") {
+        const nextLow = Math.min(moveVal, curHigh);
+        curLow = nextLow;
+        commitRange(nextLow, curHigh);
+      } else {
+        const nextHigh = Math.max(moveVal, curLow);
+        curHigh = nextHigh;
+        commitRange(curLow, nextHigh);
+      }
+    };
+
+    const onPointerUp = () => {
+      setActiveDrag(null);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerUp);
+    };
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerUp);
+  };
+
+  const totalSteps = max - min + 1;
+  const barColors = {
+    sky: "from-sky-500 to-indigo-600",
+    violet: "from-violet-500 to-purple-600",
+    amber: "from-amber-500 to-orange-600",
+  };
+  const thumbBorderColors = {
+    sky: "border-sky-600 ring-sky-300",
+    violet: "border-violet-600 ring-violet-300",
+    amber: "border-amber-600 ring-amber-300",
+  };
+
+  return (
+    <div className="space-y-1.5 select-none py-1">
+      {/* Track & Thumbs Container */}
+      <div
+        ref={trackRef}
+        onPointerDown={handleTrackPointerDown}
+        className={`relative h-6 flex items-center cursor-pointer touch-none ${disabled ? "opacity-40 pointer-events-none" : ""}`}
+      >
+        {/* Background Track */}
+        <div className="absolute left-0 right-0 h-2 bg-zinc-200 rounded-full" />
+
+        {/* Selected Range Fill */}
+        <div
+          className={`absolute h-2 bg-linear-to-r ${barColors[colorScheme]} rounded-full transition-all duration-75`}
+          style={{
+            left: `${leftPercent}%`,
+            width: `${Math.max(0, rightPercent - leftPercent)}%`,
+          }}
+        />
+
+        {/* Left Thumb */}
+        <div
+          onPointerDown={(e) => startDrag("low", e)}
+          style={{ left: `${leftPercent}%` }}
+          className={`absolute -translate-x-1/2 w-4.5 h-4.5 bg-white border-2 rounded-full shadow-md cursor-grab active:cursor-grabbing z-10 transition-transform hover:scale-115 active:scale-125 flex items-center justify-center ${thumbBorderColors[colorScheme]} ${activeDrag === "low" ? "scale-125 ring-2" : ""}`}
+          title={`Από: ${localLow}${unit}`}
+        >
+          <div className="w-1.5 h-1.5 rounded-full bg-zinc-600" />
+        </div>
+
+        {/* Right Thumb */}
+        <div
+          onPointerDown={(e) => startDrag("high", e)}
+          style={{ left: `${rightPercent}%` }}
+          className={`absolute -translate-x-1/2 w-4.5 h-4.5 bg-white border-2 rounded-full shadow-md cursor-grab active:cursor-grabbing z-10 transition-transform hover:scale-115 active:scale-125 flex items-center justify-center ${thumbBorderColors[colorScheme]} ${activeDrag === "high" ? "scale-125 ring-2" : ""}`}
+          title={`Έως: ${localHigh}${unit}`}
+        >
+          <div className="w-1.5 h-1.5 rounded-full bg-zinc-600" />
+        </div>
+      </div>
+
+      {/* Step Numbers / Clickable ticks */}
+      <div className="flex justify-between items-center text-[10px] font-medium text-zinc-500 px-0.5">
+        {Array.from({ length: totalSteps }, (_, i) => {
+          const stepVal = min + i;
+          const isSelected = stepVal >= localLow && stepVal <= localHigh;
+          const label = labels && labels[i] ? labels[i] : `${stepVal}${unit}`;
+          return (
+            <button
+              key={stepVal}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (disabled) return;
+                if (stepVal < localLow) commitRange(stepVal, localHigh);
+                else if (stepVal > localHigh) commitRange(localLow, stepVal);
+                else {
+                  const dL = Math.abs(stepVal - localLow);
+                  const dH = Math.abs(stepVal - localHigh);
+                  if (dL <= dH) commitRange(stepVal, localHigh);
+                  else commitRange(localLow, stepVal);
+                }
+              }}
+              className={`px-1 py-0.5 rounded text-[9.5px] transition-colors ${
+                isSelected
+                  ? "font-bold text-zinc-900 bg-zinc-100"
+                  : "text-zinc-400 hover:text-zinc-700 hover:bg-zinc-50"
+              }`}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DAY AVAILABILITY POPOVER (Interactive Popover with Sliders & Presets)
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface DayAvailabilityPopoverProps {
+  dayIndex: number;
+  dayLabel: { index: number; short: string; name: string };
+  isDayActive: boolean;
+  dayConfig: DayAvailabilityConfig;
+  numMorningPeriods: number;
+  numAllDayPeriods: number;
+  onToggleDay: (active: boolean) => void;
+  onChangeConfig: (newConfig: DayAvailabilityConfig) => void;
+  onApplyToAllDays?: (currentConfig: DayAvailabilityConfig) => void;
+  triggerTitle?: string;
+  triggerClassName?: string;
+  triggerStyle?: React.CSSProperties;
+  triggerContent?: React.ReactNode;
+}
+
+const DayAvailabilityPopover: React.FC<DayAvailabilityPopoverProps> = ({
+  dayIndex,
+  dayLabel,
+  isDayActive,
+  dayConfig,
+  numMorningPeriods,
+  numAllDayPeriods,
+  onToggleDay,
+  onChangeConfig,
+  onApplyToAllDays,
+  triggerTitle,
+  triggerClassName,
+  triggerStyle,
+  triggerContent,
+}) => {
+  const [open, setOpen] = useState(false);
+
+  const morningStart = dayConfig.start || 1;
+  const morningEnd = Math.min(numMorningPeriods, dayConfig.end || numMorningPeriods);
+  const allDayStart = dayConfig.allDayStart || 1;
+  const allDayEnd = Math.min(numAllDayPeriods, dayConfig.allDayEnd || numAllDayPeriods);
+  const isAllDayActive = Boolean(dayConfig.allDayActive);
+
+  const morningSpan = morningEnd - morningStart + 1;
+  const allDaySpan = allDayEnd - allDayStart + 1;
+
+  // Morning Presets
+  const morningPresets = [
+    { label: `Όλες (1-${numMorningPeriods})`, range: [1, numMorningPeriods] as [number, number] },
+    { label: "1η-4η", range: [1, Math.min(4, numMorningPeriods)] as [number, number] },
+    { label: `3η-${numMorningPeriods}η`, range: [3, numMorningPeriods] as [number, number] },
+    { label: `4η-${numMorningPeriods}η`, range: [4, numMorningPeriods] as [number, number] },
+  ];
+
+  // All-Day Presets
+  const allDayPresets = [
+    { label: `Όλες (1-${numAllDayPeriods})`, range: [1, numAllDayPeriods] as [number, number] },
+    { label: "1η-2η", range: [1, Math.min(2, numAllDayPeriods)] as [number, number] },
+    { label: `2η-${numAllDayPeriods}η`, range: [2, numAllDayPeriods] as [number, number] },
+    { label: `3η-${numAllDayPeriods}η`, range: [3, numAllDayPeriods] as [number, number] },
+  ];
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        type="button"
+        title={triggerTitle}
+        className={triggerClassName}
+        style={triggerStyle}
+      >
+        {triggerContent}
+      </PopoverTrigger>
+      <PopoverContent
+        align="center"
+        sideOffset={6}
+        className="w-80 p-3.5 shadow-2xl border border-zinc-200 bg-white text-xs z-50 rounded-xl animate-in fade-in"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header: Day Title & Active Toggle Switch */}
+        <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-zinc-100">
+          <div className="flex items-center gap-2">
+            <span className="w-5 h-5 rounded-md bg-sky-100 text-sky-800 font-bold flex items-center justify-center text-[11px]">
+              {dayLabel.short}
+            </span>
+            <div>
+              <div className="font-bold text-zinc-900 text-xs flex items-center gap-1.5">
+                {dayLabel.name}
+                {isDayActive ? (
+                  <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[9px] px-1 py-0 font-medium">
+                    Ενεργή
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="bg-zinc-100 text-zinc-500 border-zinc-200 text-[9px] px-1 py-0 font-medium">
+                    Ανενεργή
+                  </Badge>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <Switch
+              size="sm"
+              checked={isDayActive}
+              onCheckedChange={(checked) => onToggleDay(checked)}
+              title="Ενεργοποίηση / Απενεργοποίηση ημέρας"
+            />
+          </div>
+        </div>
+
+        {!isDayActive ? (
+          /* Inactive state display */
+          <div className="py-4 px-2 text-center space-y-2.5 bg-zinc-50/80 rounded-lg border border-zinc-100">
+            <p className="text-zinc-500 text-[11px]">
+              Ο εκπαιδευτικός <strong className="text-zinc-700 font-semibold">δεν είναι διαθέσιμος</strong> τη {dayLabel.name}.
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => onToggleDay(true)}
+              className="h-7 text-xs font-semibold bg-white border-sky-300 text-sky-700 hover:bg-sky-50 shadow-2xs"
+            >
+              <Check className="w-3.5 h-3.5 mr-1 text-sky-600" />
+              Ενεργοποίηση Ημέρας
+            </Button>
+          </div>
+        ) : (
+          /* Active State: Sliders for Morning and All-Day */
+          <div className="space-y-3.5">
+            {/* Section 1: Morning Hours */}
+            <div className="bg-sky-50/50 border border-sky-100 rounded-lg p-2.5 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1 text-[11px] font-bold text-sky-950">
+                  <Sun className="w-3.5 h-3.5 text-amber-500" />
+                  Πρωινό Ωράριο
+                </div>
+                <span className="font-mono text-[10.5px] font-bold bg-white text-sky-700 px-1.5 py-0.5 rounded border border-sky-200 shadow-2xs">
+                  {morningStart}η — {morningEnd}η ώρα <span className="font-sans font-normal text-zinc-500">({morningSpan}ω)</span>
+                </span>
+              </div>
+
+              {/* Morning Dual Slider */}
+              <DualRangeSlider
+                min={1}
+                max={numMorningPeriods}
+                value={[morningStart, morningEnd]}
+                colorScheme="sky"
+                unit="η"
+                onChange={(val) => {
+                  onChangeConfig({
+                    ...dayConfig,
+                    start: val[0],
+                    end: val[1],
+                  });
+                }}
+              />
+
+              {/* Quick Presets for Morning */}
+              <div className="flex items-center gap-1 flex-wrap pt-0.5">
+                <span className="text-[9.5px] text-zinc-400 font-medium mr-0.5">Επιλογές:</span>
+                {morningPresets.map((pr) => {
+                  const isActive = morningStart === pr.range[0] && morningEnd === pr.range[1];
+                  return (
+                    <button
+                      key={pr.label}
+                      type="button"
+                      onClick={() => {
+                        onChangeConfig({
+                          ...dayConfig,
+                          start: pr.range[0],
+                          end: pr.range[1],
+                        });
+                      }}
+                      className={`px-1.5 py-0.5 rounded text-[9px] font-medium border transition-all ${
+                        isActive
+                          ? "bg-sky-600 text-white border-sky-600 shadow-2xs font-bold"
+                          : "bg-white text-zinc-600 border-zinc-200 hover:border-sky-300 hover:bg-sky-50/50"
+                      }`}
+                    >
+                      {pr.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Section 2: All-Day Hours */}
+            <div className={`border rounded-lg p-2.5 space-y-2 transition-all ${
+              isAllDayActive
+                ? "bg-violet-50/50 border-violet-200/80"
+                : "bg-zinc-50/60 border-zinc-200/70"
+            }`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-[11px] font-bold text-zinc-800">
+                  <Moon className={`w-3.5 h-3.5 ${isAllDayActive ? "text-violet-600" : "text-zinc-400"}`} />
+                  Ολοήμερο Πρόγραμμα
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {isAllDayActive && (
+                    <span className="font-mono text-[10.5px] font-bold bg-white text-violet-700 px-1.5 py-0.5 rounded border border-violet-200 shadow-2xs">
+                      {allDayStart}η — {allDayEnd}η ώρα <span className="font-sans font-normal text-zinc-500">({allDaySpan}ω)</span>
+                    </span>
+                  )}
+                  <Switch
+                    size="sm"
+                    checked={isAllDayActive}
+                    onCheckedChange={(checked) => {
+                      onChangeConfig({
+                        ...dayConfig,
+                        allDayActive: checked,
+                        allDayStart: dayConfig.allDayStart || 1,
+                        allDayEnd: dayConfig.allDayEnd || numAllDayPeriods,
+                      });
+                    }}
+                    title="Συμμετοχή στο Ολοήμερο"
+                  />
+                </div>
+              </div>
+
+              {isAllDayActive ? (
+                <>
+                  {/* All-Day Dual Slider */}
+                  <DualRangeSlider
+                    min={1}
+                    max={numAllDayPeriods}
+                    value={[allDayStart, allDayEnd]}
+                    colorScheme="violet"
+                    unit="η"
+                    labels={Array.from({ length: numAllDayPeriods }, (_, i) => `${i + 1}η Ολ.`)}
+                    onChange={(val) => {
+                      onChangeConfig({
+                        ...dayConfig,
+                        allDayActive: true,
+                        allDayStart: val[0],
+                        allDayEnd: val[1],
+                      });
+                    }}
+                  />
+
+                  {/* Quick Presets for All-Day */}
+                  <div className="flex items-center gap-1 flex-wrap pt-0.5">
+                    <span className="text-[9.5px] text-zinc-400 font-medium mr-0.5">Επιλογές:</span>
+                    {allDayPresets.map((pr) => {
+                      const isActive = allDayStart === pr.range[0] && allDayEnd === pr.range[1];
+                      return (
+                        <button
+                          key={pr.label}
+                          type="button"
+                          onClick={() => {
+                            onChangeConfig({
+                              ...dayConfig,
+                              allDayActive: true,
+                              allDayStart: pr.range[0],
+                              allDayEnd: pr.range[1],
+                            });
+                          }}
+                          className={`px-1.5 py-0.5 rounded text-[9px] font-medium border transition-all ${
+                            isActive
+                              ? "bg-violet-600 text-white border-violet-600 shadow-2xs font-bold"
+                              : "bg-white text-zinc-600 border-zinc-200 hover:border-violet-300 hover:bg-violet-50/50"
+                          }`}
+                        >
+                          {pr.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              ) : (
+                <p className="text-[10.5px] text-zinc-400 italic">
+                  Ενεργοποιήστε τον διακόπτη αν ο εκπαιδευτικός διδάσκει και στο ολοήμερο τη {dayLabel.name}.
+                </p>
+              )}
+            </div>
+
+            {/* Actions Footer */}
+            <div className="flex items-center justify-between pt-2 border-t border-zinc-100">
+              {onApplyToAllDays && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onApplyToAllDays(dayConfig)}
+                  className="h-6 px-2 text-[10px] text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 font-medium cursor-pointer"
+                  title="Αντιγραφή αυτών των ωρών σε όλες τις ημέρες του εκπαιδευτικού"
+                >
+                  <CopyCheck className="w-3 h-3 mr-1" />
+                  Εφαρμογή σε όλες τις ημέρες
+                </Button>
+              )}
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => setOpen(false)}
+                className="h-6.5 px-3 text-[11px] font-semibold bg-zinc-900 text-white hover:bg-zinc-800 ml-auto shadow-2xs cursor-pointer"
+              >
+                Έγινε
+              </Button>
+            </div>
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+};
 
 interface RangeFilterPopoverProps {
   title: string;
@@ -573,6 +1311,9 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
   onTabChange,
 }) => {
   const [selectedTeacherId, setSelectedTeacherId] = useState<string | null>(null);
+
+  const numMorningPeriods = data.schoolConfig?.periods?.length || 6;
+  const numAllDayPeriods = data.schoolConfig?.allDayPeriods?.length || 4;
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState("");
@@ -1023,6 +1764,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
       maxTotalGapsPerDay: 1,
       maxTotalGapsPerWeek: 2,
       availableDays: ALL_DAYS_INDICES,
+      dayHours: extractDayHours(null, false, numMorningPeriods, numAllDayPeriods),
     });
     setEditingRowId("__new__");
     setSelectedTeacherId(null);
@@ -1058,6 +1800,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
       maxTotalGapsPerDay: c?.maxTotalGapsPerDay ?? 1,
       maxTotalGapsPerWeek: c?.maxTotalGapsPerWeek ?? 2,
       availableDays: daysList,
+      dayHours: extractDayHours(c, target.isAllDay ?? false, numMorningPeriods, numAllDayPeriods),
     });
     setEditingRowId("__new__");
     setSelectedTeacherId(null);
@@ -1091,6 +1834,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
       maxTotalGapsPerDay: c?.maxTotalGapsPerDay ?? c?.maxConsecutiveGaps ?? 1,
       maxTotalGapsPerWeek: c?.maxTotalGapsPerWeek ?? 2,
       availableDays: daysList,
+      dayHours: extractDayHours(c, tch.isAllDay ?? false, numMorningPeriods, numAllDayPeriods),
     });
     setEditingRowId(tch.id);
     setSelectedTeacherId(tch.id);
@@ -1122,6 +1866,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
       maxTotalGapsPerDay: 1,
       maxTotalGapsPerWeek: 2,
       availableDays: ALL_DAYS_INDICES,
+      dayHours: extractDayHours(null, false, numMorningPeriods, numAllDayPeriods),
     });
     setModifiedBulkFields(new Set());
     setEditingRowId("__bulk__");
@@ -1141,6 +1886,40 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
     }
   };
 
+  const updateInlineDayConfig = (dayIndex: number, newConfig: DayAvailabilityConfig) => {
+    if (!inlineData) return;
+    markBulkField("availableDays");
+    markBulkField("dayHours");
+    setInlineData((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        dayHours: {
+          ...prev.dayHours,
+          [String(dayIndex)]: newConfig,
+        },
+      };
+    });
+  };
+
+  const applyDayToAllDays = (sourceDayIndex: number, config: DayAvailabilityConfig) => {
+    if (!inlineData) return;
+    markBulkField("availableDays");
+    markBulkField("dayHours");
+    setInlineData((prev) => {
+      if (!prev) return prev;
+      const nextDayHours = { ...prev.dayHours };
+      ALL_DAYS_INDICES.forEach((d) => {
+        nextDayHours[String(d)] = { ...config };
+      });
+      return {
+        ...prev,
+        dayHours: nextDayHours,
+      };
+    });
+    toast.success(`Οι ρυθμίσεις ωραρίου της ${DAY_LABELS[sourceDayIndex].name} εφαρμόστηκαν σε όλες τις ημέρες!`);
+  };
+
   const promptSaveBulk = () => {
     if (!inlineData) return;
     if (modifiedBulkFields.size === 0) {
@@ -1155,8 +1934,16 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
     setIsSavingBulk(true);
 
     const constraintsData: Partial<TeacherConstraints> = {};
-    if (modifiedBulkFields.has("availableDays")) {
+    if (modifiedBulkFields.has("availableDays") || modifiedBulkFields.has("dayHours")) {
       constraintsData.availableDays = inlineData.availableDays.length > 0 ? inlineData.availableDays : ALL_DAYS_INDICES;
+      constraintsData.dayHours = inlineData.dayHours;
+      constraintsData.availability = computeAvailabilityGrid(
+        inlineData.availableDays,
+        inlineData.dayHours,
+        inlineData.isAllDay,
+        numMorningPeriods,
+        numAllDayPeriods
+      );
     }
     if (modifiedBulkFields.has("maxHoursPerDay")) {
       constraintsData.maxHoursPerDay = inlineData.maxHoursPerDay === "" ? null : Number(inlineData.maxHoursPerDay);
@@ -1243,9 +2030,19 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
     if (modifiedBulkFields.has("isActive")) {
       list.push({ key: "isActive", label: "Κατάσταση", value: inlineData.isActive ? "Ενεργός" : "Σε Άδεια/Ανενεργός" });
     }
-    if (modifiedBulkFields.has("availableDays")) {
-      const dayNames = inlineData.availableDays.map((idx) => DAY_LABELS.find((d) => d.index === idx)?.name || "").join(", ");
-      list.push({ key: "availableDays", label: "Ημέρες Παρουσίας", value: dayNames || "Καμία" });
+    if (modifiedBulkFields.has("availableDays") || modifiedBulkFields.has("dayHours")) {
+      const daySummaries = inlineData.availableDays
+        .map((idx) => {
+          const dName = DAY_LABELS.find((d) => d.index === idx)?.name || "";
+          const cfg = inlineData.dayHours?.[String(idx)];
+          const isCustom = isDayCustom(cfg, numMorningPeriods);
+          if (isCustom && cfg) {
+            return `${dName} (${cfg.start}η-${cfg.end}η${cfg.allDayActive ? ` + Ολοήμ. ${cfg.allDayStart}-${cfg.allDayEnd}` : ""})`;
+          }
+          return dName;
+        })
+        .join(", ");
+      list.push({ key: "availableDays", label: "Ημέρες & Ώρες Παρουσίας", value: daySummaries || "Καμία" });
     }
     if (modifiedBulkFields.has("maxWeeklyHours")) {
       list.push({ key: "maxWeeklyHours", label: "Εβδομαδιαίες Ώρες", value: `${inlineData.maxWeeklyHours} ώρες` });
@@ -1270,7 +2067,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
     }
 
     return list;
-  }, [inlineData, modifiedBulkFields]);
+  }, [inlineData, modifiedBulkFields, numMorningPeriods]);
 
   const cancelInlineEdit = () => {
     setEditingRowId(null);
@@ -1297,6 +2094,14 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
 
     const constraintsData: TeacherConstraints = {
       availableDays: inlineData.availableDays.length > 0 ? inlineData.availableDays : ALL_DAYS_INDICES,
+      dayHours: inlineData.dayHours,
+      availability: computeAvailabilityGrid(
+        inlineData.availableDays,
+        inlineData.dayHours,
+        inlineData.isAllDay,
+        numMorningPeriods,
+        numAllDayPeriods
+      ),
       maxHoursPerDay: inlineData.maxHoursPerDay === "" ? null : Number(inlineData.maxHoursPerDay),
       minHoursPerDay: inlineData.minHoursPerDay === "" ? null : Number(inlineData.minHoursPerDay),
       maxConsecutiveHours: inlineData.maxConsecutiveHours === "" ? null : Number(inlineData.maxConsecutiveHours),
@@ -1689,28 +2494,56 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
           </button>
         </td>
 
-        {/* Available Days - Compact Interactive Mini Chips */}
-        <td className="py-2 px-1.5 text-center">
-          <div className={`flex items-center justify-center gap-0.5 ${isBulkMode && modifiedBulkFields.has("availableDays") ? "p-0.5 rounded bg-indigo-100 ring-1 ring-indigo-400" : ""}`}>
+        {/* Available Days & Hours - Interactive Popover Chips */}
+        <td className="py-2 px-1 text-center">
+          <div className={`flex items-center justify-center gap-0.5 ${isBulkMode && (modifiedBulkFields.has("availableDays") || modifiedBulkFields.has("dayHours")) ? "p-0.5 rounded bg-indigo-100 ring-1 ring-indigo-400" : ""}`}>
             {DAY_LABELS.map((d) => {
               const isAvail = inlineData.availableDays.includes(d.index);
+              const dayCfg = inlineData.dayHours?.[String(d.index)] || {
+                start: 1,
+                end: numMorningPeriods,
+                allDayActive: inlineData.isAllDay ?? false,
+                allDayStart: 1,
+                allDayEnd: numAllDayPeriods,
+              };
+              const bgStyle = getDayBackgroundStyle(isAvail, dayCfg, numMorningPeriods, numAllDayPeriods);
+
               return (
-                <button
+                <DayAvailabilityPopover
                   key={d.index}
-                  type="button"
-                  onClick={() => {
-                    markBulkField("availableDays");
-                    toggleInlineDay(d.index);
-                  }}
-                  title={`${d.name}: Κλικ για ενεργοποίηση/απενεργοποίηση`}
-                  className={`w-4 h-4 rounded-sm flex items-center justify-center text-[9px] font-bold border transition-all ${
+                  dayIndex={d.index}
+                  dayLabel={d}
+                  isDayActive={isAvail}
+                  dayConfig={dayCfg}
+                  numMorningPeriods={numMorningPeriods}
+                  numAllDayPeriods={numAllDayPeriods}
+                  triggerTitle={getDaySummaryText(d.index, isAvail, dayCfg, numMorningPeriods, numAllDayPeriods)}
+                  triggerStyle={bgStyle}
+                  triggerClassName={`w-4.5 h-4.5 rounded-sm flex items-center justify-center text-[9px] font-bold border transition-all cursor-pointer shadow-2xs ${
                     isAvail
-                      ? "bg-sky-500 border-sky-600 text-white shadow-2xs"
-                      : "bg-white border-zinc-200 text-zinc-300 hover:border-zinc-400"
+                      ? "border-sky-600/50 text-white [text-shadow:_0_1px_2px_rgba(0,0,0,0.6)] hover:brightness-110"
+                      : "bg-white border-zinc-200 text-zinc-300 hover:border-zinc-400 line-through"
                   }`}
-                >
-                  {d.short}
-                </button>
+                  triggerContent={<span>{d.short}</span>}
+                  onToggleDay={(active) => {
+                    markBulkField("availableDays");
+                    if (active && !isAvail) {
+                      setInlineData((prev) => prev ? ({ ...prev, availableDays: [...prev.availableDays, d.index].sort() }) : prev);
+                    } else if (!active && isAvail) {
+                      if (inlineData.availableDays.length === 1) {
+                        toast.info("Πρέπει να επιλεγεί τουλάχιστον 1 ημέρα.");
+                        return;
+                      }
+                      setInlineData((prev) => prev ? ({ ...prev, availableDays: prev.availableDays.filter((idx) => idx !== d.index) }) : prev);
+                    }
+                  }}
+                  onChangeConfig={(newCfg) => {
+                    updateInlineDayConfig(d.index, newCfg);
+                  }}
+                  onApplyToAllDays={(cfg) => {
+                    applyDayToAllDays(d.index, cfg);
+                  }}
+                />
               );
             })}
           </div>
@@ -2796,32 +3629,37 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
                       )}
                     </td>
 
-                    {/* Available Days - Compact Slim View */}
+                    {/* Available Days & Hours - Compact Slim View */}
                     <td className="py-2.5 px-2 text-center">
-                      {isAllDays ? (
-                        <Badge variant="outline" className="bg-emerald-50/80 text-emerald-700 border-emerald-200 font-medium text-[10px] px-1.5 py-0.5">
-                          Όλες (5/5)
-                        </Badge>
-                      ) : (
-                        <div className="flex items-center justify-center gap-0.5">
-                          {DAY_LABELS.map((d) => {
-                            const isAvail = daysList.includes(d.index);
-                            return (
-                              <span
-                                key={d.index}
-                                title={`${d.name}: ${isAvail ? "Διαθέσιμος" : "Μη διαθέσιμος"}`}
-                                className={`w-4 h-4 rounded-sm flex items-center justify-center text-[9px] font-bold transition-all ${
-                                  isAvail
-                                    ? "bg-sky-500 text-white shadow-2xs"
-                                    : "bg-zinc-100 text-zinc-300 line-through"
-                                }`}
-                              >
-                                {d.short}
-                              </span>
-                            );
-                          })}
-                        </div>
-                      )}
+                      {(() => {
+                        const tchDayHours = extractDayHours(c, tch.isAllDay, numMorningPeriods, numAllDayPeriods);
+
+                        return (
+                          <div className="flex items-center justify-center gap-0.5">
+                            {DAY_LABELS.map((d) => {
+                              const isAvail = daysList.includes(d.index);
+                              const dayCfg = tchDayHours[String(d.index)];
+                              const summary = getDaySummaryText(d.index, isAvail, dayCfg, numMorningPeriods, numAllDayPeriods);
+                              const bgStyle = getDayBackgroundStyle(isAvail, dayCfg, numMorningPeriods, numAllDayPeriods);
+
+                              return (
+                                <span
+                                  key={d.index}
+                                  title={summary}
+                                  style={bgStyle}
+                                  className={`w-4 h-4.5 rounded-sm flex items-center justify-center text-[9px] font-bold transition-all shadow-2xs ${
+                                    isAvail
+                                      ? "border border-sky-600/50 text-white [text-shadow:_0_1px_2px_rgba(0,0,0,0.6)]"
+                                      : "bg-zinc-100 border border-zinc-200/60 text-zinc-300 line-through"
+                                  }`}
+                                >
+                                  {d.short}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
                     </td>
 
                     {/* Weekly Hours */}

@@ -21,7 +21,7 @@ def solve_timetable(req: SolveRequest) -> SolveResponse:
     all_periods = sorted(list(set(morning_periods + allday_periods)))
 
     # 1. Filter active core teachers
-    teachers = [t for t in req.teachers if not t.isSupport and t.isActive and t.maxWeeklyHours > 0]
+    teachers = [t for t in req.teachers if not t.isSupport and t.isActive and t.maxWeeklyHours > 0 and t.id != "tch-unassigned"]
     classes = req.classes
     subjects = req.subjects
 
@@ -73,6 +73,7 @@ def solve_timetable(req: SolveRequest) -> SolveResponse:
         c_ht = teacher_is_ht_of.get(t_id)
         c_ht_obj = class_by_id.get(c_ht) if c_ht else None
         is_morning_ht = (c_ht_obj is not None and not c_ht_obj.isAllDay)
+        is_allday_ht = (c_ht_obj is not None and c_ht_obj.isAllDay)
 
         for s in subjects:
             s_id = s.id
@@ -83,23 +84,33 @@ def solve_timetable(req: SolveRequest) -> SolveResponse:
                 c_id = c.id
                 c_is_allday = c.isAllDay
 
-                # If teacher is head teacher of a morning class (e.g. A1, A2..), they can only teach in their own class!
+                # 1. Morning Head Teacher: STRICTLY in their own class (all hours: whole-class or subgroup)
                 if is_morning_ht and c_ht != c_id:
                     continue
 
-                # Class period & teacher availability compatibility:
-                # Morning classes run during morning_periods (require t.isMorning)
-                # All-day classes run during allday_periods (require t.isAllDay)
-                if not c_is_allday:
-                    if not t_is_morning:
-                        continue
-                    valid_periods = morning_periods
+                # 2. All-Day Head Teacher: in All-Day class (during all-day periods) OR in morning classes (for remaining hours)
+                if is_allday_ht:
+                    if c_is_allday:
+                        if c_ht != c_id:
+                            continue
+                        valid_periods = allday_periods
+                    else:
+                        valid_periods = morning_periods
                 else:
-                    if not t_is_allday:
-                        continue
-                    valid_periods = allday_periods
+                    if not c_is_allday:
+                        if not t_is_morning:
+                            continue
+                        valid_periods = morning_periods
+                    else:
+                        if not t_is_allday:
+                            continue
+                        valid_periods = allday_periods
 
                 for g_idx in [0, 1, 2]:
+                    # All-Day Head teacher teaching in morning classes teaches in subgroup/co-teaching (g_idx in (1, 2))
+                    if is_allday_ht and not c_is_allday and g_idx == 0:
+                        continue
+
                     for d in range(num_days):
                         for p in valid_periods:
                             var = model.NewBoolVar(f"y_{t_id[:4]}_{s_id[:4]}_{c_id[:4]}_g{g_idx}_d{d}_p{p}")
@@ -109,29 +120,32 @@ def solve_timetable(req: SolveRequest) -> SolveResponse:
     # 5. Teacher constraints
     objective_terms = []
 
+    # 5a. Enforce each teacher's exact contract weekly hours
     for t in teachers:
         t_id = t.id
         t_max_h = t.maxWeeklyHours
         t_vars = [y[key] for key in eligible_tuples if key[0] == t_id]
-
-        # 5a. Cap teacher's weekly hours at their contract maximum
         if t_vars:
-            model.Add(sum(t_vars) <= t_max_h)
+            model.Add(sum(t_vars) == t_max_h)
 
-        # 5b. Head teacher of All-Day (e.g. Kazakis):
+    # 5b. For All-Day Head Teacher: EXACTLY 20 hours in their All-Day class
+    for t in teachers:
+        t_id = t.id
         c_ht = teacher_is_ht_of.get(t_id)
         c_ht_obj = class_by_id.get(c_ht) if c_ht else None
-        is_allday_ht = bool(c_ht_obj and c_ht_obj.isAllDay)
+        if c_ht_obj and c_ht_obj.isAllDay:
+            allday_ht_vars = [y[k] for k in eligible_tuples if k[0] == t_id and k[2] == c_ht]
+            model.Add(sum(allday_ht_vars) == 20)
 
-        # 5c. Teacher availability & daily workload
+    # 5b. Teacher availability & daily workload
+    for t in teachers:
+        t_id = t.id
+        t_max_h = t.maxWeeklyHours
         cons = t.constraints
         avail_days = cons.availableDays if cons and cons.availableDays is not None else list(range(num_days))
         avail_grid = cons.availability if cons and cons.availability else {}
         max_h = cons.maxHoursPerDay if cons and cons.maxHoursPerDay is not None else len(all_periods)
         min_h = cons.minHoursPerDay if cons and cons.minHoursPerDay is not None else 0
-
-        max_cg = cons.maxConsecutiveGaps if cons and cons.maxConsecutiveGaps is not None else None
-        max_g_day = cons.maxTotalGapsPerDay if cons and cons.maxTotalGapsPerDay is not None else None
         max_ch = cons.maxConsecutiveHours if cons and cons.maxConsecutiveHours is not None else None
 
         t_periods = []
@@ -140,10 +154,10 @@ def solve_timetable(req: SolveRequest) -> SolveResponse:
         if t.isAllDay:
             t_periods.extend(allday_periods)
         t_periods = sorted(list(set(t_periods)))
-        m = len(t_periods)
 
         for d in range(num_days):
             daily_p_dict = {}
+            avail_p_on_day = []
             for p in t_periods:
                 p_vars = [y[k] for k in eligible_tuples if k[0] == t_id and k[4] == d and k[5] == p]
                 if not p_vars:
@@ -172,67 +186,56 @@ def solve_timetable(req: SolveRequest) -> SolveResponse:
                     p_act = model.NewBoolVar(f"pact_{t_id[:4]}_{d}_{p}")
                     model.Add(p_act == sum(p_vars))
                     daily_p_dict[p] = p_act
+                    avail_p_on_day.append(p)
 
             daily_hours = sum(daily_p_dict.values())
+            eff_max_h = max_h
 
-            if max_h:
-                eff_max_h = max_h if not (t.isMorning and t.isAllDay) else max(max_h, len(morning_periods))
-                model.Add(daily_hours <= eff_max_h)
+            # Enforce minimum hours on active working days:
+            # If working on day d (w_d == 1), then eff_min <= daily_hours <= eff_max_h
+            # If off on day d (w_d == 0), then daily_hours == 0
+            w_d = model.NewBoolVar(f"w_{t_id[:4]}_{d}")
+            eff_min = min(min_h, eff_max_h) if min_h else 1
+            if min_h and min_h > 0:
+                model.Add(daily_hours >= eff_min * w_d)
+            else:
+                model.Add(daily_hours >= 1 * w_d)
+            model.Add(daily_hours <= eff_max_h * w_d)
 
-            if min_h and min_h > 1:
-                eff_min = min(min_h, t_max_h)
-                if eff_min > 1:
-                    is_working = model.NewBoolVar(f"w_{t_id[:4]}_{d}")
-                    model.Add(daily_hours >= eff_min * is_working)
-                    model.Add(daily_hours <= len(t_periods) * is_working)
+            # Enforce first & last available hour requirement if enabled
+            # Can be configured per teacher (cons.requireFirstAndLastHour) or globally (schoolConfig / req)
+            # Defaults to True for teachers with custom availability windows, and False for full-day generic availability
+            if cons and cons.requireFirstAndLastHour is not None:
+                req_edge = cons.requireFirstAndLastHour
+            elif req.schoolConfig and getattr(req.schoolConfig, 'requireFirstAndLastHour', None) is not None:
+                req_edge = req.schoolConfig.requireFirstAndLastHour
+            elif getattr(req, 'requireFirstAndLastHour', None) is not None:
+                req_edge = req.requireFirstAndLastHour
+            else:
+                req_edge = (len(avail_p_on_day) < len(t_periods))
 
-            # Shift period zones:
-            # - For morning-only or all-day-only teachers: single zone (t_periods)
-            # - For full-time all-day head teacher (e.g. Kazakis): unified continuous timeline (t_periods)
-            # - For dual specialty teachers (e.g. Boutari, Tsalkoutis): evaluate gap limits within morning and within all-day shifts
-            shift_zones = [t_periods] if is_allday_ht or not (t.isMorning and t.isAllDay) else [morning_periods, allday_periods]
+            if req_edge and avail_p_on_day:
+                first_p = min(avail_p_on_day)
+                last_p = max(avail_p_on_day)
+                if first_p == last_p:
+                    model.Add(daily_p_dict[first_p] >= w_d)
+                else:
+                    if eff_min >= 2:
+                        model.Add(daily_p_dict[first_p] >= w_d)
+                        model.Add(daily_p_dict[last_p] >= w_d)
+                    else:
+                        is_multi = model.NewBoolVar(f"mh_{t_id[:4]}_{d}")
+                        model.Add(daily_hours >= 2).OnlyEnforceIf(is_multi)
+                        model.Add(daily_hours <= 1).OnlyEnforceIf(is_multi.Not())
+                        model.Add(daily_p_dict[first_p] >= is_multi)
+                        model.Add(daily_p_dict[last_p] >= is_multi)
+                        model.Add(daily_p_dict[first_p] + daily_p_dict[last_p] >= w_d - is_multi)
 
-            for zone in shift_zones:
-                m_zone = len(zone)
-                # Max consecutive teaching hours within shift
-                if max_ch and max_ch < m_zone:
-                    for i in range(m_zone - max_ch):
-                        consec_vars = [daily_p_dict[zone[i + offset]] for offset in range(max_ch + 1) if zone[i + offset] in daily_p_dict]
-                        if len(consec_vars) > max_ch:
-                            model.Add(sum(consec_vars) <= max_ch)
-
-                # Max consecutive gaps within shift
-                if max_cg is not None:
-                    for i, p1 in enumerate(zone):
-                        for j, p2 in enumerate(zone):
-                            if j >= i + max_cg + 2:
-                                intermediate = [daily_p_dict[zone[k]] for k in range(i + 1, j) if zone[k] in daily_p_dict]
-                                if intermediate and p1 in daily_p_dict and p2 in daily_p_dict:
-                                    model.Add(sum(intermediate) >= daily_p_dict[p1] + daily_p_dict[p2] - 1)
-
-                # Max total gaps per day within shift
-                if max_g_day is not None:
-                    for i in range(m_zone):
-                        pi = zone[i]
-                        for j in range(i + 1, m_zone):
-                            pj = zone[j]
-                            span_len = j - i + 1
-                            min_required_lessons = span_len - max_g_day
-                            if min_required_lessons > 2 and pi in daily_p_dict and pj in daily_p_dict:
-                                window_vars = [daily_p_dict[zone[k]] for k in range(i, j + 1) if zone[k] in daily_p_dict]
-                                model.Add(sum(window_vars) >= min_required_lessons).OnlyEnforceIf([daily_p_dict[pi], daily_p_dict[pj]])
-
-            # TRANSITION GAP MINIMIZATION FOR DUAL SPECIALTY TEACHERS:
-            # When a teacher teaches in both morning and all-day on day d, penalize any empty periods
-            # between their morning and all-day lessons. This naturally forces morning lessons to the late
-            # morning (periods 4, 5) directly adjacent to all-day period 6, producing 0 gaps!
-            if t.isMorning and t.isAllDay and not is_allday_ht:
-                for pm in morning_periods:
-                    for pad in allday_periods:
-                        for p_mid in range(pm + 1, pad):
-                            tgap_var = model.NewBoolVar(f"tgap_{t_id[:4]}_{d}_{pm}_{pad}_{p_mid}")
-                            model.Add(tgap_var >= daily_p_dict[pm] + daily_p_dict[pad] - daily_p_dict[p_mid] - 1)
-                            objective_terms.append(10 * tgap_var)
+            # Max consecutive hours constraint (sliding window within active shift)
+            if max_ch and max_ch < len(t_periods):
+                for i in range(len(t_periods) - max_ch):
+                    consec = [daily_p_dict[t_periods[i + offset]] for offset in range(max_ch + 1)]
+                    model.Add(sum(consec) <= max_ch)
 
     # 6. Class schedule & subgroup concurrency constraints
     for c in classes:
@@ -246,32 +249,28 @@ def solve_timetable(req: SolveRequest) -> SolveResponse:
                 sg1_vars = [y[k] for k in eligible_tuples if k[2] == c_id and k[3] == 1 and k[4] == d and k[5] == p]
                 sg2_vars = [y[k] for k in eligible_tuples if k[2] == c_id and k[3] == 2 and k[4] == d and k[5] == p]
 
-                def_sum = sum(def_vars)
-                sg1_sum = sum(sg1_vars)
-                sg2_sum = sum(sg2_vars)
-
                 # HARD CONSTRAINT: Every class period must have EXACTLY 1 active session (NO EMPTY PERIODS!)
                 # Either exactly 1 whole-class lesson (def_sum == 1, sg1_sum == 0, sg2_sum == 0)
                 # OR exactly 1 split session where both subgroups are active (def_sum == 0, sg1_sum == 1, sg2_sum == 1)
-                model.Add(def_sum + sg1_sum == 1)
-                model.Add(sg1_sum == sg2_sum)
-                model.Add(def_sum <= 1)
+                model.Add(sum(def_vars) + sum(sg1_vars) == 1)
+                model.Add(sum(sg1_vars) == sum(sg2_vars))
+                model.Add(sum(def_vars) <= 1)
 
-        # 7. Head teacher & Subject hours per class
+    # 7. Subject hours per class from the Subjects table
+    for c in classes:
+        c_id = c.id
+        c_grade = c.grade
         for s in subjects:
             s_id = s.id
-            ch = subject_class_hours[s_id].get(c_id, [0, 0])
+            ch = subject_class_hours[s_id].get(c_id) or subject_class_hours[s_id].get(c_grade, [0, 0])
             s_c_vars = [y[k] for k in eligible_tuples if k[2] == c_id and k[1] == s_id]
-
-            # If subject is primary (ΓΛΩΣ) and class has a morning head teacher, ensure head teacher teaches at least 20 hours:
-            if s.code == "ΓΛΩΣ" and c.headTeacherId and not c_is_allday:
-                ht = teacher_by_id.get(c.headTeacherId)
-                if ht and ht.maxWeeklyHours > 0:
-                    ht_vars = [y[k] for k in eligible_tuples if k[0] == ht.id and k[2] == c_id]
-                    model.Add(sum(ht_vars) >= min(20, ht.maxWeeklyHours))
-            elif ch and len(ch) >= 2 and ch[1] > 0 and not (c_is_allday and s.code == "ΓΛΩΣ"):
+            if ch and len(ch) >= 2:
                 min_h = ch[0]
-                model.Add(sum(s_c_vars) >= min_h)
+                max_h = ch[1]
+                if min_h > 0:
+                    model.Add(sum(s_c_vars) >= min_h)
+                if max_h > 0:
+                    model.Add(sum(s_c_vars) <= max_h)
 
     # 8. Locked / Fixed slots
     if req.fixedSlots:

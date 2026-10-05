@@ -10,6 +10,7 @@ class TeacherConstraints(BaseModel):
     maxConsecutiveGaps: Optional[int] = None
     maxTotalGapsPerDay: Optional[int] = None
     maxTotalGapsPerWeek: Optional[int] = None
+    requireFirstAndLastHour: Optional[bool] = None
 
 class TeacherInput(BaseModel):
     id: str
@@ -71,6 +72,7 @@ class SchoolConfigInput(BaseModel):
     days: List[str] = ["Δευτέρα", "Τρίτη", "Τετάρτη", "Πέμπτη", "Παρασκευή"]
     periods: List[PeriodConfig] = []
     allDayPeriods: List[PeriodConfig] = []
+    requireFirstAndLastHour: Optional[bool] = None
 
 class CustomRuleInput(BaseModel):
     id: str
@@ -97,6 +99,7 @@ class SolveRequest(BaseModel):
     schoolConfig: SchoolConfigInput
     customRules: Optional[List[CustomRuleInput]] = []
     fixedSlots: Optional[List[FixedSlotInput]] = []
+    requireFirstAndLastHour: Optional[bool] = None
 
 class SlotResult(BaseModel):
     id: str

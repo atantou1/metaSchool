@@ -1,12 +1,22 @@
+export interface DayAvailabilityConfig {
+  start: number; // 1-based morning start period (e.g. 1)
+  end: number; // 1-based morning end period (e.g. 6)
+  allDayActive?: boolean; // whether available during all-day on this day
+  allDayStart?: number; // 1-based all-day start period (e.g. 1)
+  allDayEnd?: number; // 1-based all-day end period (e.g. 4)
+}
+
 export interface TeacherConstraints {
   availability?: Record<string, boolean[]>; // "0" -> [true, true, ...]
   availableDays?: number[]; // [0, 1, 2, 3, 4] where 0=Monday, 4=Friday
+  dayHours?: Record<string, DayAvailabilityConfig>; // "0" -> { start: 1, end: 6, ... }
   maxHoursPerDay?: number | null;
   minHoursPerDay?: number | null;
   maxConsecutiveHours?: number | null;
   maxConsecutiveGaps?: number | null;
   maxTotalGapsPerDay?: number | null;
   maxTotalGapsPerWeek?: number | null;
+  requireFirstAndLastHour?: boolean | null;
 }
 
 export interface Teacher {
