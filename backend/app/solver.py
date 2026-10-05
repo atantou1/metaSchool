@@ -9,6 +9,7 @@ from .models import (
     ValidateMoveRequest,
     ValidateMoveResponse,
 )
+from .diagnostics import run_diagnostics
 
 def solve_timetable(req: SolveRequest) -> SolveResponse:
     start_time = time.time()
@@ -128,14 +129,6 @@ def solve_timetable(req: SolveRequest) -> SolveResponse:
         if t_vars:
             model.Add(sum(t_vars) == t_max_h)
 
-    # 5b. For All-Day Head Teacher: EXACTLY 20 hours in their All-Day class
-    for t in teachers:
-        t_id = t.id
-        c_ht = teacher_is_ht_of.get(t_id)
-        c_ht_obj = class_by_id.get(c_ht) if c_ht else None
-        if c_ht_obj and c_ht_obj.isAllDay:
-            allday_ht_vars = [y[k] for k in eligible_tuples if k[0] == t_id and k[2] == c_ht]
-            model.Add(sum(allday_ht_vars) == 20)
 
     # 5b. Teacher availability & daily workload
     for t in teachers:
@@ -189,7 +182,7 @@ def solve_timetable(req: SolveRequest) -> SolveResponse:
                     avail_p_on_day.append(p)
 
             daily_hours = sum(daily_p_dict.values())
-            eff_max_h = max_h
+            eff_max_h = max_h if not (t.isMorning and t.isAllDay) else max(max_h, len(morning_periods))
 
             # Enforce minimum hours on active working days:
             # If working on day d (w_d == 1), then eff_min <= daily_hours <= eff_max_h
@@ -204,15 +197,13 @@ def solve_timetable(req: SolveRequest) -> SolveResponse:
 
             # Enforce first & last available hour requirement if enabled
             # Can be configured per teacher (cons.requireFirstAndLastHour) or globally (schoolConfig / req)
-            # Defaults to True for teachers with custom availability windows, and False for full-day generic availability
+            req_edge = False
             if cons and cons.requireFirstAndLastHour is not None:
                 req_edge = cons.requireFirstAndLastHour
             elif req.schoolConfig and getattr(req.schoolConfig, 'requireFirstAndLastHour', None) is not None:
                 req_edge = req.schoolConfig.requireFirstAndLastHour
             elif getattr(req, 'requireFirstAndLastHour', None) is not None:
                 req_edge = req.requireFirstAndLastHour
-            else:
-                req_edge = (len(avail_p_on_day) < len(t_periods))
 
             if req_edge and avail_p_on_day:
                 first_p = min(avail_p_on_day)
@@ -297,18 +288,22 @@ def solve_timetable(req: SolveRequest) -> SolveResponse:
 
     if status_1 not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         elapsed = time.time() - start_time
+        diag_items = run_diagnostics(req)
+        conflict_summaries = [f"{item.title}: {item.description}" for item in diag_items]
         return SolveResponse(
             status="INFEASIBLE",
             solveTimeSeconds=round(elapsed, 3),
             slots=[],
-            conflicts=[
+            conflicts=conflict_summaries or [
                 "Δεν βρέθηκε έγκυρη λύση για το πρόγραμμα.",
                 "Ελέγξτε τις διαθεσιμότητες των εκπαιδευτικών ή το σύνολο των απαιτούμενων ωρών ανά τμήμα.",
             ],
+            diagnosticItems=diag_items,
             diagnostics={
                 "teachersCount": len(teachers),
                 "totalTeacherHours": sum(t.maxWeeklyHours for t in teachers),
                 "classesCount": len(classes),
+                "itemsCount": len(diag_items),
             }
         )
 

@@ -113,12 +113,23 @@ class SlotResult(BaseModel):
     isSupport: bool
     layer: int
 
+class ConflictDiagnosticItem(BaseModel):
+    id: str
+    category: str  # "teacher", "class", "subject", "general"
+    title: str
+    description: str
+    suggestion: str
+    targetTab: Optional[str] = None  # "teachers", "classes", "subjects", "rules"
+    targetId: Optional[str] = None
+    severity: str = "error"  # "error", "warning"
+
 class SolveResponse(BaseModel):
     status: str  # "OPTIMAL", "FEASIBLE", "INFEASIBLE", "ERROR"
     solveTimeSeconds: float
     slots: List[SlotResult] = []
     conflicts: List[str] = []
     diagnostics: Optional[Dict[str, Any]] = None
+    diagnosticItems: Optional[List[ConflictDiagnosticItem]] = []
 
 class ValidateMoveRequest(BaseModel):
     slotId: str

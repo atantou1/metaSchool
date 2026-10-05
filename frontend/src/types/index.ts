@@ -1,4 +1,5 @@
 export interface DayAvailabilityConfig {
+  morningActive?: boolean; // whether available during morning on this day (defaults to true)
   start: number; // 1-based morning start period (e.g. 1)
   end: number; // 1-based morning end period (e.g. 6)
   allDayActive?: boolean; // whether available during all-day on this day
@@ -132,6 +133,17 @@ export interface Rule {
   source: "manual" | "ai";
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ConflictDiagnosticItem {
+  id: string;
+  category: "teacher" | "class" | "subject" | "general";
+  title: string;
+  description: string;
+  suggestion: string;
+  targetTab?: "teachers" | "classes" | "subjects" | "rules";
+  targetId?: string;
+  severity?: "error" | "warning";
 }
 
 export type { Specialty, SpecialtyType } from "@/lib/specialties";

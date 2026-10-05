@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useEffect, useState, useMemo } from "react";
-import { TimetableData } from "@/types";
+import React, { useState, useEffect } from "react";
+import { TimetableData, ConflictDiagnosticItem } from "@/types";
 import { MasterMatrix } from "@/components/master-matrix";
 import { ClassesManager } from "@/components/classes-manager";
 import { TeachersManager } from "@/components/teachers-manager";
 import { SubjectsManager } from "@/components/subjects-manager";
 import { RulesManager } from "@/components/rules-manager";
+import { DiagnosticsModal } from "@/components/diagnostics-modal";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -34,6 +35,9 @@ export default function Home() {
   const [spotlightTeacherId, setSpotlightTeacherId] = useState<string | null>(
     null
   );
+  const [diagnosticsModalOpen, setDiagnosticsModalOpen] = useState(false);
+  const [diagnosticItems, setDiagnosticItems] = useState<ConflictDiagnosticItem[]>([]);
+  const [diagnosticConflicts, setDiagnosticConflicts] = useState<string[]>([]);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -74,12 +78,21 @@ export default function Home() {
 
       const resData = await res.json();
       if (!res.ok || !resData.success) {
-        toast.error("Σφάλμα Επίλυσης", {
-          description:
-            resData.error ||
-            resData.conflicts?.join(" ") ||
-            "Ο αλγόριθμος δεν μπόρεσε να βρει λύση.",
-        });
+        if (resData.status === "INFEASIBLE") {
+          setDiagnosticItems(resData.diagnosticItems || []);
+          setDiagnosticConflicts(resData.conflicts || []);
+          setDiagnosticsModalOpen(true);
+          toast.error("Αδυναμία Επίλυσης", {
+            description: "Εντοπίστηκαν συγκρουόμενοι περιορισμοί. Ανοίγει το παράθυρο διάγνωσης.",
+          });
+        } else {
+          toast.error("Σφάλμα Επίλυσης", {
+            description:
+              resData.error ||
+              resData.conflicts?.join(" ") ||
+              "Ο αλγόριθμος δεν μπόρεσε να βρει λύση.",
+          });
+        }
       } else {
         toast.success("Επιτυχής Επίλυση Προγράμματος!", {
           description: `Υπολογίστηκε σε ${resData.solveTimeSeconds}s (${resData.slotsCount} ώρες).`,
@@ -258,6 +271,21 @@ export default function Home() {
           )}
         </SheetContent>
       </Sheet>
+
+      {/* Diagnostics Modal for Infeasibility / Conflict Analysis */}
+      <DiagnosticsModal
+        isOpen={diagnosticsModalOpen}
+        onClose={() => setDiagnosticsModalOpen(false)}
+        diagnosticItems={diagnosticItems}
+        conflicts={diagnosticConflicts}
+        onNavigateToTab={(tab, targetId) => {
+          setActiveSheet(tab);
+          if (tab === "teachers" && targetId) {
+            setSpotlightTeacherId(targetId);
+          }
+        }}
+        onRetrySolve={handleSolve}
+      />
     </div>
   );
 }

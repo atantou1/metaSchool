@@ -164,6 +164,7 @@ export async function POST(req: Request) {
         success: false,
         status: "INFEASIBLE",
         conflicts: result.conflicts || ["Αδύνατη η επίλυση με τους τρέχοντες περιορισμούς."],
+        diagnosticItems: result.diagnosticItems || [],
         diagnostics: result.diagnostics,
       });
     }

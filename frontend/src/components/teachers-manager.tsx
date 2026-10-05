@@ -152,7 +152,8 @@ export function extractDayHours(
   c?: TeacherConstraints | null,
   isAllDayTeacher = false,
   numMorning = 6,
-  numAllDay = 4
+  numAllDay = 4,
+  isMorningTeacher = true
 ): Record<string, DayAvailabilityConfig> {
   const res: Record<string, DayAvailabilityConfig> = {};
 
@@ -160,6 +161,7 @@ export function extractDayHours(
     const key = String(d);
     if (c?.dayHours && c.dayHours[key]) {
       res[key] = {
+        morningActive: c.dayHours[key].morningActive !== undefined ? Boolean(c.dayHours[key].morningActive) : true,
         start: c.dayHours[key].start ?? 1,
         end: c.dayHours[key].end ?? numMorning,
         allDayActive: c.dayHours[key].allDayActive ?? false,
@@ -178,6 +180,7 @@ export function extractDayHours(
       const lastTrueA = allDayArr.lastIndexOf(true);
 
       res[key] = {
+        morningActive: firstTrueM !== -1,
         start: firstTrueM !== -1 ? firstTrueM + 1 : 1,
         end: lastTrueM !== -1 ? lastTrueM + 1 : numMorning,
         allDayActive: firstTrueA !== -1,
@@ -186,6 +189,7 @@ export function extractDayHours(
       };
     } else {
       res[key] = {
+        morningActive: isMorningTeacher,
         start: 1,
         end: numMorning,
         allDayActive: isAllDayTeacher,
@@ -211,6 +215,7 @@ export function computeAvailabilityGrid(
     const dayKey = String(d);
     const isDayEnabled = (availableDays || []).includes(d);
     const cfg = dayHours?.[dayKey] || {
+      morningActive: true,
       start: 1,
       end: numMorning,
       allDayActive: isTeacherAllDay,
@@ -218,16 +223,19 @@ export function computeAvailabilityGrid(
       allDayEnd: numAllDay,
     };
 
+    const isMorningActive = cfg.morningActive !== undefined ? Boolean(cfg.morningActive) : true;
+    const isAllDayActive = Boolean(cfg.allDayActive);
+
     const slots: boolean[] = [];
     // Morning periods (1 .. numMorning)
     for (let m = 1; m <= numMorning; m++) {
-      slots.push(isDayEnabled && m >= (cfg.start ?? 1) && m <= (cfg.end ?? numMorning));
+      slots.push(isDayEnabled && isMorningActive && m >= (cfg.start ?? 1) && m <= (cfg.end ?? numMorning));
     }
     // All-day periods (1 .. numAllDay)
     for (let a = 1; a <= numAllDay; a++) {
       slots.push(
         isDayEnabled &&
-          Boolean(cfg.allDayActive) &&
+          isAllDayActive &&
           a >= (cfg.allDayStart ?? 1) &&
           a <= (cfg.allDayEnd ?? numAllDay)
       );
@@ -243,6 +251,7 @@ export function isDayCustom(
   numMorning = 6
 ): boolean {
   if (!cfg) return false;
+  if (cfg.morningActive === false) return true;
   if (cfg.start > 1 || cfg.end < numMorning) return true;
   if (cfg.allDayActive) return true;
   return false;
@@ -259,12 +268,23 @@ export function getDaySummaryText(
   if (!isAvailable) return `${dayName}: Μη διαθέσιμος`;
   if (!cfg) return `${dayName}: Πλήρες ωράριο (1η–${numMorning}η)`;
 
+  const isMorningActive = cfg.morningActive !== undefined ? Boolean(cfg.morningActive) : true;
+  const isAllDayActive = Boolean(cfg.allDayActive);
+
+  if (!isMorningActive && !isAllDayActive) {
+    return `${dayName}: 0 ώρες (Ανενεργό ωράριο)`;
+  }
+
+  if (!isMorningActive && isAllDayActive) {
+    return `${dayName}: Μόνο Ολοήμερο (${cfg.allDayStart ?? 1}η–${cfg.allDayEnd ?? numAllDay}η)`;
+  }
+
   const hasCustomMorning = cfg.start > 1 || cfg.end < numMorning;
   const morningText = hasCustomMorning
     ? `${cfg.start}η–${cfg.end}η ώρα`
     : `1η–${numMorning}η (Πλήρες)`;
 
-  if (cfg.allDayActive) {
+  if (isAllDayActive) {
     const allDayText = `Ολοήμερο: ${cfg.allDayStart ?? 1}η–${cfg.allDayEnd ?? numAllDay}η`;
     return `${dayName}: ${morningText} + ${allDayText}`;
   }
@@ -282,6 +302,7 @@ export function getDayBackgroundStyle(
     return {};
   }
 
+  const isMorningActive = dayCfg?.morningActive !== undefined ? Boolean(dayCfg?.morningActive) : true;
   const start = dayCfg?.start ?? 1;
   const end = dayCfg?.end ?? numMorning;
   const allDayActive = Boolean(dayCfg?.allDayActive);
@@ -291,7 +312,7 @@ export function getDayBackgroundStyle(
   const hourActive: boolean[] = [];
 
   for (let h = 1; h <= numMorning; h++) {
-    hourActive.push(h >= start && h <= end);
+    hourActive.push(isMorningActive && h >= start && h <= end);
   }
 
   if (allDayActive) {
@@ -604,10 +625,11 @@ const DayAvailabilityPopover: React.FC<DayAvailabilityPopoverProps> = ({
   const morningEnd = Math.min(numMorningPeriods, dayConfig.end || numMorningPeriods);
   const allDayStart = dayConfig.allDayStart || 1;
   const allDayEnd = Math.min(numAllDayPeriods, dayConfig.allDayEnd || numAllDayPeriods);
+  const isMorningActive = dayConfig.morningActive !== undefined ? Boolean(dayConfig.morningActive) : true;
   const isAllDayActive = Boolean(dayConfig.allDayActive);
 
-  const morningSpan = morningEnd - morningStart + 1;
-  const allDaySpan = allDayEnd - allDayStart + 1;
+  const morningSpan = isMorningActive ? morningEnd - morningStart + 1 : 0;
+  const allDaySpan = isAllDayActive ? allDayEnd - allDayStart + 1 : 0;
 
   // Morning Presets
   const morningPresets = [
@@ -694,60 +716,91 @@ const DayAvailabilityPopover: React.FC<DayAvailabilityPopoverProps> = ({
           /* Active State: Sliders for Morning and All-Day */
           <div className="space-y-3.5">
             {/* Section 1: Morning Hours */}
-            <div className="bg-sky-50/50 border border-sky-100 rounded-lg p-2.5 space-y-2">
+            <div className={`border rounded-lg p-2.5 space-y-2 transition-all ${
+              isMorningActive
+                ? "bg-sky-50/50 border-sky-100"
+                : "bg-zinc-50/60 border-zinc-200/70"
+            }`}>
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1 text-[11px] font-bold text-sky-950">
-                  <Sun className="w-3.5 h-3.5 text-amber-500" />
-                  Πρωινό Ωράριο
+                <div className="flex items-center gap-1.5 text-[11px] font-bold text-sky-950">
+                  <Sun className={`w-3.5 h-3.5 ${isMorningActive ? "text-amber-500" : "text-zinc-400"}`} />
+                  Πρωινό Πρόγραμμα
                 </div>
-                <span className="font-mono text-[10.5px] font-bold bg-white text-sky-700 px-1.5 py-0.5 rounded border border-sky-200 shadow-2xs">
-                  {morningStart}η — {morningEnd}η ώρα <span className="font-sans font-normal text-zinc-500">({morningSpan}ω)</span>
-                </span>
+                <div className="flex items-center gap-1.5">
+                  {isMorningActive && (
+                    <span className="font-mono text-[10.5px] font-bold bg-white text-sky-700 px-1.5 py-0.5 rounded border border-sky-200 shadow-2xs">
+                      {morningStart}η — {morningEnd}η ώρα <span className="font-sans font-normal text-zinc-500">({morningSpan}ω)</span>
+                    </span>
+                  )}
+                  <Switch
+                    size="sm"
+                    checked={isMorningActive}
+                    onCheckedChange={(checked) => {
+                      onChangeConfig({
+                        ...dayConfig,
+                        morningActive: checked,
+                        start: dayConfig.start || 1,
+                        end: dayConfig.end || numMorningPeriods,
+                      });
+                    }}
+                    title="Συμμετοχή στο Πρωινό Πρόγραμμα"
+                  />
+                </div>
               </div>
 
-              {/* Morning Dual Slider */}
-              <DualRangeSlider
-                min={1}
-                max={numMorningPeriods}
-                value={[morningStart, morningEnd]}
-                colorScheme="sky"
-                unit="η"
-                onChange={(val) => {
-                  onChangeConfig({
-                    ...dayConfig,
-                    start: val[0],
-                    end: val[1],
-                  });
-                }}
-              />
+              {isMorningActive ? (
+                <>
+                  {/* Morning Dual Slider */}
+                  <DualRangeSlider
+                    min={1}
+                    max={numMorningPeriods}
+                    value={[morningStart, morningEnd]}
+                    colorScheme="sky"
+                    unit="η"
+                    onChange={(val) => {
+                      onChangeConfig({
+                        ...dayConfig,
+                        morningActive: true,
+                        start: val[0],
+                        end: val[1],
+                      });
+                    }}
+                  />
 
-              {/* Quick Presets for Morning */}
-              <div className="flex items-center gap-1 flex-wrap pt-0.5">
-                <span className="text-[9.5px] text-zinc-400 font-medium mr-0.5">Επιλογές:</span>
-                {morningPresets.map((pr) => {
-                  const isActive = morningStart === pr.range[0] && morningEnd === pr.range[1];
-                  return (
-                    <button
-                      key={pr.label}
-                      type="button"
-                      onClick={() => {
-                        onChangeConfig({
-                          ...dayConfig,
-                          start: pr.range[0],
-                          end: pr.range[1],
-                        });
-                      }}
-                      className={`px-1.5 py-0.5 rounded text-[9px] font-medium border transition-all ${
-                        isActive
-                          ? "bg-sky-600 text-white border-sky-600 shadow-2xs font-bold"
-                          : "bg-white text-zinc-600 border-zinc-200 hover:border-sky-300 hover:bg-sky-50/50"
-                      }`}
-                    >
-                      {pr.label}
-                    </button>
-                  );
-                })}
-              </div>
+                  {/* Quick Presets for Morning */}
+                  <div className="flex items-center gap-1 flex-wrap pt-0.5">
+                    <span className="text-[9.5px] text-zinc-400 font-medium mr-0.5">Επιλογές:</span>
+                    {morningPresets.map((pr) => {
+                      const isActive = morningStart === pr.range[0] && morningEnd === pr.range[1];
+                      return (
+                        <button
+                          key={pr.label}
+                          type="button"
+                          onClick={() => {
+                            onChangeConfig({
+                              ...dayConfig,
+                              morningActive: true,
+                              start: pr.range[0],
+                              end: pr.range[1],
+                            });
+                          }}
+                          className={`px-1.5 py-0.5 rounded text-[9px] font-medium border transition-all ${
+                            isActive
+                              ? "bg-sky-600 text-white border-sky-600 shadow-2xs font-bold"
+                              : "bg-white text-zinc-600 border-zinc-200 hover:border-sky-300 hover:bg-sky-50/50"
+                          }`}
+                        >
+                          {pr.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              ) : (
+                <p className="text-[10.5px] text-zinc-400 italic">
+                  Απενεργοποιημένο για τη συγκεκριμένη ημέρα (0 ώρες στο πρωινό).
+                </p>
+              )}
             </div>
 
             {/* Section 2: All-Day Hours */}
@@ -2500,6 +2553,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
             {DAY_LABELS.map((d) => {
               const isAvail = inlineData.availableDays.includes(d.index);
               const dayCfg = inlineData.dayHours?.[String(d.index)] || {
+                morningActive: inlineData.isMorning ?? true,
                 start: 1,
                 end: numMorningPeriods,
                 allDayActive: inlineData.isAllDay ?? false,
@@ -3632,7 +3686,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
                     {/* Available Days & Hours - Compact Slim View */}
                     <td className="py-2.5 px-2 text-center">
                       {(() => {
-                        const tchDayHours = extractDayHours(c, tch.isAllDay, numMorningPeriods, numAllDayPeriods);
+                        const tchDayHours = extractDayHours(c, tch.isAllDay, numMorningPeriods, numAllDayPeriods, tch.isMorning);
 
                         return (
                           <div className="flex items-center justify-center gap-0.5">
