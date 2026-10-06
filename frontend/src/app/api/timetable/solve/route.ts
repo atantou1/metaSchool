@@ -35,6 +35,10 @@ export async function POST(req: Request) {
         assignmentId: s.assignmentId,
         day: s.day,
         period: s.period,
+        teacherId: s.teacherId,
+        subjectId: s.subjectId,
+        classId: s.classId,
+        subGroupId: s.subGroupId,
       }));
     const fixedSlots = [...(body.fixedSlots || []), ...lockedFixedSlots];
 
@@ -197,6 +201,16 @@ export async function POST(req: Request) {
     // Insert new slots
     if (result.slots && result.slots.length > 0) {
       for (const slot of result.slots) {
+        const isLocked = lockedFixedSlots.some(
+          (locked) =>
+            locked.day === slot.day &&
+            locked.period === slot.period &&
+            locked.teacherId === slot.teacherId &&
+            locked.classId === slot.classId &&
+            locked.subjectId === slot.subjectId &&
+            locked.subGroupId === slot.subGroupId
+        );
+
         await db.insert(schema.timetableSlots).values({
           id: slot.id || `slot-${crypto.randomUUID().slice(0, 8)}`,
           day: slot.day,
@@ -208,6 +222,7 @@ export async function POST(req: Request) {
           subjectId: slot.subjectId,
           isSupport: slot.isSupport ?? false,
           layer: slot.layer || 1,
+          isLocked,
         });
       }
     }

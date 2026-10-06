@@ -123,6 +123,9 @@ def solve_timetable(req: SolveRequest) -> SolveResponse:
 
     # 5a. Enforce each teacher's exact contract weekly hours
     for t in teachers:
+        if not t.isActive or not t.isTeaching or t.isSupport or t.id == 'tch-unassigned':
+            continue
+            
         t_id = t.id
         t_max_h = t.maxWeeklyHours
         t_vars = [y[key] for key in eligible_tuples if key[0] == t_id]
@@ -240,12 +243,21 @@ def solve_timetable(req: SolveRequest) -> SolveResponse:
                 sg1_vars = [y[k] for k in eligible_tuples if k[2] == c_id and k[3] == 1 and k[4] == d and k[5] == p]
                 sg2_vars = [y[k] for k in eligible_tuples if k[2] == c_id and k[3] == 2 and k[4] == d and k[5] == p]
 
-                # HARD CONSTRAINT: Every class period must have EXACTLY 1 active session (NO EMPTY PERIODS!)
-                # Either exactly 1 whole-class lesson (def_sum == 1, sg1_sum == 0, sg2_sum == 0)
-                # OR exactly 1 split session where both subgroups are active (def_sum == 0, sg1_sum == 1, sg2_sum == 1)
-                model.Add(sum(def_vars) + sum(sg1_vars) == 1)
-                model.Add(sum(sg1_vars) == sum(sg2_vars))
-                model.Add(sum(def_vars) <= 1)
+                # HARD CONSTRAINT: Every class period must have EXACTLY 1 active session type (Main OR Split)
+                is_default_active = model.NewBoolVar(f"def_act_c{c_id}_d{d}_p{p}")
+                is_split_active = model.NewBoolVar(f"split_act_c{c_id}_d{d}_p{p}")
+                
+                model.Add(is_default_active + is_split_active == 1)
+                
+                # If Main is active: >=1 teacher in Main, 0 in Split
+                model.Add(sum(def_vars) >= 1).OnlyEnforceIf(is_default_active)
+                model.Add(sum(sg1_vars) == 0).OnlyEnforceIf(is_default_active)
+                model.Add(sum(sg2_vars) == 0).OnlyEnforceIf(is_default_active)
+                
+                # If Split is active: 0 teachers in Main, >=1 in Split A, >=1 in Split B
+                model.Add(sum(def_vars) == 0).OnlyEnforceIf(is_split_active)
+                model.Add(sum(sg1_vars) >= 1).OnlyEnforceIf(is_split_active)
+                model.Add(sum(sg2_vars) >= 1).OnlyEnforceIf(is_split_active)
 
     # 7. Subject hours per class from the Subjects table
     for c in classes:
@@ -272,6 +284,7 @@ def solve_timetable(req: SolveRequest) -> SolveResponse:
                 and (not fixed.teacherId or k[0] == fixed.teacherId)
                 and (not fixed.subjectId or k[1] == fixed.subjectId)
                 and (not fixed.classId or k[2] == fixed.classId)
+                and (not fixed.subGroupId or (k[2] in subgroups_by_class and subgroups_by_class[k[2]].get(k[3]) == fixed.subGroupId))
             ]
             for mk in matching_keys:
                 model.Add(y[mk] == 1)

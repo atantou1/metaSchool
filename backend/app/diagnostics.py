@@ -222,6 +222,54 @@ def run_diagnostics(req: SolveRequest) -> List[ConflictDiagnosticItem]:
             ))
 
     # -------------------------------------------------------------
+    # 3b. Check Excess Hours for All-Day Head Teachers (ΠΕ70/ΠΕ71)
+    # -------------------------------------------------------------
+    for t in teachers:
+        c_ht = teacher_is_ht_of.get(t.id)
+        c_ht_obj = class_by_id.get(c_ht) if c_ht else None
+        
+        if c_ht_obj and c_ht_obj.isAllDay and ("ΠΕ70" in t.specialty or "ΠΕ71" in t.specialty):
+            # Calculate how many hours this teacher uses in their own All-Day class
+            ht_specs = {t.specialty}
+            ht_hours_in_allday = sum(
+                (subject_class_hours[s.id].get(c_ht) or subject_class_hours[s.id].get(c_ht_obj.grade, [0, 0]))[0]
+                for s in subjects
+                if set(s.allowedSpecialties or []).intersection(ht_specs)
+            )
+            
+            excess_hours = t.maxWeeklyHours - ht_hours_in_allday
+            if excess_hours > 0:
+                # Calculate remaining capacity of morning classes for PE70/PE71
+                total_morning_capacity_for_excess = 0
+                for mc in classes:
+                    if not mc.isAllDay:
+                        mc_ht_id = mc.headTeacherId
+                        mc_ht = teacher_by_id.get(mc_ht_id)
+                        mc_ht_hours = mc_ht.maxWeeklyHours if mc_ht else 0
+                        
+                        # Sum of max_h for PE70/71 subjects in this morning class
+                        mc_pe70_max = sum(
+                            (subject_class_hours[s.id].get(mc.id) or subject_class_hours[s.id].get(mc.grade, [0, 0]))[1]
+                            for s in subjects
+                            if "ΠΕ70" in (s.allowedSpecialties or []) or "ΠΕ71" in (s.allowedSpecialties or [])
+                        )
+                        
+                        capacity = max(0, mc_pe70_max - mc_ht_hours)
+                        total_morning_capacity_for_excess += capacity
+                
+                if excess_hours > total_morning_capacity_for_excess:
+                    items.append(ConflictDiagnosticItem(
+                        id=f"t_excess_allday_ht_{t.id}",
+                        category="teacher",
+                        title=f"Υπεράριθμες Ώρες Δασκάλου Ολοήμερου: {t.firstName} {t.lastName}",
+                        description=f"Ο/Η εκπαιδευτικός έχει συμβόλαιο {t.maxWeeklyHours} ωρών και διδάσκει μόνο {ht_hours_in_allday} ώρες στο Ολοήμερο. Οι υπόλοιπες {excess_hours} ώρες πρέπει να τοποθετηθούν στα πρωινά τμήματα. Ωστόσο, τα πρωινά τμήματα έχουν περιθώριο μόνο για {total_morning_capacity_for_excess} επιπλέον ώρες (αφού αφαιρεθούν οι ώρες των δικών τους υπεύθυνων).",
+                        suggestion=f"Μειώστε τις ώρες συμβολαίου του/της εκπαιδευτικού κατά {excess_hours - total_morning_capacity_for_excess}, ή αυξήστε τις μέγιστες (max) επιτρεπόμενες ώρες του μαθήματος Γλώσσας στα πρωινά τμήματα.",
+                        targetTab="teachers",
+                        targetId=t.id,
+                        severity="error"
+                    ))
+
+    # -------------------------------------------------------------
     # 4. Check Period-by-Period Teacher Supply vs Active Classes
     # -------------------------------------------------------------
     subject_specs = set()
