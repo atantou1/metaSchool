@@ -63,6 +63,16 @@ export async function POST(req: Request) {
       } catch (e) {}
     }
 
+    const forceExtremeHoursSetting = allSettings.find((s) => s.key === "timetable.force_extreme_hours");
+    let requireFirstAndLastHour = false;
+    if (forceExtremeHoursSetting) {
+      try {
+        requireFirstAndLastHour = JSON.parse(forceExtremeHoursSetting.value) === true || forceExtremeHoursSetting.value === "true";
+      } catch {
+        requireFirstAndLastHour = forceExtremeHoursSetting.value === "true";
+      }
+    }
+
     // 2. Prepare payload for Python OR-Tools sidecar
     const payload = {
       teachers: allTeachers.map((t) => ({
@@ -129,6 +139,7 @@ export async function POST(req: Request) {
           },
           isActive: Boolean(r.isActive),
         })),
+      requireFirstAndLastHour,
     };
 
     // 3. Call FastAPI solver
