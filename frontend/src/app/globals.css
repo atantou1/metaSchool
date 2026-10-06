@@ -136,6 +136,11 @@
   table-layout: fixed;
   width: max-content;
   min-width: 100%;
+  cursor: default;
+}
+
+.matrix-table * {
+  cursor: default;
 }
 
 .col-class {
@@ -235,7 +240,7 @@
   line-height: 1;
   border: 1px solid rgba(0, 0, 0, 0.15);
   box-sizing: border-box;
-  cursor: pointer;
+  cursor: default;
   user-select: none;
   transition: filter 0.12s ease, transform 0.08s ease, opacity 0.15s ease;
 }
@@ -275,7 +280,7 @@
   line-height: 1;
   border: 1px solid rgba(0, 0, 0, 0.15);
   box-sizing: border-box;
-  cursor: pointer;
+  cursor: default;
   user-select: none;
   transition: filter 0.12s ease, opacity 0.15s ease;
 }
@@ -315,7 +320,7 @@
   line-height: 1;
   border: 1px solid rgba(0, 0, 0, 0.15);
   box-sizing: border-box;
-  cursor: pointer;
+  cursor: default;
   user-select: none;
   transition: filter 0.12s ease, opacity 0.15s ease;
 }
@@ -332,7 +337,7 @@
   height: 100%;
   border: none;
   background: transparent;
-  cursor: pointer;
+  cursor: default;
   transition: background-color 0.1s ease;
 }
 

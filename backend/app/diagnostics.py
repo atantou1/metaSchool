@@ -222,6 +222,47 @@ def run_diagnostics(req: SolveRequest) -> List[ConflictDiagnosticItem]:
             ))
 
     # -------------------------------------------------------------
+    # 4. Check Period-by-Period Teacher Supply vs Active Classes
+    # -------------------------------------------------------------
+    subject_specs = set()
+    for s in subjects:
+        if s.allowedSpecialties:
+            subject_specs.update(s.allowedSpecialties)
+
+    teachable_teachers = [t for t in teachers if t.specialty in subject_specs]
+    morning_classes_count = sum(1 for c in classes if not c.isAllDay)
+
+    if morning_classes_count > 0:
+        for d in range(num_days):
+            for p in range(num_morning):
+                avail_count = 0
+                for t in teachable_teachers:
+                    if not t.isMorning:
+                        continue
+                    cons = t.constraints
+                    avail = True
+                    if cons and cons.availableDays is not None and d not in cons.availableDays:
+                        avail = False
+                    if avail and cons and cons.availability:
+                        d_row = cons.availability.get(str(d), [])
+                        if p < len(d_row):
+                            avail = bool(d_row[p])
+                    if avail:
+                        avail_count += 1
+                if avail_count < morning_classes_count:
+                    d_name = day_names[d] if d < len(day_names) else f"Ημέρα {d+1}"
+                    items.append(ConflictDiagnosticItem(
+                        id=f"period_deficit_d{d}_p{p}",
+                        category="teacher",
+                        title=f"Ανεπάρκεια Εκπαιδευτικών: {d_name}, {p+1}η Ώρα",
+                        description=f"Την {d_name} στην {p+1}η ώρα υπάρχουν μόνο {avail_count} διαθέσιμοι εκπαιδευτικοί που μπορούν να διδάξουν μαθήματα, ενώ λειτουργούν {morning_classes_count} πρωινά τμήματα (λείπουν τουλάχιστον {morning_classes_count - avail_count} εκπαιδευτικοί).",
+                        suggestion=f"Διευρύνετε τη διαθεσιμότητα κάποιων εκπαιδευτικών την {d_name} στην {p+1}η ώρα στον πίνακα Εκπαιδευτικοί.",
+                        targetTab="teachers",
+                        targetId=f"d{d}_p{p}",
+                        severity="error"
+                    ))
+
+    # -------------------------------------------------------------
     # 4. Fallback General Conflict if no specific items found
     # -------------------------------------------------------------
     if not items:

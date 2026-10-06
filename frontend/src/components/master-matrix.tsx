@@ -31,8 +31,11 @@ import {
   Copy,
   ClipboardPaste,
   X,
+  CalendarDays,
 } from "lucide-react";
 import { toast } from "sonner";
+import { ClassTimetableModal } from "./class-timetable-modal";
+import { TeacherTimetableModal } from "./teacher-timetable-modal";
 
 interface MasterMatrixProps {
   data: TimetableData;
@@ -67,6 +70,12 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
     abbr: string;
     name: string;
   } | null>(null);
+
+  // Selected class for Class Timetable Modal (double-click on class column)
+  const [selectedClassForModal, setSelectedClassForModal] = useState<ClassEntity | null>(null);
+
+  // Selected teacher for Teacher Timetable Modal (right-click on teacher tile)
+  const [selectedTeacherForModal, setSelectedTeacherForModal] = useState<Teacher | null>(null);
 
   // Maps for fast lookups
   const teacherMap = useMemo(
@@ -405,6 +414,20 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
           </ContextMenuLabel>
           <ContextMenuSeparator />
 
+          {/* 0. Πρόγραμμα Εκπαιδευτικού */}
+          {!isUnassigned && teacher && (
+            <>
+              <ContextMenuItem
+                onClick={() => setSelectedTeacherForModal(teacher)}
+                className="gap-2 font-medium text-indigo-700 focus:text-indigo-800 focus:bg-indigo-50"
+              >
+                <CalendarDays className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Πρόγραμμα: {teacher.lastName}</span>
+              </ContextMenuItem>
+              <ContextMenuSeparator />
+            </>
+          )}
+
           {/* 1. Αλλαγή */}
           <ContextMenuSub>
             <ContextMenuSubTrigger className="gap-2">
@@ -662,8 +685,9 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
                     isResourceClass
                       ? "bg-purple-100 group-hover:bg-purple-200 text-purple-900 border-purple-300"
                       : "bg-zinc-100 group-hover:bg-zinc-200 text-zinc-900 border-zinc-300"
-                  } border-r-2 font-bold text-center select-none`}
-                  title={cls.name}
+                  } border-r-2 font-bold text-center select-none cursor-default hover:bg-zinc-200/90 transition-colors`}
+                  title={`${cls.name} (Διπλό κλικ για αναλυτικό πρόγραμμα)`}
+                  onDoubleClick={() => setSelectedClassForModal(cls)}
                 >
                   <div className="w-full max-h-[56px] overflow-hidden flex flex-col items-center justify-center text-center px-0.5 leading-[1.1] text-[10.5px]">
                     <span className="w-full overflow-hidden text-clip break-words">
@@ -702,7 +726,7 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
                                 }
                                 className={`t-empty ${
                                   swapSourceSlot
-                                    ? "cursor-pointer hover:bg-amber-100/60"
+                                    ? "hover:bg-amber-100/60"
                                     : ""
                                 }`}
                               />
@@ -839,6 +863,26 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
           })}
         </tbody>
       </table>
+
+      {/* Dedicated Class Timetable Modal */}
+      {selectedClassForModal && (
+        <ClassTimetableModal
+          isOpen={Boolean(selectedClassForModal)}
+          onClose={() => setSelectedClassForModal(null)}
+          classData={selectedClassForModal}
+          data={data}
+        />
+      )}
+
+      {/* Dedicated Teacher Timetable Modal */}
+      {selectedTeacherForModal && (
+        <TeacherTimetableModal
+          isOpen={Boolean(selectedTeacherForModal)}
+          onClose={() => setSelectedTeacherForModal(null)}
+          initialTeacher={selectedTeacherForModal}
+          data={data}
+        />
+      )}
     </div>
   );
 };
