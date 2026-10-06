@@ -1357,6 +1357,281 @@ const RangeFilterPopover: React.FC<RangeFilterPopoverProps> = ({
   );
 };
 
+interface DailyHoursSliderPopoverProps {
+  value: [number, number];
+  onChange: (value: [number, number]) => void;
+  min?: number;
+  max?: number;
+  step?: number;
+  unit?: string;
+  className?: string;
+  isBulkModified?: boolean;
+}
+
+const DailyHoursSliderPopover: React.FC<DailyHoursSliderPopoverProps> = ({
+  value,
+  onChange,
+  min = 1,
+  max = 7,
+  step = 1,
+  unit = "ω",
+  className = "",
+  isBulkModified = false,
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const low = typeof value?.[0] === "number" ? value[0] : 2;
+  const high = typeof value?.[1] === "number" ? value[1] : 5;
+
+  const [localLow, setLocalLow] = useState(low);
+  const [localHigh, setLocalHigh] = useState(high);
+  const [activeDrag, setActiveDrag] = useState<"low" | "high" | null>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (value && typeof value[0] === "number" && typeof value[1] === "number") {
+      setLocalLow(value[0]);
+      setLocalHigh(value[1]);
+    }
+  }, [value]);
+
+  const commitRange = (newLow: number, newHigh: number) => {
+    const clLow = Math.max(min, Math.min(newLow, max));
+    const clHigh = Math.max(min, Math.min(newHigh, max));
+    const finalLow = Math.min(clLow, clHigh);
+    const finalHigh = Math.max(clLow, clHigh);
+    setLocalLow(finalLow);
+    setLocalHigh(finalHigh);
+    onChange([finalLow, finalHigh]);
+  };
+
+  const displayText = useMemo(() => {
+    if (low === high) return `${low}${unit}`;
+    return `${low}-${high}${unit}`;
+  }, [low, high, unit]);
+
+  const leftPercent = ((localLow - min) / (max - min)) * 100;
+  const rightPercent = ((localHigh - min) / (max - min)) * 100;
+
+  const getValueFromPointer = (clientX: number) => {
+    if (!trackRef.current) return min;
+    const rect = trackRef.current.getBoundingClientRect();
+    if (rect.width <= 0) return min;
+    const pos = (clientX - rect.left) / rect.width;
+    const clampedPos = Math.max(0, Math.min(1, pos));
+    const rawVal = min + clampedPos * (max - min);
+    const steppedVal = Math.round((rawVal - min) / step) * step + min;
+    return Math.max(min, Math.min(max, steppedVal));
+  };
+
+  const startDrag = (type: "low" | "high", e: React.PointerEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setActiveDrag(type);
+
+    let curLow = localLow;
+    let curHigh = localHigh;
+
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      const val = getValueFromPointer(moveEvent.clientX);
+      if (type === "low") {
+        const nextLow = Math.min(val, curHigh);
+        curLow = nextLow;
+        commitRange(nextLow, curHigh);
+      } else {
+        const nextHigh = Math.max(val, curLow);
+        curHigh = nextHigh;
+        commitRange(curLow, nextHigh);
+      }
+    };
+
+    const onPointerUp = () => {
+      setActiveDrag(null);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerUp);
+    };
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerUp);
+  };
+
+  const handleTrackPointerDown = (e: React.PointerEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const val = getValueFromPointer(e.clientX);
+    const distLow = Math.abs(val - localLow);
+    const distHigh = Math.abs(val - localHigh);
+    const chosenType: "low" | "high" = distLow <= distHigh ? "low" : "high";
+
+    setActiveDrag(chosenType);
+    let curLow = localLow;
+    let curHigh = localHigh;
+
+    if (chosenType === "low") {
+      const nextLow = Math.min(val, curHigh);
+      curLow = nextLow;
+      commitRange(nextLow, curHigh);
+    } else {
+      const nextHigh = Math.max(val, curLow);
+      curHigh = nextHigh;
+      commitRange(curLow, nextHigh);
+    }
+
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      const moveVal = getValueFromPointer(moveEvent.clientX);
+      if (chosenType === "low") {
+        const nextLow = Math.min(moveVal, curHigh);
+        curLow = nextLow;
+        commitRange(nextLow, curHigh);
+      } else {
+        const nextHigh = Math.max(moveVal, curLow);
+        curHigh = nextHigh;
+        commitRange(curLow, nextHigh);
+      }
+    };
+
+    const onPointerUp = () => {
+      setActiveDrag(null);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerUp);
+    };
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerUp);
+  };
+
+  return (
+    <Popover open={isOpen} onOpenChange={setIsOpen}>
+      <PopoverTrigger
+        type="button"
+        className={`h-7 px-2 text-xs font-mono font-medium rounded-md shadow-2xs transition-all flex items-center justify-center gap-1 border cursor-pointer ${
+          isBulkModified
+            ? "border-amber-400 bg-amber-50/60 ring-1 ring-amber-300 font-bold text-amber-900"
+            : "bg-white border-zinc-200 text-zinc-800 hover:bg-zinc-50"
+        } ${className}`}
+        title="Εύρος ωρών ανά ημέρα (Ελάχιστες - Μέγιστες)"
+      >
+        <span>{displayText}</span>
+        <ChevronDown className="w-3 h-3 shrink-0 opacity-40" />
+      </PopoverTrigger>
+
+      <PopoverContent
+        align="center"
+        className="w-64 p-3 shadow-xl border border-zinc-200 bg-white text-xs z-50 rounded-xl animate-in fade-in"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between pb-2 mb-2 border-b border-zinc-100">
+          <span className="font-bold text-zinc-800 text-[11px]">Ώρες ανά Ημέρα</span>
+          <div className="flex items-center gap-1">
+            {[
+              { label: "1-6ω", range: [1, 6] },
+              { label: "1-5ω", range: [1, 5] },
+              { label: "1-4ω", range: [1, 4] },
+              { label: "2-6ω", range: [2, 6] },
+              { label: "3-6ω", range: [3, 6] },
+            ].map((p) => (
+              <button
+                key={p.label}
+                type="button"
+                onClick={() => commitRange(p.range[0], p.range[1])}
+                className="px-1.5 py-0.5 rounded bg-zinc-100 hover:bg-zinc-200 text-[10px] font-mono text-zinc-700 transition-colors cursor-pointer"
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-center mb-3">
+          <div className="px-2.5 py-1 rounded-md bg-indigo-50 border border-indigo-200 text-indigo-950 font-mono text-xs font-bold shadow-2xs flex items-center gap-1.5">
+            {localLow === localHigh ? (
+              <span>{localLow}{unit} <span className="text-[10px] font-sans font-normal text-indigo-600">(ακριβώς)</span></span>
+            ) : (
+              <span>{localLow}{unit} — {localHigh}{unit}</span>
+            )}
+          </div>
+        </div>
+
+        <div className="px-2 py-3 select-none">
+          <div
+            ref={trackRef}
+            onPointerDown={handleTrackPointerDown}
+            className="relative h-6 flex items-center cursor-pointer touch-none"
+          >
+            <div className="absolute w-full h-1.5 bg-zinc-200 rounded-full pointer-events-none" />
+
+            <div
+              className="absolute h-1.5 bg-indigo-600 rounded-full transition-all duration-75 pointer-events-none"
+              style={{
+                left: `${leftPercent}%`,
+                width: `${Math.max(0, rightPercent - leftPercent)}%`,
+              }}
+            />
+
+            <div
+              tabIndex={0}
+              role="slider"
+              aria-label="Ελάχιστες ώρες από"
+              aria-valuemin={min}
+              aria-valuemax={localHigh}
+              aria-valuenow={localLow}
+              onPointerDown={(e) => startDrag("low", e)}
+              onKeyDown={(e) => {
+                if (e.key === "ArrowLeft" || e.key === "ArrowDown") {
+                  e.preventDefault();
+                  commitRange(localLow - step, localHigh);
+                } else if (e.key === "ArrowRight" || e.key === "ArrowUp") {
+                  e.preventDefault();
+                  commitRange(localLow + step, localHigh);
+                }
+              }}
+              className={`absolute w-5 h-5 bg-white border-2 border-indigo-600 rounded-full shadow-md -translate-x-1/2 cursor-grab active:cursor-grabbing hover:scale-115 focus:scale-115 focus:outline-hidden ring-2 transition-transform ${
+                activeDrag === "low"
+                  ? "ring-indigo-400 scale-120 z-20"
+                  : "ring-indigo-100 hover:ring-indigo-300 z-10"
+              }`}
+              style={{ left: `${leftPercent}%` }}
+            />
+
+            <div
+              tabIndex={0}
+              role="slider"
+              aria-label="Μέγιστες ώρες έως"
+              aria-valuemin={localLow}
+              aria-valuemax={max}
+              aria-valuenow={localHigh}
+              onPointerDown={(e) => startDrag("high", e)}
+              onKeyDown={(e) => {
+                if (e.key === "ArrowLeft" || e.key === "ArrowDown") {
+                  e.preventDefault();
+                  commitRange(localLow, localHigh - step);
+                } else if (e.key === "ArrowRight" || e.key === "ArrowUp") {
+                  e.preventDefault();
+                  commitRange(localLow, localHigh + step);
+                }
+              }}
+              className={`absolute w-5 h-5 bg-white border-2 border-indigo-600 rounded-full shadow-md -translate-x-1/2 cursor-grab active:cursor-grabbing hover:scale-115 focus:scale-115 focus:outline-hidden ring-2 transition-transform ${
+                activeDrag === "high"
+                  ? "ring-indigo-400 scale-120 z-20"
+                  : "ring-indigo-100 hover:ring-indigo-300 z-10"
+              }`}
+              style={{ left: `${rightPercent}%` }}
+            />
+          </div>
+
+          <div className="flex justify-between text-[10px] text-zinc-400 font-mono mt-1 select-none pointer-events-none">
+            <span>{min}{unit} (min)</span>
+            <span>{max}{unit} (max)</span>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+};
+
 export const TeachersManager: React.FC<TeachersManagerProps> = ({
   data,
   onRefresh,
@@ -1379,8 +1654,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
   const [supportFilter, setSupportFilter] = useState("all");
   const [selectedFilterDays, setSelectedFilterDays] = useState<number[]>([]);
   const [weeklyHoursRange, setWeeklyHoursRange] = useState<[number, number] | null>(null);
-  const [minHoursRange, setMinHoursRange] = useState<[number, number] | null>(null);
-  const [maxHoursRange, setMaxHoursRange] = useState<[number, number] | null>(null);
+  const [dailyHoursRange, setDailyHoursRange] = useState<[number, number] | null>(null);
   const [consecutiveHoursRange, setConsecutiveHoursRange] = useState<[number, number] | null>(null);
   const [consecutiveGapsRange, setConsecutiveGapsRange] = useState<[number, number] | null>(null);
   const [dailyGapsRange, setDailyGapsRange] = useState<[number, number] | null>(null);
@@ -1515,16 +1789,11 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
         return false;
       }
 
-      // 11. Min Hours / Day
+      // 11. Daily Hours Range
       const c = tch.constraints;
       const minH = c?.minHoursPerDay ?? 2;
-      if (minHoursRange !== null && (minH < minHoursRange[0] || minH > minHoursRange[1])) {
-        return false;
-      }
-
-      // 12. Max Hours / Day
       const maxH = c?.maxHoursPerDay ?? 5;
-      if (maxHoursRange !== null && (maxH < maxHoursRange[0] || maxH > maxHoursRange[1])) {
+      if (dailyHoursRange !== null && (minH < dailyHoursRange[0] || maxH > dailyHoursRange[1])) {
         return false;
       }
 
@@ -1566,8 +1835,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
     statusFilter,
     selectedFilterDays,
     weeklyHoursRange,
-    minHoursRange,
-    maxHoursRange,
+    dailyHoursRange,
     consecutiveHoursRange,
     consecutiveGapsRange,
     dailyGapsRange,
@@ -1586,8 +1854,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
     setSupportFilter("all");
     setSelectedFilterDays([]);
     setWeeklyHoursRange(null);
-    setMinHoursRange(null);
-    setMaxHoursRange(null);
+    setDailyHoursRange(null);
     setConsecutiveHoursRange(null);
     setConsecutiveGapsRange(null);
     setDailyGapsRange(null);
@@ -1605,8 +1872,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
     supportFilter !== "all" ||
     selectedFilterDays.length > 0 ||
     weeklyHoursRange !== null ||
-    minHoursRange !== null ||
-    maxHoursRange !== null ||
+    dailyHoursRange !== null ||
     consecutiveHoursRange !== null ||
     consecutiveGapsRange !== null ||
     dailyGapsRange !== null ||
@@ -1623,8 +1889,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
     (supportFilter !== "all" ? 1 : 0) +
     (selectedFilterDays.length > 0 ? 1 : 0) +
     (weeklyHoursRange !== null ? 1 : 0) +
-    (minHoursRange !== null ? 1 : 0) +
-    (maxHoursRange !== null ? 1 : 0) +
+    (dailyHoursRange !== null ? 1 : 0) +
     (consecutiveHoursRange !== null ? 1 : 0) +
     (consecutiveGapsRange !== null ? 1 : 0) +
     (dailyGapsRange !== null ? 1 : 0) +
@@ -1713,19 +1978,11 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
       });
     }
 
-    if (minHoursRange !== null) {
+    if (dailyHoursRange !== null) {
       list.push({
-        id: "minHours",
-        label: `Min/ημ: ${minHoursRange[0] === minHoursRange[1] ? `${minHoursRange[0]}ω` : `${minHoursRange[0]}-${minHoursRange[1]}ω`}`,
-        clear: () => setMinHoursRange(null),
-      });
-    }
-
-    if (maxHoursRange !== null) {
-      list.push({
-        id: "maxHours",
-        label: `Max/ημ: ${maxHoursRange[0] === maxHoursRange[1] ? `${maxHoursRange[0]}ω` : `${maxHoursRange[0]}-${maxHoursRange[1]}ω`}`,
-        clear: () => setMaxHoursRange(null),
+        id: "dailyHours",
+        label: `Ώρες/ημ: ${dailyHoursRange[0] === dailyHoursRange[1] ? `${dailyHoursRange[0]}ω` : `${dailyHoursRange[0]}-${dailyHoursRange[1]}ω`}`,
+        clear: () => setDailyHoursRange(null),
       });
     }
 
@@ -1773,8 +2030,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
     statusFilter,
     selectedFilterDays,
     weeklyHoursRange,
-    minHoursRange,
-    maxHoursRange,
+    dailyHoursRange,
     consecutiveHoursRange,
     consecutiveGapsRange,
     dailyGapsRange,
@@ -2621,40 +2877,29 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
           />
         </td>
 
-        {/* Min Hours/Day */}
+        {/* Daily Hours Range (Min - Max) */}
         <td className="py-1.5 px-1 text-center">
-          <Input
-            type="number"
-            min={1}
-            max={7}
-            value={inlineData.minHoursPerDay}
-            onChange={(e) => {
-              markBulkField("minHoursPerDay");
-              setInlineData({
-                ...inlineData,
-                minHoursPerDay: e.target.value === "" ? "" : Number(e.target.value),
-              });
-            }}
-            className={`h-7 text-xs w-12 font-mono text-center px-1 mx-auto ${getBorderClass("minHoursPerDay")}`}
-          />
-        </td>
-
-        {/* Max Hours/Day */}
-        <td className="py-1.5 px-1 text-center">
-          <Input
-            type="number"
-            min={1}
-            max={7}
-            value={inlineData.maxHoursPerDay}
-            onChange={(e) => {
-              markBulkField("maxHoursPerDay");
-              setInlineData({
-                ...inlineData,
-                maxHoursPerDay: e.target.value === "" ? "" : Number(e.target.value),
-              });
-            }}
-            className={`h-7 text-xs w-12 font-mono text-center px-1 mx-auto ${getBorderClass("maxHoursPerDay")}`}
-          />
+          <div className="flex justify-center">
+            <DailyHoursSliderPopover
+              value={[
+                typeof inlineData.minHoursPerDay === "number" ? inlineData.minHoursPerDay : 2,
+                typeof inlineData.maxHoursPerDay === "number" ? inlineData.maxHoursPerDay : 5,
+              ]}
+              onChange={(range) => {
+                markBulkField("minHoursPerDay");
+                markBulkField("maxHoursPerDay");
+                setInlineData({
+                  ...inlineData,
+                  minHoursPerDay: range[0],
+                  maxHoursPerDay: range[1],
+                });
+              }}
+              isBulkModified={
+                isBulkMode &&
+                (modifiedBulkFields.has("minHoursPerDay") || modifiedBulkFields.has("maxHoursPerDay"))
+              }
+            />
+          </div>
         </td>
 
         {/* Max Consecutive Hours */}
@@ -3028,7 +3273,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
                 <th colSpan={6} className="py-2 px-3 border-r border-zinc-200 bg-zinc-100/80 text-center">
                   ΙΔΙΟΤΗΤΕΣ & ΡΟΛΟΙ
                 </th>
-                <th colSpan={5} className="py-2 px-3 border-r border-zinc-200 bg-zinc-100/80 text-center">
+                <th colSpan={4} className="py-2 px-3 border-r border-zinc-200 bg-zinc-100/80 text-center">
                   ΗΜΕΡΕΣ & ΩΡΕΣ ΔΙΔΑΣΚΑΛΙΑΣ
                 </th>
                 <th colSpan={3} className="py-2 px-3 bg-zinc-100/80 text-center">
@@ -3055,8 +3300,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
                 {/* Days & Hours (5) - Compact Days Column */}
                 <th className="py-2.5 px-2.5 w-[115px] text-center" title="Ημέρες παρουσίας στο σχολείο">Ημέρες</th>
                 <th className="py-2.5 px-2.5 w-16 text-center font-bold text-zinc-800" title="Εβδομαδιαίο διδακτικό ωράριο">Εβδομάδα</th>
-                <th className="py-2.5 px-2 w-14 text-center" title="Ελάχιστες ώρες ανά ημέρα">Min/ημ.</th>
-                <th className="py-2.5 px-2 w-14 text-center" title="Μέγιστες ώρες ανά ημέρα">Max/ημ.</th>
+                <th className="py-2.5 px-2 w-20 text-center" title="Εύρος ωρών ανά ημέρα (Ελάχιστες - Μέγιστες)">Ώρες/ημ.</th>
                 <th className="py-2.5 px-2 w-14 text-center border-r border-zinc-200" title="Μέγιστες συνεχόμενες ώρες">Συνεχ.</th>
 
                 {/* Gaps (3) */}
@@ -3441,36 +3685,21 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
                     />
                   </th>
 
-                  {/* 13. Min Hours / Day Filter (1 - 6) */}
-                  <th className="py-1 px-0.5 w-14 text-center">
+                  {/* 13. Daily Hours Range Filter (1 - 7) */}
+                  <th className="py-1 px-0.5 w-20 text-center">
                     <RangeFilterPopover
-                      title="Min Ώρες / Ημέρα"
+                      title="Ώρες / Ημέρα"
                       min={1}
-                      max={6}
+                      max={7}
                       unit="ω"
-                      value={minHoursRange}
-                      onChange={setMinHoursRange}
+                      value={dailyHoursRange}
+                      onChange={setDailyHoursRange}
                       presets={[
-                        { label: "2ω", range: [2, 2] },
-                        { label: "1ω", range: [1, 1] },
-                        { label: "3-4ω", range: [3, 4] },
-                      ]}
-                    />
-                  </th>
-
-                  {/* 14. Max Hours / Day Filter (1 - 6) */}
-                  <th className="py-1 px-0.5 w-14 text-center">
-                    <RangeFilterPopover
-                      title="Max Ώρες / Ημέρα"
-                      min={1}
-                      max={6}
-                      unit="ω"
-                      value={maxHoursRange}
-                      onChange={setMaxHoursRange}
-                      presets={[
-                        { label: "5ω", range: [5, 5] },
-                        { label: "6ω", range: [6, 6] },
-                        { label: "4ω", range: [4, 4] },
+                        { label: "1-6ω", range: [1, 6] },
+                        { label: "1-5ω", range: [1, 5] },
+                        { label: "1-4ω", range: [1, 4] },
+                        { label: "2-6ω", range: [2, 6] },
+                        { label: "3-6ω", range: [3, 6] },
                       ]}
                     />
                   </th>
@@ -3721,14 +3950,11 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
                       {tch.maxWeeklyHours || 24}ω
                     </td>
 
-                    {/* Min Hours/Day */}
-                    <td className="py-2.5 px-2 text-center font-mono text-zinc-700">
-                      {c?.minHoursPerDay ?? 2}ω
-                    </td>
-
-                    {/* Max Hours/Day */}
-                    <td className="py-2.5 px-2 text-center font-mono text-zinc-700">
-                      {c?.maxHoursPerDay ?? 5}ω
+                    {/* Daily Hours Range */}
+                    <td className="py-2.5 px-2 text-center font-mono text-zinc-700 font-medium">
+                      {(c?.minHoursPerDay ?? 2) === (c?.maxHoursPerDay ?? 5)
+                        ? `${c?.minHoursPerDay ?? 2}ω`
+                        : `${c?.minHoursPerDay ?? 2}-${c?.maxHoursPerDay ?? 5}ω`}
                     </td>
 
                     {/* Max Consecutive Hours */}
@@ -3756,7 +3982,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
 
               {filteredTeachers.length === 0 && editingRowId !== "__new__" && (
                 <tr>
-                  <td colSpan={18} className="py-12 text-center text-zinc-500">
+                  <td colSpan={17} className="py-12 text-center text-zinc-500">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <Search className="w-8 h-8 text-zinc-300" />
                       <p className="font-medium text-sm text-zinc-700">Δεν βρέθηκαν εκπαιδευτικοί</p>
