@@ -96,6 +96,7 @@ export async function POST(req: Request) {
         color: s.color,
         allowedSpecialties: s.allowedSpecialties ? JSON.parse(s.allowedSpecialties) : (s.defaultSpecialty ? [s.defaultSpecialty] : []),
         classHours: s.classHours ? JSON.parse(s.classHours) : {},
+        maxPerDay: s.maxPerDay,
       })),
       classes: allClasses.map((c) => ({
         id: c.id,

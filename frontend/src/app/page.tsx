@@ -114,6 +114,42 @@ export default function Home() {
   };
 
 
+  const handleSolveSupport = async () => {
+    setIsSolving(true);
+    try {
+      const res = await fetch("/api/timetable/solve-support", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+
+      const resData = await res.json();
+      if (!res.ok || !resData.success) {
+        if (resData.status === "INFEASIBLE") {
+          toast.error("Αδυναμία Επίλυσης Συμπληρωματικών", {
+            description: resData.conflicts?.join(" ") || "Εντοπίστηκαν συγκρούσεις.",
+          });
+        } else {
+          toast.error("Σφάλμα Επίλυσης", {
+            description: resData.error || resData.conflicts?.join(" ") || "Ο αλγόριθμος δεν μπόρεσε να βρει λύση.",
+          });
+        }
+      } else {
+        toast.success("Επιτυχής Τοποθέτηση Συμπληρωματικών!", {
+          description: `Υπολογίστηκε σε ${resData.solveTimeSeconds}s (${resData.slotsCount} ώρες).`,
+        });
+        await loadData();
+      }
+    } catch (err: any) {
+      toast.error("Σφάλμα σύνδεσης με τον Solver", {
+        description: err.message,
+      });
+    } finally {
+      setIsSolving(false);
+    }
+  };
+
+
   if (loadError && !data) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-zinc-50 text-zinc-800">
@@ -203,7 +239,21 @@ export default function Home() {
                   isSolving ? "animate-spin text-amber-300 dark:text-amber-600" : "text-amber-400 dark:text-amber-600"
                 }`}
               />
-              {isSolving ? "Επίλυση..." : "Επίλυση"}
+              {isSolving ? "Επίλυση..." : "Επίλυση (Βασικές)"}
+            </Button>
+            
+            <Button
+              size="sm"
+              onClick={handleSolveSupport}
+              disabled={isSolving}
+              className="h-6 px-2.5 text-[10px] font-sans bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              <Sparkles
+                className={`w-3 h-3 mr-1 ${
+                  isSolving ? "animate-spin text-emerald-200" : "text-emerald-300"
+                }`}
+              />
+              {isSolving ? "Επίλυση..." : "Επίλυση (Όλοι μαζί)"}
             </Button>
           </>
         }

@@ -28,6 +28,7 @@ export const subjects = sqliteTable("subjects", {
   allowedSpecialties: text("allowed_specialties"), // JSON string e.g. '["ΠΕ70","ΠΕ71"]'
   defaultSpecialty: text("default_specialty"), // Legacy single specialty e.g. "ΠΕ70"
   classHours: text("class_hours"), // JSON string mapping classId to [min, max] hours
+  maxPerDay: integer("max_per_day"), // Max times a class can have this subject per day
 });
 
 export const classes = sqliteTable("classes", {

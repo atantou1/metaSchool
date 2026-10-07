@@ -95,6 +95,7 @@ interface InlineSubjectEditState {
   color: string;
   allowedSpecialties: string[];
   classHours: Record<string, [number, number]>;
+  maxPerDay: number | null;
 }
 
 /* ========================================================================== */
@@ -892,6 +893,7 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
       color: nextColor,
       allowedSpecialties: ["ΠΕ70"],
       classHours: initialHours,
+      maxPerDay: null,
     });
     setEditingRowId("__new__");
     setSelectedSubjectId(null);
@@ -923,6 +925,7 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
       color: target.color || "#3b82f6",
       allowedSpecialties: targetSpecs,
       classHours: targetHours,
+      maxPerDay: target.maxPerDay || null,
     });
     setEditingRowId("__new__");
     setSelectedSubjectId(null);
@@ -950,6 +953,7 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
       color: subj.color || "#3b82f6",
       allowedSpecialties: specs,
       classHours: hours,
+      maxPerDay: subj.maxPerDay || null,
     });
     setEditingRowId(subj.id);
     setSelectedSubjectId(subj.id);
@@ -984,6 +988,7 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
       allowedSpecialties: inlineData.allowedSpecialties,
       defaultSpecialty: inlineData.allowedSpecialties[0] || "ΠΕ70",
       classHours: cleanHours,
+      maxPerDay: inlineData.maxPerDay,
     };
 
     try {
@@ -1135,7 +1140,6 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
           />
         </td>
 
-        {/* Allowed Specialties Multi-Select Popover */}
         <td className="py-1.5 px-2 border-r border-zinc-200">
           <SpecialtyMultiSelectPopover
             selectedSpecialties={inlineData.allowedSpecialties}
@@ -1143,6 +1147,24 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
             allSpecialties={allSpecialties}
             isNewDraft={isNewDraft}
           />
+        </td>
+
+        {/* Max Per Day Dropdown */}
+        <td className="py-1.5 px-2 border-r border-zinc-200">
+          <select
+            value={inlineData.maxPerDay || ""}
+            onChange={(e) => setInlineData({ ...inlineData, maxPerDay: e.target.value ? parseInt(e.target.value, 10) : null })}
+            className={`h-7 text-xs w-full bg-white rounded border ${
+              isNewDraft ? "border-emerald-400" : "border-sky-300"
+            } px-1 outline-none focus:ring-1 focus:ring-sky-400`}
+          >
+            <option value="">Αδιάφορο</option>
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+          </select>
         </td>
 
         {/* Class Hours Range Sliders */}
@@ -1401,7 +1423,7 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
             <thead className="bg-zinc-50 border-b border-zinc-200 text-zinc-600 shadow-2xs select-none">
               {/* Row 1: Super Headers Grouping */}
               <tr className="border-b border-zinc-200 text-[10px] uppercase font-bold tracking-wider text-zinc-500">
-                <th colSpan={4} className="py-2 px-3 border-r border-zinc-200 bg-zinc-100/80 text-left">
+                <th colSpan={5} className="py-2 px-3 border-r border-zinc-200 bg-zinc-100/80 text-left">
                   ΒΑΣΙΚΑ ΣΤΟΙΧΕΙΑ ΜΑΘΗΜΑΤΟΣ
                 </th>
                 <th colSpan={sortedClasses.length || 1} className="py-2 px-3 bg-zinc-100/80 text-center">
@@ -1414,8 +1436,11 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
                 <th className="py-2.5 px-3 w-12 text-center" title="Χρώμα μαθήματος">Χρώμα</th>
                 <th className="py-2.5 px-3 min-w-[180px]" title="Πλήρης τίτλος μαθήματος">Τίτλος Μαθήματος</th>
                 <th className="py-2.5 px-2 w-20 text-center" title="Σύντομος κωδικός (π.χ. ΤΠΕ)">Κωδικός</th>
-                <th className="py-2.5 px-3 min-w-[180px] text-center border-r border-zinc-200" title="Ειδικότητες εκπαιδευτικών που μπορούν να το διδάξουν">
+                <th className="py-2.5 px-3 min-w-[180px] text-center" title="Ειδικότητες εκπαιδευτικών που μπορούν να το διδάξουν">
                   Ειδικότητες Διδασκαλίας
+                </th>
+                <th className="py-2.5 px-3 w-20 text-center border-r border-zinc-200" title="Μέγιστες φορές ανά ημέρα για το ίδιο τμήμα">
+                  Μέγ./Ημέρα
                 </th>
                 {sortedClasses.map((c) => (
                   <th key={c.id} className="py-2.5 px-1.5 w-14 text-center" title={`Ώρες διδασκαλίας: ${c.name}`}>
@@ -1606,6 +1631,10 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
                     </Popover>
                   </th>
 
+                  <th className="py-1 px-1.5 text-center text-zinc-400 text-[10px] font-mono border-r border-zinc-200">
+                    —
+                  </th>
+
                   <th colSpan={sortedClasses.length || 1} className="py-1 px-2 text-center text-zinc-400 text-[10px] font-mono">
                     —
                   </th>
@@ -1689,6 +1718,17 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
                         </div>
                       ) : (
                         <span className="text-zinc-400 italic text-[11px]">—</span>
+                      )}
+                    </td>
+
+                    {/* Max Per Day */}
+                    <td className="py-2.5 px-3 text-center border-r border-zinc-100 font-mono text-[11px] font-bold text-zinc-700">
+                      {subj.maxPerDay ? (
+                        <span className="bg-sky-50 text-sky-700 border border-sky-200 px-1.5 py-0.5 rounded shadow-2xs">
+                          {subj.maxPerDay}
+                        </span>
+                      ) : (
+                        <span className="text-zinc-400 italic font-sans text-[11px]">—</span>
                       )}
                     </td>
 
