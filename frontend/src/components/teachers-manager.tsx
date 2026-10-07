@@ -1632,6 +1632,79 @@ const DailyHoursSliderPopover: React.FC<DailyHoursSliderPopoverProps> = ({
   );
 };
 
+interface GapSelectorPopoverProps {
+  options: (number | null)[];
+  value: number | "" | null | undefined;
+  onChange: (val: number | "") => void;
+  isBulkModified?: boolean;
+  label?: string;
+}
+
+const GapSelectorPopover: React.FC<GapSelectorPopoverProps> = ({
+  options,
+  value,
+  onChange,
+  isBulkModified = false,
+  label = "Κενά",
+}) => {
+  const [open, setOpen] = useState(false);
+  const currentVal = value === "" || value === undefined || value === null ? null : Number(value);
+  const displayLabel = currentVal === null ? "—" : `${currentVal}`;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        type="button"
+        className={`h-7 w-10 px-1 text-xs font-mono font-bold rounded-md shadow-2xs transition-all flex items-center justify-center gap-0.5 border cursor-pointer ${
+          isBulkModified
+            ? "border-amber-400 bg-amber-50/60 ring-1 ring-amber-300 text-amber-900"
+            : "bg-white border-zinc-200 text-zinc-800 hover:bg-zinc-50"
+        }`}
+        title={`${label}: ${currentVal === null ? "Χωρίς περιορισμό" : `${currentVal}`}`}
+      >
+        <span>{displayLabel}</span>
+        <ChevronDown className="w-2.5 h-2.5 shrink-0 opacity-40 -mr-0.5" />
+      </PopoverTrigger>
+
+      <PopoverContent
+        align="center"
+        className="w-auto p-2 shadow-xl border border-zinc-200 bg-white rounded-xl z-50 animate-in fade-in"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex flex-col gap-1.5">
+          <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider px-1">
+            {label}
+          </div>
+          <div className="flex items-center gap-1">
+            {options.map((opt) => {
+              const isSelected = opt === null ? currentVal === null : currentVal === opt;
+              const optLabel = opt === null ? "— (Αδιάφορο)" : `${opt}`;
+
+              return (
+                <button
+                  key={opt === null ? "none" : opt}
+                  type="button"
+                  onClick={() => {
+                    onChange(opt === null ? "" : opt);
+                    setOpen(false);
+                  }}
+                  className={`h-7 px-2.5 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer flex items-center justify-center ${
+                    isSelected
+                      ? "bg-zinc-900 text-white shadow-2xs"
+                      : "bg-zinc-50 text-zinc-700 hover:bg-zinc-100 border border-zinc-200"
+                  }`}
+                >
+                  {optLabel}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+};
+
 export const TeachersManager: React.FC<TeachersManagerProps> = ({
   data,
   onRefresh,
@@ -2105,8 +2178,8 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
       minHoursPerDay: c?.minHoursPerDay ?? 2,
       maxHoursPerDay: c?.maxHoursPerDay ?? 5,
       maxConsecutiveHours: c?.maxConsecutiveHours ?? 4,
-      maxConsecutiveGaps: c?.maxConsecutiveGaps ?? 1,
-      maxTotalGapsPerDay: c?.maxTotalGapsPerDay ?? 1,
+      maxConsecutiveGaps: c?.maxConsecutiveGaps !== undefined && c?.maxConsecutiveGaps !== null ? c.maxConsecutiveGaps : "",
+      maxTotalGapsPerDay: c?.maxTotalGapsPerDay !== undefined && c?.maxTotalGapsPerDay !== null ? c.maxTotalGapsPerDay : "",
       maxTotalGapsPerWeek: c?.maxTotalGapsPerWeek ?? 2,
       availableDays: daysList,
       dayHours: extractDayHours(c, target.isAllDay ?? false, numMorningPeriods, numAllDayPeriods),
@@ -2139,8 +2212,8 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
       minHoursPerDay: c?.minHoursPerDay ?? 2,
       maxHoursPerDay: c?.maxHoursPerDay ?? 5,
       maxConsecutiveHours: c?.maxConsecutiveHours ?? 4,
-      maxConsecutiveGaps: c?.maxConsecutiveGaps ?? 1,
-      maxTotalGapsPerDay: c?.maxTotalGapsPerDay ?? c?.maxConsecutiveGaps ?? 1,
+      maxConsecutiveGaps: c?.maxConsecutiveGaps !== undefined && c?.maxConsecutiveGaps !== null ? c.maxConsecutiveGaps : "",
+      maxTotalGapsPerDay: c?.maxTotalGapsPerDay !== undefined && c?.maxTotalGapsPerDay !== null ? c.maxTotalGapsPerDay : "",
       maxTotalGapsPerWeek: c?.maxTotalGapsPerWeek ?? 2,
       availableDays: daysList,
       dayHours: extractDayHours(c, tch.isAllDay ?? false, numMorningPeriods, numAllDayPeriods),
@@ -2922,38 +2995,40 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
 
         {/* Max Consecutive Gaps */}
         <td className="py-1.5 px-1 text-center">
-          <Input
-            type="number"
-            min={0}
-            max={4}
-            value={inlineData.maxConsecutiveGaps}
-            onChange={(e) => {
-              markBulkField("maxConsecutiveGaps");
-              setInlineData({
-                ...inlineData,
-                maxConsecutiveGaps: e.target.value === "" ? "" : Number(e.target.value),
-              });
-            }}
-            className={`h-7 text-xs w-12 font-mono text-center px-1 mx-auto ${getBorderClass("maxConsecutiveGaps")}`}
-          />
+          <div className="flex justify-center">
+            <GapSelectorPopover
+              label="Συνεχόμενα Κενά"
+              options={[1, 2, 3, null]}
+              value={inlineData.maxConsecutiveGaps}
+              onChange={(val) => {
+                markBulkField("maxConsecutiveGaps");
+                setInlineData({
+                  ...inlineData,
+                  maxConsecutiveGaps: val,
+                });
+              }}
+              isBulkModified={isBulkMode && modifiedBulkFields.has("maxConsecutiveGaps")}
+            />
+          </div>
         </td>
 
         {/* Max Gaps / Day */}
         <td className="py-1.5 px-1 text-center">
-          <Input
-            type="number"
-            min={0}
-            max={5}
-            value={inlineData.maxTotalGapsPerDay}
-            onChange={(e) => {
-              markBulkField("maxTotalGapsPerDay");
-              setInlineData({
-                ...inlineData,
-                maxTotalGapsPerDay: e.target.value === "" ? "" : Number(e.target.value),
-              });
-            }}
-            className={`h-7 text-xs w-12 font-mono text-center px-1 mx-auto ${getBorderClass("maxTotalGapsPerDay")}`}
-          />
+          <div className="flex justify-center">
+            <GapSelectorPopover
+              label="Κενά ανά Ημέρα"
+              options={[0, 1, 2, 3, null]}
+              value={inlineData.maxTotalGapsPerDay}
+              onChange={(val) => {
+                markBulkField("maxTotalGapsPerDay");
+                setInlineData({
+                  ...inlineData,
+                  maxTotalGapsPerDay: val,
+                });
+              }}
+              isBulkModified={isBulkMode && modifiedBulkFields.has("maxTotalGapsPerDay")}
+            />
+          </div>
         </td>
 
         {/* Max Gaps / Week */}
@@ -3304,8 +3379,8 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
                 <th className="py-2.5 px-2 w-14 text-center border-r border-zinc-200" title="Μέγιστες συνεχόμενες ώρες">Συνεχ.</th>
 
                 {/* Gaps (3) */}
-                <th className="py-2.5 px-2 w-16 text-center" title="Μέγιστα συνεχόμενα κενά">Max συνεχ.</th>
-                <th className="py-2.5 px-2 w-16 text-center" title="Μέγιστα συνολικά κενά ανά ημέρα">Max/ημ.</th>
+                <th className="py-2.5 px-1 w-14 text-center" title="Μέγιστα συνεχόμενα κενά (1, 2, 3 ή Αδιάφορο)">Max συνεχ.</th>
+                <th className="py-2.5 px-1 w-14 text-center" title="Μέγιστα συνολικά κενά ανά ημέρα (0, 1, 2, 3 ή Αδιάφορο)">Max/ημ.</th>
                 <th className="py-2.5 px-2 w-16 text-center" title="Μέγιστα συνολικά κενά ανά εβδομάδα">Max/εβδ.</th>
               </tr>
 
@@ -3964,12 +4039,12 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
 
                     {/* Max Consecutive Gaps */}
                     <td className="py-2.5 px-2 text-center font-mono text-zinc-700 font-medium">
-                      {c?.maxConsecutiveGaps ?? 1}
+                      {c?.maxConsecutiveGaps !== null && c?.maxConsecutiveGaps !== undefined ? c.maxConsecutiveGaps : "—"}
                     </td>
 
                     {/* Max Gaps / Day */}
-                    <td className="py-2.5 px-2 text-center font-mono text-zinc-700">
-                      {c?.maxTotalGapsPerDay ?? c?.maxConsecutiveGaps ?? 1}
+                    <td className="py-2.5 px-2 text-center font-mono text-zinc-700 font-medium">
+                      {c?.maxTotalGapsPerDay !== null && c?.maxTotalGapsPerDay !== undefined ? c.maxTotalGapsPerDay : "—"}
                     </td>
 
                     {/* Max Gaps / Week */}

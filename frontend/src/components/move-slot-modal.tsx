@@ -95,25 +95,25 @@ export const MoveSlotModal: React.FC<MoveSlotModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-md bg-white border-zinc-200 text-zinc-900 shadow-lg">
+      <DialogContent className="sm:max-w-md bg-card border-border text-card-foreground shadow-lg">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-base text-zinc-900">
-            <ArrowRightLeft className="w-4 h-4 text-zinc-500" />
+          <DialogTitle className="flex items-center gap-2 text-base text-foreground">
+            <ArrowRightLeft className="w-4 h-4 text-muted-foreground" />
             Μετακίνηση Μαθήματος
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 py-3">
-          <div className="p-3 rounded-lg bg-zinc-50 border border-zinc-200 text-xs text-zinc-600 space-y-1">
+          <div className="p-3 rounded-lg bg-muted/50 border border-border text-xs text-muted-foreground space-y-1">
             <div>
               Τρέχουσα ώρα:{" "}
-              <span className="font-semibold text-zinc-900">
+              <span className="font-semibold text-foreground">
                 {days[slot.day]}, {periods[slot.period]?.label || `${slot.period + 1}η Ώρα`}
               </span>
             </div>
             <div>
               Τύπος:{" "}
-              <span className="font-semibold text-zinc-900">
+              <span className="font-semibold text-foreground">
                 {slot.isSupport ? "Υποστηρικτική Ειδικότητα (Pull-out)" : "Βασικό Πρόγραμμα (Core)"}
               </span>
             </div>
@@ -121,15 +121,15 @@ export const MoveSlotModal: React.FC<MoveSlotModalProps> = ({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label className="text-xs text-zinc-600">Νέα Ημέρα</Label>
+              <Label className="text-xs text-muted-foreground">Νέα Ημέρα</Label>
               <Select
                 value={String(targetDay)}
                 onValueChange={(val) => setTargetDay(Number(val))}
               >
-                <SelectTrigger className="bg-white border-zinc-200 text-zinc-800">
+                <SelectTrigger className="bg-background border-border text-foreground">
                   <SelectValue placeholder="Επιλέξτε ημέρα" />
                 </SelectTrigger>
-                <SelectContent className="bg-white border-zinc-200 text-zinc-800">
+                <SelectContent className="bg-card border-border text-card-foreground">
                   {days.map((dayName, idx) => (
                     <SelectItem key={idx} value={String(idx)}>
                       {dayName}
@@ -140,15 +140,15 @@ export const MoveSlotModal: React.FC<MoveSlotModalProps> = ({
             </div>
 
             <div className="space-y-2">
-              <Label className="text-xs text-zinc-600">Νέα Διδακτική Ώρα</Label>
+              <Label className="text-xs text-muted-foreground">Νέα Διδακτική Ώρα</Label>
               <Select
                 value={String(targetPeriod)}
                 onValueChange={(val) => setTargetPeriod(Number(val))}
               >
-                <SelectTrigger className="bg-white border-zinc-200 text-zinc-800">
+                <SelectTrigger className="bg-background border-border text-foreground">
                   <SelectValue placeholder="Επιλέξτε ώρα" />
                 </SelectTrigger>
-                <SelectContent className="bg-white border-zinc-200 text-zinc-800">
+                <SelectContent className="bg-card border-border text-card-foreground">
                   {periods.map((p, idx) => (
                     <SelectItem key={idx} value={String(idx)}>
                       {p.label || `${idx + 1}η Ώρα`}
@@ -160,8 +160,8 @@ export const MoveSlotModal: React.FC<MoveSlotModalProps> = ({
           </div>
 
           {errorMsg && (
-            <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-xs text-red-800 flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+            <div className="p-3 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-xs text-red-800 dark:text-red-300 flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
               <span>{errorMsg}</span>
             </div>
           )}
@@ -171,14 +171,14 @@ export const MoveSlotModal: React.FC<MoveSlotModalProps> = ({
           <Button
             variant="outline"
             onClick={onClose}
-            className="border-zinc-200 text-zinc-700 hover:bg-zinc-50"
+            className="border-border text-foreground hover:bg-muted"
           >
             Ακύρωση
           </Button>
           <Button
             onClick={handleMove}
             disabled={isSubmitting}
-            className="bg-zinc-900 hover:bg-zinc-800 text-white font-semibold"
+            className="bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
           >
             {isSubmitting ? "Έλεγχος..." : "Αποθήκευση Μετακίνησης"}
           </Button>

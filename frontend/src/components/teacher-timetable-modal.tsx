@@ -571,11 +571,11 @@ export const TeacherTimetableModal: React.FC<TeacherTimetableModalProps> = ({
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent
-        className="max-w-6xl w-[96vw] max-h-[92vh] h-[92vh] p-0 flex flex-col overflow-hidden bg-white border border-zinc-200 shadow-2xl rounded-xl z-[120]"
+        className="max-w-6xl w-[96vw] max-h-[92vh] h-[92vh] p-0 flex flex-col overflow-hidden bg-card text-card-foreground border border-border shadow-2xl rounded-xl z-[120]"
         showCloseButton={true}
       >
         {/* Header Bar */}
-        <DialogHeader className="px-5 py-3 border-b border-zinc-200 bg-zinc-50/70 flex flex-row items-center justify-between flex-none gap-4">
+        <DialogHeader className="px-5 py-3 border-b border-border bg-muted/40 flex flex-row items-center justify-between flex-none gap-4">
           <div className="flex items-center gap-3">
             {/* Teacher Swatch Badge */}
             <div
@@ -587,36 +587,36 @@ export const TeacherTimetableModal: React.FC<TeacherTimetableModalProps> = ({
 
             <div>
               <div className="flex items-center gap-2">
-                <DialogTitle className="text-base font-bold text-zinc-900 leading-tight">
+                <DialogTitle className="text-base font-bold text-foreground leading-tight">
                   Πρόγραμμα: {currentTeacher.lastName} {currentTeacher.firstName}
                 </DialogTitle>
-                <Badge variant="outline" className="text-[10px] font-mono border-zinc-300 bg-white">
+                <Badge variant="outline" className="text-[10px] font-mono border-border bg-background">
                   {formatSpecialtyLabel(currentTeacher.specialty)}
                 </Badge>
                 {currentTeacher.isSupport && (
-                  <Badge className="bg-purple-100 text-purple-900 border-purple-300 text-[10px]">
+                  <Badge className="bg-purple-100 dark:bg-purple-950/60 text-purple-900 dark:text-purple-300 border-purple-300 dark:border-purple-700 text-[10px]">
                     Παράλληλη / Ένταξη
                   </Badge>
                 )}
                 {currentTeacher.isAllDay && (
-                  <Badge className="bg-amber-100 text-amber-900 border-amber-300 text-[10px]">
+                  <Badge className="bg-amber-100 dark:bg-amber-950/60 text-amber-900 dark:text-amber-300 border-amber-300 dark:border-amber-700 text-[10px]">
                     Ολοήμερο
                   </Badge>
                 )}
               </div>
 
               {/* Stats summary */}
-              <div className="flex items-center gap-3 text-xs text-zinc-500 mt-0.5 font-sans">
-                <span className="flex items-center gap-1 font-mono text-[11px] text-zinc-600 font-semibold">
-                  <Clock className="w-3.5 h-3.5 text-zinc-500" />
+              <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5 font-sans">
+                <span className="flex items-center gap-1 font-mono text-[11px] text-foreground font-semibold">
+                  <Clock className="w-3.5 h-3.5 text-muted-foreground" />
                   {teacherSlots.length} ώρες διδασκαλίας
                 </span>
-                <span className="flex items-center gap-1 font-mono text-[11px] text-zinc-500">
-                  <Coffee className="w-3.5 h-3.5 text-zinc-400" />
+                <span className="flex items-center gap-1 font-mono text-[11px] text-muted-foreground">
+                  <Coffee className="w-3.5 h-3.5 text-muted-foreground" />
                   {totalGapsCount} {totalGapsCount === 1 ? "κενό" : "κενά"}
                 </span>
-                <span className="flex items-center gap-1 font-mono text-[11px] text-zinc-500">
-                  <Users className="w-3.5 h-3.5 text-zinc-400" />
+                <span className="flex items-center gap-1 font-mono text-[11px] text-muted-foreground">
+                  <Users className="w-3.5 h-3.5 text-muted-foreground" />
                   {uniqueClassesTaught.length} {uniqueClassesTaught.length === 1 ? "τμήμα" : "τμήματα"}
                 </span>
               </div>
@@ -633,14 +633,14 @@ export const TeacherTimetableModal: React.FC<TeacherTimetableModalProps> = ({
                   if (val) setSelectedTeacherId(val);
                 }}
               >
-                <SelectTrigger className="h-7 text-xs bg-white border-zinc-200">
+                <SelectTrigger className="h-7 text-xs bg-background border-border text-foreground">
                   <SelectValue placeholder="Επιλογή εκπαιδευτικού..." />
                 </SelectTrigger>
-                <SelectContent className="max-h-64 bg-white z-[130]">
+                <SelectContent className="max-h-64 bg-card text-card-foreground border-border z-[130]">
                   {availableTeachers.map((t) => (
                     <SelectItem key={t.id} value={t.id} className="text-xs">
                       <span className="font-semibold">{t.lastName}</span> {t.firstName}{" "}
-                      <span className="text-zinc-400 text-[10px]">({t.specialty})</span>
+                      <span className="text-muted-foreground text-[10px]">({t.specialty})</span>
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -654,11 +654,11 @@ export const TeacherTimetableModal: React.FC<TeacherTimetableModalProps> = ({
               onClick={() => setShowAllDay(!showAllDay)}
               className={`h-7 px-2.5 text-[11px] font-sans ${
                 showAllDay
-                  ? "bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-100"
-                  : "bg-white text-zinc-700 hover:bg-zinc-100"
+                  ? "bg-amber-50 dark:bg-amber-950/50 text-amber-900 dark:text-amber-200 border-amber-200 dark:border-amber-800 hover:bg-amber-100"
+                  : "bg-background text-foreground hover:bg-muted"
               }`}
             >
-              <Clock className="w-3.5 h-3.5 mr-1 text-amber-600" />
+              <Clock className="w-3.5 h-3.5 mr-1 text-amber-600 dark:text-amber-400" />
               {showAllDay ? "Απόκρυψη Ολοημέρου" : "Προβολή Ολοημέρου"}
             </Button>
 
@@ -667,9 +667,9 @@ export const TeacherTimetableModal: React.FC<TeacherTimetableModalProps> = ({
               variant="outline"
               size="sm"
               onClick={handlePrint}
-              className="h-7 px-2.5 text-[11px] font-sans bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-100"
+              className="h-7 px-2.5 text-[11px] font-sans bg-background border-border text-foreground hover:bg-muted"
             >
-              <Printer className="w-3.5 h-3.5 mr-1 text-zinc-600" />
+              <Printer className="w-3.5 h-3.5 mr-1 text-muted-foreground" />
               Εκτύπωση (A4)
             </Button>
 
@@ -678,22 +678,22 @@ export const TeacherTimetableModal: React.FC<TeacherTimetableModalProps> = ({
               variant="outline"
               size="sm"
               onClick={handleExportCsv}
-              className="h-7 px-2.5 text-[11px] font-sans bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-100"
+              className="h-7 px-2.5 text-[11px] font-sans bg-background border-border text-foreground hover:bg-muted"
             >
-              <Download className="w-3.5 h-3.5 mr-1 text-zinc-600" />
+              <Download className="w-3.5 h-3.5 mr-1 text-muted-foreground" />
               CSV
             </Button>
           </div>
         </DialogHeader>
 
         {/* Content Body: Timetable Grid */}
-        <div className="flex-1 overflow-auto p-4 bg-zinc-100/60" ref={printAreaRef}>
-          <div className="bg-white rounded-lg border border-zinc-200 shadow-sm overflow-hidden min-w-[700px]">
+        <div className="flex-1 overflow-auto p-4 bg-muted/30" ref={printAreaRef}>
+          <div className="bg-card rounded-lg border border-border shadow-sm overflow-hidden min-w-[700px]">
             <table className="w-full border-collapse text-left font-sans">
               <thead>
-                <tr className="border-b border-zinc-200">
+                <tr className="border-b border-border">
                   {/* Left Corner header */}
-                  <th className="w-24 p-2.5 bg-zinc-100/80 border-r border-zinc-200 text-[11px] font-bold text-zinc-700 text-center">
+                  <th className="w-24 p-2.5 bg-muted/60 border-r border-border text-[11px] font-bold text-foreground text-center">
                     ΩΡΑ
                   </th>
                   {/* 5 Day Headers */}
@@ -703,7 +703,7 @@ export const TeacherTimetableModal: React.FC<TeacherTimetableModalProps> = ({
                     return (
                       <th
                         key={day.index}
-                        className={`p-2.5 border-r border-zinc-200 text-center ${day.headerBg} last:border-r-0`}
+                        className={`p-2.5 border-r border-border text-center bg-muted/50 text-foreground last:border-r-0`}
                       >
                         <div className="text-xs font-bold tracking-wide uppercase">
                           {day.name}
@@ -716,27 +716,27 @@ export const TeacherTimetableModal: React.FC<TeacherTimetableModalProps> = ({
                   })}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-200 text-xs">
+              <tbody className="divide-y divide-border text-xs">
                 {activePeriods.map((period) => (
                   <tr
                     key={period.index}
-                    className={`hover:bg-zinc-50/60 transition-colors ${
-                      period.isAllDay ? "bg-amber-50/20" : ""
+                    className={`hover:bg-muted/40 transition-colors ${
+                      period.isAllDay ? "bg-amber-50/20 dark:bg-amber-950/20" : ""
                     }`}
                   >
                     {/* Period Row Label (Left Axis) */}
                     <td
-                      className={`p-2 border-r border-zinc-200 text-center select-none ${
+                      className={`p-2 border-r border-border text-center select-none ${
                         period.isAllDay
-                          ? "bg-amber-50/60 text-amber-900 border-r-amber-200"
-                          : "bg-zinc-50/80 text-zinc-700"
+                          ? "bg-amber-50/60 dark:bg-amber-950/40 text-amber-900 dark:text-amber-300 border-r-amber-200 dark:border-r-amber-800"
+                          : "bg-muted/40 text-foreground"
                       }`}
                     >
                       <div className="font-bold text-[11px] font-mono leading-tight">
                         {period.label}
                       </div>
                       {period.timeRange && (
-                        <div className="text-[10px] text-zinc-400 font-mono mt-0.5">
+                        <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
                           {period.timeRange}
                         </div>
                       )}
@@ -754,23 +754,23 @@ export const TeacherTimetableModal: React.FC<TeacherTimetableModalProps> = ({
                       return (
                         <td
                           key={cellKey}
-                          className="p-1.5 border-r border-zinc-200 last:border-r-0 align-top h-16 min-h-[64px]"
+                          className="p-1.5 border-r border-border last:border-r-0 align-top h-16 min-h-[64px]"
                         >
                           {slots.length === 0 ? (
                             isGap ? (
                               /* Gap Cell */
-                              <div className="h-full w-full min-h-[48px] rounded border border-dashed border-amber-300 bg-amber-50/40 flex flex-col items-center justify-center text-[10px] text-amber-800 font-sans font-medium select-none p-1">
-                                <Coffee className="w-3.5 h-3.5 text-amber-600 mb-0.5" />
+                              <div className="h-full w-full min-h-[48px] rounded border border-dashed border-amber-300 dark:border-amber-700 bg-amber-50/40 dark:bg-amber-950/30 flex flex-col items-center justify-center text-[10px] text-amber-800 dark:text-amber-300 font-sans font-medium select-none p-1">
+                                <Coffee className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 mb-0.5" />
                                 <span>Κενό</span>
                               </div>
                             ) : isOffDay ? (
                               /* Day Off / Free Day */
-                              <div className="h-full w-full min-h-[48px] rounded border border-dashed border-zinc-200/60 bg-zinc-50/30 flex items-center justify-center text-[10px] text-zinc-300 font-mono select-none">
+                              <div className="h-full w-full min-h-[48px] rounded border border-dashed border-border/60 bg-muted/20 flex items-center justify-center text-[10px] text-muted-foreground font-mono select-none">
                                 —
                               </div>
                             ) : (
                               /* Empty Cell before/after workday */
-                              <div className="h-full w-full min-h-[48px] rounded border border-dashed border-zinc-200/50 flex items-center justify-center text-[10px] text-zinc-300 font-mono select-none">
+                              <div className="h-full w-full min-h-[48px] rounded border border-dashed border-border/50 flex items-center justify-center text-[10px] text-muted-foreground font-mono select-none">
                                 —
                               </div>
                             )
@@ -785,10 +785,10 @@ export const TeacherTimetableModal: React.FC<TeacherTimetableModalProps> = ({
                                 return (
                                   <div
                                     key={slot.id}
-                                    className={`relative flex flex-col justify-between p-2 rounded-md border text-left shadow-2xs transition-all ${
+                                    className={`relative flex flex-col justify-between p-2 rounded-md border border-border text-left shadow-2xs transition-all ${
                                       slot.isSupport
-                                        ? "bg-purple-50/80 border-purple-300"
-                                        : "bg-white hover:border-zinc-400"
+                                        ? "bg-purple-50/80 dark:bg-purple-950/50 border-purple-300 dark:border-purple-800"
+                                        : "bg-card hover:border-foreground/30"
                                     }`}
                                     style={{
                                       borderLeftWidth: "4px",
@@ -807,7 +807,7 @@ export const TeacherTimetableModal: React.FC<TeacherTimetableModalProps> = ({
                                           {cls?.name || "Τμήμα"}
                                         </span>
                                         <span
-                                          className="font-bold text-xs text-zinc-900 leading-tight truncate"
+                                          className="font-bold text-xs text-foreground leading-tight truncate"
                                           title={subject?.title || subject?.code}
                                         >
                                           {subject?.title || subject?.code || "Μάθημα"}
@@ -818,11 +818,11 @@ export const TeacherTimetableModal: React.FC<TeacherTimetableModalProps> = ({
                                       <div className="flex items-center gap-1 flex-none">
                                         {slot.isLocked && (
                                           <span title="Κλειδωμένη ώρα">
-                                            <Lock className="w-2.5 h-2.5 text-zinc-500" />
+                                            <Lock className="w-2.5 h-2.5 text-muted-foreground" />
                                           </span>
                                         )}
                                         {slot.isSupport && (
-                                          <Badge className="h-3.5 px-1 text-[8px] bg-purple-200 text-purple-900 font-mono">
+                                          <Badge className="h-3.5 px-1 text-[8px] bg-purple-200 dark:bg-purple-900 text-purple-900 dark:text-purple-100 font-mono">
                                             Παράλληλη
                                           </Badge>
                                         )}
@@ -831,8 +831,8 @@ export const TeacherTimetableModal: React.FC<TeacherTimetableModalProps> = ({
 
                                     {/* Co-teaching Badge (if other teachers share this slot!) */}
                                     {coTeachers.length > 0 && (
-                                      <div className="mt-1.5 pt-1 border-t border-purple-100 flex items-center gap-1 text-[10px] text-purple-900 bg-purple-100/60 px-1.5 py-0.5 rounded">
-                                        <Users className="w-3 h-3 text-purple-700 flex-none" />
+                                      <div className="mt-1.5 pt-1 border-t border-purple-100 dark:border-purple-900 flex items-center gap-1 text-[10px] text-purple-900 dark:text-purple-200 bg-purple-100/60 dark:bg-purple-900/40 px-1.5 py-0.5 rounded">
+                                        <Users className="w-3 h-3 text-purple-700 dark:text-purple-400 flex-none" />
                                         <span className="truncate">
                                           Συνδ:{" "}
                                           <strong className="font-semibold">
@@ -849,8 +849,8 @@ export const TeacherTimetableModal: React.FC<TeacherTimetableModalProps> = ({
 
                                     {/* Room if available */}
                                     {cls?.room && coTeachers.length === 0 && (
-                                      <div className="mt-1 text-[9.5px] text-zinc-400 font-mono flex items-center gap-1">
-                                        <Building className="w-3 h-3 text-zinc-400" />
+                                      <div className="mt-1 text-[9.5px] text-muted-foreground font-mono flex items-center gap-1">
+                                        <Building className="w-3 h-3 text-muted-foreground" />
                                         <span>Αίθ: {cls.room}</span>
                                       </div>
                                     )}
@@ -870,15 +870,15 @@ export const TeacherTimetableModal: React.FC<TeacherTimetableModalProps> = ({
         </div>
 
         {/* Footer Statistics & Breakdown */}
-        <div className="px-5 py-2.5 border-t border-zinc-200 bg-white flex-none flex items-center justify-between text-xs text-zinc-600">
+        <div className="px-5 py-2.5 border-t border-border bg-card flex-none flex items-center justify-between text-xs text-muted-foreground">
           <div className="flex items-center gap-2 overflow-x-auto max-w-[70%] py-0.5">
-            <span className="font-semibold text-zinc-700 text-[11px] flex-none">
+            <span className="font-semibold text-foreground text-[11px] flex-none">
               Μαθήματα ({subjectStats.length}):
             </span>
             {subjectStats.map(({ subject, hours }) => (
               <span
                 key={subject.id}
-                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-100 border border-zinc-200 text-[10px] text-zinc-700 flex-none font-medium"
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-muted/60 border border-border text-[10px] text-foreground flex-none font-medium"
               >
                 <span
                   className="w-1.5 h-1.5 rounded-full"
@@ -890,7 +890,7 @@ export const TeacherTimetableModal: React.FC<TeacherTimetableModalProps> = ({
           </div>
 
           <div className="flex items-center gap-3 flex-none font-mono text-[11px]">
-            <span className="text-zinc-500">
+            <span className="text-muted-foreground">
               Τμήματα: <strong>{uniqueClassesTaught.map((c) => c.name).join(", ")}</strong>
             </span>
             <Button

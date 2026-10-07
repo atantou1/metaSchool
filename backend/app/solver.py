@@ -143,6 +143,9 @@ def solve_timetable(req: SolveRequest) -> SolveResponse:
         max_h = cons.maxHoursPerDay if cons and cons.maxHoursPerDay is not None else len(all_periods)
         min_h = cons.minHoursPerDay if cons and cons.minHoursPerDay is not None else 0
         max_ch = cons.maxConsecutiveHours if cons and cons.maxConsecutiveHours is not None else None
+        max_cg = cons.maxConsecutiveGaps if cons and cons.maxConsecutiveGaps is not None else None
+        max_tg_day = cons.maxTotalGapsPerDay if cons and cons.maxTotalGapsPerDay is not None else None
+        is_regular_tch = t.isActive and t.isTeaching and not t.isSupport and t.id != 'tch-unassigned'
 
         t_periods = []
         if t.isMorning:
@@ -150,6 +153,29 @@ def solve_timetable(req: SolveRequest) -> SolveResponse:
         if t.isAllDay:
             t_periods.extend(allday_periods)
         t_periods = sorted(list(set(t_periods)))
+
+        # Find active available days where the teacher can potentially have periods
+        valid_avail_days = []
+        for d in range(num_days):
+            if avail_days is not None and d not in avail_days:
+                continue
+            day_has_period = False
+            for p in t_periods:
+                p_vars = [y[k] for k in eligible_tuples if k[0] == t_id and k[4] == d and k[5] == p]
+                if not p_vars:
+                    continue
+                is_avail = True
+                if avail_grid:
+                    d_list = avail_grid.get(str(d))
+                    if d_list and p < len(d_list):
+                        is_avail = d_list[p]
+                if is_avail:
+                    day_has_period = True
+                    break
+            if day_has_period:
+                valid_avail_days.append(d)
+
+        num_valid_days = len(valid_avail_days)
 
         for d in range(num_days):
             daily_p_dict = {}
@@ -187,16 +213,38 @@ def solve_timetable(req: SolveRequest) -> SolveResponse:
             daily_hours = sum(daily_p_dict.values())
             eff_max_h = max_h if not (t.isMorning and t.isAllDay) else max(max_h, len(morning_periods))
 
-            # Enforce minimum hours on active working days:
-            # If working on day d (w_d == 1), then eff_min <= daily_hours <= eff_max_h
-            # If off on day d (w_d == 0), then daily_hours == 0
             w_d = model.NewBoolVar(f"w_{t_id[:4]}_{d}")
             eff_min = min(min_h, eff_max_h) if min_h else 1
-            if min_h and min_h > 0:
-                model.Add(daily_hours >= eff_min * w_d)
+
+            if is_regular_tch and t_max_h > 0:
+                if d in valid_avail_days:
+                    # If the teacher has enough weekly hours to cover all available days, they MUST work on this day
+                    if t_max_h >= num_valid_days:
+                        model.Add(w_d == 1)
+                        if min_h and min_h > 0:
+                            if num_valid_days * min_h <= t_max_h:
+                                eff_min = min(min_h, eff_max_h)
+                            else:
+                                eff_min = max(1, t_max_h // num_valid_days)
+                        else:
+                            eff_min = 1
+                        model.Add(daily_hours >= eff_min)
+                        model.Add(daily_hours <= eff_max_h)
+                    else:
+                        eff_min = min(min_h, eff_max_h) if min_h else 1
+                        model.Add(daily_hours >= eff_min * w_d)
+                        model.Add(daily_hours <= eff_max_h * w_d)
+                else:
+                    model.Add(w_d == 0)
+                    model.Add(daily_hours == 0)
             else:
-                model.Add(daily_hours >= 1 * w_d)
-            model.Add(daily_hours <= eff_max_h * w_d)
+                if d not in valid_avail_days:
+                    model.Add(w_d == 0)
+                    model.Add(daily_hours == 0)
+                else:
+                    eff_min = min(min_h, eff_max_h) if min_h else 1
+                    model.Add(daily_hours >= eff_min * w_d)
+                    model.Add(daily_hours <= eff_max_h * w_d)
 
             # Enforce first & last available hour requirement if enabled
             # Can be configured per teacher (cons.requireFirstAndLastHour) or globally (schoolConfig / req)
@@ -230,6 +278,45 @@ def solve_timetable(req: SolveRequest) -> SolveResponse:
                 for i in range(len(t_periods) - max_ch):
                     consec = [daily_p_dict[t_periods[i + offset]] for offset in range(max_ch + 1)]
                     model.Add(sum(consec) <= max_ch)
+
+            # Max consecutive gaps constraint
+            if max_cg is not None and len(t_periods) >= 3:
+                for i in range(len(t_periods)):
+                    for j in range(i + 1, len(t_periods)):
+                        p_start = t_periods[i]
+                        p_end = t_periods[j]
+                        gap_count = p_end - p_start - 1
+                        if gap_count == max_cg + 1 or (max_cg == 0 and gap_count >= 1):
+                            middle_vars = [daily_p_dict[p] for p in range(p_start + 1, p_end) if p in daily_p_dict]
+                            if middle_vars:
+                                model.Add(daily_p_dict[p_start] + daily_p_dict[p_end] - sum(middle_vars) <= 1)
+                            else:
+                                model.Add(daily_p_dict[p_start] + daily_p_dict[p_end] <= 1)
+
+            # Max total gaps per day constraint (span - daily_hours <= max_tg_day)
+            if max_tg_day is not None:
+                if max_tg_day == 0:
+                    for i in range(len(t_periods)):
+                        for j in range(i + 2, len(t_periods)):
+                            p_start = t_periods[i]
+                            p_end = t_periods[j]
+                            middle_vars = [daily_p_dict[p] for p in range(p_start + 1, p_end) if p in daily_p_dict]
+                            if middle_vars:
+                                model.Add(daily_p_dict[p_start] + daily_p_dict[p_end] - sum(middle_vars) <= 1)
+                            else:
+                                model.Add(daily_p_dict[p_start] + daily_p_dict[p_end] <= 1)
+                else:
+                    start_p = model.NewIntVar(0, len(all_periods), f"st_{t_id[:4]}_{d}")
+                    end_p = model.NewIntVar(0, len(all_periods), f"en_{t_id[:4]}_{d}")
+                    span = model.NewIntVar(0, len(all_periods), f"sp_{t_id[:4]}_{d}")
+
+                    for p in t_periods:
+                        model.Add(start_p <= p).OnlyEnforceIf(daily_p_dict[p])
+                        model.Add(end_p >= p).OnlyEnforceIf(daily_p_dict[p])
+
+                    model.Add(span == end_p - start_p + 1).OnlyEnforceIf(w_d)
+                    model.Add(span == 0).OnlyEnforceIf(w_d.Not())
+                    model.Add(span - daily_hours <= max_tg_day).OnlyEnforceIf(w_d)
 
     # 6. Class schedule & subgroup concurrency constraints
     for c in classes:

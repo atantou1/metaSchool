@@ -421,11 +421,11 @@ export const ClassTimetableModal: React.FC<ClassTimetableModalProps> = ({
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent
-        className="max-w-6xl w-[96vw] max-h-[92vh] h-[92vh] p-0 flex flex-col overflow-hidden bg-white border border-zinc-200 shadow-2xl rounded-xl z-[120]"
+        className="max-w-6xl w-[96vw] max-h-[92vh] h-[92vh] p-0 flex flex-col overflow-hidden bg-card text-card-foreground border border-border shadow-2xl rounded-xl z-[120]"
         showCloseButton={true}
       >
         {/* Header Bar */}
-        <DialogHeader className="px-5 py-3 border-b border-zinc-200 bg-zinc-50/70 flex flex-row items-center justify-between flex-none gap-4">
+        <DialogHeader className="px-5 py-3 border-b border-border bg-muted/40 flex flex-row items-center justify-between flex-none gap-4">
           <div className="flex items-center gap-3">
             <div
               className="h-8 w-8 rounded-lg flex items-center justify-center text-white font-bold text-sm shadow-sm"
@@ -435,39 +435,39 @@ export const ClassTimetableModal: React.FC<ClassTimetableModalProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <DialogTitle className="text-base font-bold text-zinc-900 leading-tight">
+                <DialogTitle className="text-base font-bold text-foreground leading-tight">
                   Πρόγραμμα Τμήματος: {classData.name}
                 </DialogTitle>
-                <Badge variant="outline" className="text-[10px] font-mono border-zinc-300 bg-white">
+                <Badge variant="outline" className="text-[10px] font-mono border-border bg-background">
                   {classData.grade ? `Τάξη ${classData.grade}` : "Τμήμα"}
                 </Badge>
                 {classData.isAllDay && (
-                  <Badge className="bg-amber-100 text-amber-900 border-amber-300 text-[10px]">
+                  <Badge className="bg-amber-100 dark:bg-amber-950/60 text-amber-900 dark:text-amber-300 border-amber-300 dark:border-amber-700 text-[10px]">
                     Ολοήμερο
                   </Badge>
                 )}
               </div>
-              <div className="flex items-center gap-3 text-xs text-zinc-500 mt-0.5 font-sans">
+              <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5 font-sans">
                 {headTeacher && (
                   <span className="flex items-center gap-1">
-                    <User className="w-3.5 h-3.5 text-zinc-400" />
-                    Υπεύθυνος: <strong className="text-zinc-700">{headTeacher.lastName} {headTeacher.firstName}</strong> ({formatSpecialtyLabel(headTeacher.specialty)})
+                    <User className="w-3.5 h-3.5 text-muted-foreground" />
+                    Υπεύθυνος: <strong className="text-foreground">{headTeacher.lastName} {headTeacher.firstName}</strong> ({formatSpecialtyLabel(headTeacher.specialty)})
                   </span>
                 )}
                 {classData.studentsCount && (
                   <span className="flex items-center gap-1">
-                    <Users className="w-3.5 h-3.5 text-zinc-400" />
+                    <Users className="w-3.5 h-3.5 text-muted-foreground" />
                     {classData.studentsCount} Μαθητές
                   </span>
                 )}
                 {classData.room && (
                   <span className="flex items-center gap-1">
-                    <Building className="w-3.5 h-3.5 text-zinc-400" />
+                    <Building className="w-3.5 h-3.5 text-muted-foreground" />
                     Αίθουσα: {classData.room}
                   </span>
                 )}
-                <span className="flex items-center gap-1 font-mono text-[11px] text-zinc-400">
-                  <Clock className="w-3 h-3 text-zinc-400" />
+                <span className="flex items-center gap-1 font-mono text-[11px] text-muted-foreground">
+                  <Clock className="w-3 h-3 text-muted-foreground" />
                   {classSlots.length} ώρες/εβδ.
                 </span>
               </div>
@@ -483,11 +483,11 @@ export const ClassTimetableModal: React.FC<ClassTimetableModalProps> = ({
               onClick={() => setShowAllDay(!showAllDay)}
               className={`h-7 px-2.5 text-[11px] font-sans ${
                 showAllDay
-                  ? "bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-100"
-                  : "bg-white text-zinc-700 hover:bg-zinc-100"
+                  ? "bg-amber-50 dark:bg-amber-950/50 text-amber-900 dark:text-amber-200 border-amber-200 dark:border-amber-800 hover:bg-amber-100"
+                  : "bg-background text-foreground hover:bg-muted"
               }`}
             >
-              <Clock className="w-3.5 h-3.5 mr-1 text-amber-600" />
+              <Clock className="w-3.5 h-3.5 mr-1 text-amber-600 dark:text-amber-400" />
               {showAllDay ? "Απόκρυψη Ολοημέρου" : "Προβολή Ολοημέρου"}
             </Button>
 
@@ -496,9 +496,9 @@ export const ClassTimetableModal: React.FC<ClassTimetableModalProps> = ({
               variant="outline"
               size="sm"
               onClick={handlePrint}
-              className="h-7 px-2.5 text-[11px] font-sans bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-100"
+              className="h-7 px-2.5 text-[11px] font-sans bg-background border-border text-foreground hover:bg-muted"
             >
-              <Printer className="w-3.5 h-3.5 mr-1 text-zinc-600" />
+              <Printer className="w-3.5 h-3.5 mr-1 text-muted-foreground" />
               Εκτύπωση (A4)
             </Button>
 
@@ -507,29 +507,29 @@ export const ClassTimetableModal: React.FC<ClassTimetableModalProps> = ({
               variant="outline"
               size="sm"
               onClick={handleExportCsv}
-              className="h-7 px-2.5 text-[11px] font-sans bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-100"
+              className="h-7 px-2.5 text-[11px] font-sans bg-background border-border text-foreground hover:bg-muted"
             >
-              <Download className="w-3.5 h-3.5 mr-1 text-zinc-600" />
+              <Download className="w-3.5 h-3.5 mr-1 text-muted-foreground" />
               CSV
             </Button>
           </div>
         </DialogHeader>
 
         {/* Content Body: Timetable Grid */}
-        <div className="flex-1 overflow-auto p-4 bg-zinc-100/60" ref={printAreaRef}>
-          <div className="bg-white rounded-lg border border-zinc-200 shadow-sm overflow-hidden min-w-[700px]">
+        <div className="flex-1 overflow-auto p-4 bg-muted/30" ref={printAreaRef}>
+          <div className="bg-card rounded-lg border border-border shadow-sm overflow-hidden min-w-[700px]">
             <table className="w-full border-collapse text-left font-sans">
               <thead>
-                <tr className="border-b border-zinc-200">
+                <tr className="border-b border-border">
                   {/* Left Corner header */}
-                  <th className="w-24 p-2.5 bg-zinc-100/80 border-r border-zinc-200 text-[11px] font-bold text-zinc-700 text-center">
+                  <th className="w-24 p-2.5 bg-muted/60 border-r border-border text-[11px] font-bold text-foreground text-center">
                     ΩΡΑ
                   </th>
                   {/* 5 Day Headers */}
                   {days.map((day) => (
                     <th
                       key={day.index}
-                      className={`p-2.5 border-r border-zinc-200 text-center ${day.headerBg} last:border-r-0`}
+                      className={`p-2.5 border-r border-border text-center bg-muted/50 text-foreground last:border-r-0`}
                     >
                       <div className="text-xs font-bold tracking-wide uppercase">
                         {day.name}
@@ -538,27 +538,27 @@ export const ClassTimetableModal: React.FC<ClassTimetableModalProps> = ({
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-200 text-xs">
+              <tbody className="divide-y divide-border text-xs">
                 {activePeriods.map((period) => (
                   <tr
                     key={period.index}
-                    className={`hover:bg-zinc-50/60 transition-colors ${
-                      period.isAllDay ? "bg-amber-50/20" : ""
+                    className={`hover:bg-muted/40 transition-colors ${
+                      period.isAllDay ? "bg-amber-50/20 dark:bg-amber-950/20" : ""
                     }`}
                   >
                     {/* Period Row Label (Left Axis) */}
                     <td
-                      className={`p-2 border-r border-zinc-200 text-center select-none ${
+                      className={`p-2 border-r border-border text-center select-none ${
                         period.isAllDay
-                          ? "bg-amber-50/60 text-amber-900 border-r-amber-200"
-                          : "bg-zinc-50/80 text-zinc-700"
+                          ? "bg-amber-50/60 dark:bg-amber-950/40 text-amber-900 dark:text-amber-300 border-r-amber-200 dark:border-r-amber-800"
+                          : "bg-muted/40 text-foreground"
                       }`}
                     >
                       <div className="font-bold text-[11px] font-mono leading-tight">
                         {period.label}
                       </div>
                       {period.timeRange && (
-                        <div className="text-[10px] text-zinc-400 font-mono mt-0.5">
+                        <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
                           {period.timeRange}
                         </div>
                       )}
@@ -572,10 +572,10 @@ export const ClassTimetableModal: React.FC<ClassTimetableModalProps> = ({
                       return (
                         <td
                           key={cellKey}
-                          className="p-1.5 border-r border-zinc-200 last:border-r-0 align-top h-16 min-h-[64px]"
+                          className="p-1.5 border-r border-border last:border-r-0 align-top h-16 min-h-[64px]"
                         >
                           {slots.length === 0 ? (
-                            <div className="h-full w-full min-h-[48px] rounded border border-dashed border-zinc-200/80 flex items-center justify-center text-[10px] text-zinc-300 font-mono select-none">
+                            <div className="h-full w-full min-h-[48px] rounded border border-dashed border-border/80 flex items-center justify-center text-[10px] text-muted-foreground font-mono select-none">
                               —
                             </div>
                           ) : (
@@ -592,10 +592,10 @@ export const ClassTimetableModal: React.FC<ClassTimetableModalProps> = ({
                                 return (
                                   <div
                                     key={slot.id}
-                                    className={`relative flex flex-col justify-between p-2 rounded-md border text-left shadow-2xs transition-all ${
+                                    className={`relative flex flex-col justify-between p-2 rounded-md border border-border text-left shadow-2xs transition-all ${
                                       slot.isSupport
-                                        ? "bg-purple-50/80 border-purple-300"
-                                        : "bg-white hover:border-zinc-400"
+                                        ? "bg-purple-50/80 dark:bg-purple-950/50 border-purple-300 dark:border-purple-800"
+                                        : "bg-card hover:border-foreground/30"
                                     }`}
                                     style={{
                                       borderLeftWidth: "4px",
@@ -605,7 +605,7 @@ export const ClassTimetableModal: React.FC<ClassTimetableModalProps> = ({
                                     {/* Top Row: Subject Title */}
                                     <div className="flex items-start justify-between gap-1">
                                       <span
-                                        className="font-bold text-xs text-zinc-900 leading-tight truncate"
+                                        className="font-bold text-xs text-foreground leading-tight truncate"
                                         title={subject?.title || subject?.code}
                                       >
                                         {subject?.title || subject?.code || "Άγνωστο"}
@@ -615,11 +615,11 @@ export const ClassTimetableModal: React.FC<ClassTimetableModalProps> = ({
                                       <div className="flex items-center gap-1 flex-none">
                                         {slot.isLocked && (
                                           <span title="Κλειδωμένη ώρα">
-                                            <Lock className="w-2.5 h-2.5 text-zinc-500" />
+                                            <Lock className="w-2.5 h-2.5 text-muted-foreground" />
                                           </span>
                                         )}
                                         {slot.isSupport && (
-                                          <Badge className="h-3.5 px-1 text-[8px] bg-purple-200 text-purple-900 font-mono">
+                                          <Badge className="h-3.5 px-1 text-[8px] bg-purple-200 dark:bg-purple-900 text-purple-900 dark:text-purple-100 font-mono">
                                             Παράλληλη
                                           </Badge>
                                         )}
@@ -639,24 +639,18 @@ export const ClassTimetableModal: React.FC<ClassTimetableModalProps> = ({
                                               {getTeacherAbbr(teacher)}
                                             </span>
                                             <span
-                                              className="truncate text-zinc-600 font-medium text-[10.5px]"
+                                              className="truncate text-muted-foreground font-medium text-[10.5px]"
                                               title={`${teacher.lastName} ${teacher.firstName}`}
                                             >
                                               {teacher.lastName} {teacher.firstName ? teacher.firstName[0] + "." : ""}
                                             </span>
                                           </>
                                         ) : (
-                                          <span className="text-amber-600 italic text-[10px]">
+                                          <span className="text-amber-600 dark:text-amber-400 italic text-[10px]">
                                             Χωρίς Ανάθεση
                                           </span>
                                         )}
                                       </div>
-
-                                      {teacher?.specialty && (
-                                        <span className="text-[9px] font-mono text-zinc-400 flex-none">
-                                          {teacher.specialty}
-                                        </span>
-                                      )}
                                     </div>
                                   </div>
                                 );
@@ -674,15 +668,15 @@ export const ClassTimetableModal: React.FC<ClassTimetableModalProps> = ({
         </div>
 
         {/* Footer Statistics & Teachers summary */}
-        <div className="px-5 py-2.5 border-t border-zinc-200 bg-white flex-none flex items-center justify-between text-xs text-zinc-600">
+        <div className="px-5 py-2.5 border-t border-border bg-card flex-none flex items-center justify-between text-xs text-muted-foreground">
           <div className="flex items-center gap-2 overflow-x-auto max-w-[70%] py-0.5">
-            <span className="font-semibold text-zinc-700 text-[11px] flex-none">
+            <span className="font-semibold text-foreground text-[11px] flex-none">
               Μαθήματα ({subjectStats.length}):
             </span>
             {subjectStats.map(({ subject, hours }) => (
               <span
                 key={subject.id}
-                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-100 border border-zinc-200 text-[10px] text-zinc-700 flex-none font-medium"
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-muted/60 border border-border text-[10px] text-foreground flex-none font-medium"
               >
                 <span
                   className="w-1.5 h-1.5 rounded-full"
@@ -694,7 +688,7 @@ export const ClassTimetableModal: React.FC<ClassTimetableModalProps> = ({
           </div>
 
           <div className="flex items-center gap-3 flex-none font-mono text-[11px]">
-            <span className="text-zinc-500">
+            <span className="text-muted-foreground">
               Διδάσκοντες: <strong>{classTeachers.length}</strong>
             </span>
             <Button

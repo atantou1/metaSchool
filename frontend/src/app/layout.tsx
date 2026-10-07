@@ -3,6 +3,7 @@ import { Manrope } from "next/font/google";
 import "./globals.css";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
+import { ThemeProvider } from "@/components/theme-provider";
 
 const manrope = Manrope({
   variable: "--font-manrope",
@@ -23,13 +24,20 @@ export default function RootLayout({
   return (
     <html lang="el" className={`${manrope.variable} antialiased`} suppressHydrationWarning>
       <body
-        className="min-h-screen bg-zinc-50/50 text-zinc-900 font-sans selection:bg-zinc-200 selection:text-zinc-900"
+        className="min-h-screen bg-background text-foreground font-sans selection:bg-zinc-200 selection:text-zinc-900 dark:selection:bg-zinc-700 dark:selection:text-zinc-100"
         suppressHydrationWarning
       >
-        <TooltipProvider>
-          {children}
-          <Toaster richColors position="top-right" theme="light" />
-        </TooltipProvider>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <TooltipProvider>
+            {children}
+            <Toaster richColors position="top-right" duration={1500} closeButton />
+          </TooltipProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

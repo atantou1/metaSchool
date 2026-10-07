@@ -543,21 +543,21 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
   };
 
   return (
-    <div className="w-full h-full flex-1 overflow-auto bg-white select-none relative">
+    <div className="w-full h-full flex-1 overflow-auto bg-background text-foreground select-none relative">
       {/* Floating Tooltip when left-clicking a tile */}
       {focusedTile && (
         <div
-          className="fixed z-50 pointer-events-none px-2.5 py-1 rounded bg-zinc-900 text-white text-[11px] font-sans font-medium shadow-xl border border-zinc-700 -translate-x-1/2 -translate-y-full mb-1 animate-in fade-in zoom-in-95 duration-75"
+          className="fixed z-50 pointer-events-none px-2.5 py-1 rounded bg-zinc-900 dark:bg-zinc-800 text-white text-[11px] font-sans font-medium shadow-xl border border-zinc-700 -translate-x-1/2 -translate-y-full mb-1 animate-in fade-in zoom-in-95 duration-75"
           style={{ left: focusedTile.x, top: focusedTile.y - 4 }}
         >
           {focusedTile.teacherName}
-          <div className="absolute left-1/2 -bottom-1 -translate-x-1/2 border-4 border-transparent border-t-zinc-900" />
+          <div className="absolute left-1/2 -bottom-1 -translate-x-1/2 border-4 border-transparent border-t-zinc-900 dark:border-t-zinc-800" />
         </div>
       )}
 
       {/* Floating Swap Banner */}
       {swapSourceSlot && (
-        <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-4 py-2 rounded-full bg-zinc-900 text-white text-xs font-sans shadow-2xl border border-zinc-700 animate-in slide-in-from-bottom-4 duration-150">
+        <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-4 py-2 rounded-full bg-zinc-900 dark:bg-zinc-800 text-white text-xs font-sans shadow-2xl border border-zinc-700 animate-in slide-in-from-bottom-4 duration-150">
           <span className="flex items-center gap-2">
             <ArrowRightLeft className="w-4 h-4 text-amber-400 animate-spin" />
             <span>
@@ -579,7 +579,7 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
 
       {/* Floating Copied Indicator Banner */}
       {copiedTeacher && (
-        <div className="fixed bottom-10 right-8 z-50 flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-900 text-white text-xs font-sans shadow-2xl border border-blue-500/40 animate-in slide-in-from-bottom-3 duration-150">
+        <div className="fixed bottom-10 right-8 z-50 flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-900 dark:bg-zinc-800 text-white text-xs font-sans shadow-2xl border border-blue-500/40 animate-in slide-in-from-bottom-3 duration-150">
           <Copy className="w-3.5 h-3.5 text-blue-400" />
           <span>
             Αντιγραφή: <strong className="text-blue-300 font-mono font-bold">[{copiedTeacher.abbr}]</strong> {copiedTeacher.name}
@@ -617,18 +617,18 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
         </colgroup>
 
         {/* Header with Days & Hours */}
-        <thead className="bg-zinc-100 select-none">
+        <thead className="bg-zinc-100 dark:bg-zinc-900 select-none">
           {/* ROW 1: Days */}
-          <tr className="h-[26px] text-[11px] font-semibold text-zinc-800 border-b border-zinc-200">
-            <th className="sticky-top-left-1 bg-zinc-200 border-r-2 border-zinc-300 text-zinc-700 font-mono text-[10px]">
+          <tr className="h-[26px] text-[11px] font-semibold text-zinc-800 dark:text-zinc-200 border-b border-zinc-200 dark:border-zinc-800">
+            <th className="sticky-top-left-1 bg-zinc-200 dark:bg-zinc-800 border-r-2 border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 font-mono text-[10px]">
               ΤΜ
             </th>
             {days.map((day, idx) => (
               <th
                 key={day.index}
-                className={`sticky-day-head bg-zinc-100 ${
-                  idx === 4 ? "border-r border-zinc-200" : "border-r-2 border-zinc-300"
-                } text-zinc-900 border-b border-zinc-200`}
+                className={`sticky-day-head bg-zinc-100 dark:bg-zinc-900 ${
+                  idx === 4 ? "border-r border-zinc-200 dark:border-zinc-800" : "border-r-2 border-zinc-300 dark:border-zinc-700"
+                } text-zinc-900 dark:text-zinc-100 border-b border-zinc-200 dark:border-zinc-800`}
                 colSpan={10}
               >
                 <span className="inline-flex items-center gap-1 font-bold">
@@ -640,8 +640,8 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
           </tr>
 
           {/* ROW 2: Hours: 1-6 morning, 1-4 all-day */}
-          <tr className="h-6 text-[9px] font-mono text-zinc-600 bg-white border-b border-zinc-200">
-            <th className="sticky-top-left-2 bg-zinc-200 border-r-2 border-zinc-300 text-zinc-600 font-semibold">
+          <tr className="h-6 text-[9px] font-mono text-zinc-600 dark:text-zinc-400 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800">
+            <th className="sticky-top-left-2 bg-zinc-200 dark:bg-zinc-800 border-r-2 border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 font-semibold">
               ΩΡΑ
             </th>
             {days.map((day) =>
@@ -655,12 +655,12 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
                     key={`${day.index}_${p.index}`}
                     className={`sticky-hour-head ${
                       isAllDay
-                        ? "bg-amber-50/70 text-amber-800 font-bold"
-                        : "bg-white text-zinc-700"
+                        ? "bg-amber-50/70 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 font-bold"
+                        : "bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300"
                     } ${
                       isLastMorning || isLastAllDay
-                        ? "border-r-2 border-zinc-300 font-bold"
-                        : "border-r border-zinc-200"
+                        ? "border-r-2 border-zinc-300 dark:border-zinc-700 font-bold"
+                        : "border-r border-zinc-200 dark:border-zinc-800"
                     }`}
                   >
                     {p.label}
@@ -672,20 +672,20 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
         </thead>
 
         {/* Table Body */}
-        <tbody className="divide-y divide-zinc-200 text-[10px]">
+        <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800 text-[10px]">
           {sortedClasses.map((cls) => {
             const isResourceClass =
               cls.name.includes("Τ.Ε.") || cls.name.includes("ΕΝΤΑΞ");
 
             return (
-              <tr key={cls.id} className="hover:bg-zinc-50 group">
+              <tr key={cls.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-900/50 group">
                 {/* Sticky Class Column */}
                 <td
                   className={`sticky-col ${
                     isResourceClass
-                      ? "bg-purple-100 group-hover:bg-purple-200 text-purple-900 border-purple-300"
-                      : "bg-zinc-100 group-hover:bg-zinc-200 text-zinc-900 border-zinc-300"
-                  } border-r-2 font-bold text-center select-none cursor-default hover:bg-zinc-200/90 transition-colors`}
+                      ? "bg-purple-100 dark:bg-purple-950/60 group-hover:bg-purple-200 dark:group-hover:bg-purple-900/80 text-purple-900 dark:text-purple-200 border-purple-300 dark:border-purple-800"
+                      : "bg-zinc-100 dark:bg-zinc-900 group-hover:bg-zinc-200 dark:group-hover:bg-zinc-800 text-zinc-900 dark:text-zinc-100 border-zinc-300 dark:border-zinc-700"
+                  } border-r-2 font-bold text-center select-none cursor-default hover:bg-zinc-200/90 dark:hover:bg-zinc-800 transition-colors`}
                   title={`${cls.name} (Διπλό κλικ για αναλυτικό πρόγραμμα)`}
                   onDoubleClick={() => setSelectedClassForModal(cls)}
                 >
@@ -710,11 +710,11 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
                         key={cellKey}
                         className={`${
                           isLastMorning || isLastAllDay
-                            ? "border-r-2 border-zinc-300"
-                            : "border-r border-zinc-200"
+                            ? "border-r-2 border-zinc-300 dark:border-zinc-700"
+                            : "border-r border-zinc-200 dark:border-zinc-800"
                         } ${
-                          isAllDay ? "bg-amber-50/30" : "bg-white"
-                        } border-b border-zinc-200`}
+                          isAllDay ? "bg-amber-50/30 dark:bg-amber-950/20" : "bg-white dark:bg-zinc-950"
+                        } border-b border-zinc-200 dark:border-zinc-800`}
                       >
                         {slots.length === 0 ? (
                           /* Empty Cell with its own Context Menu */
@@ -726,7 +726,7 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
                                 }
                                 className={`t-empty ${
                                   swapSourceSlot
-                                    ? "hover:bg-amber-100/60"
+                                    ? "hover:bg-amber-100/60 dark:hover:bg-amber-900/40"
                                     : ""
                                 }`}
                               />

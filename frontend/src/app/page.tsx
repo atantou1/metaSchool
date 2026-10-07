@@ -42,8 +42,10 @@ export default function Home() {
   const [diagnosticItems, setDiagnosticItems] = useState<ConflictDiagnosticItem[]>([]);
   const [diagnosticConflicts, setDiagnosticConflicts] = useState<string[]>([]);
 
-  const loadData = async () => {
-    setIsLoading(true);
+  const loadData = async (isInitial = false) => {
+    if (isInitial || !data) {
+      setIsLoading(true);
+    }
     setLoadError(null);
     try {
       const res = await fetch("/api/timetable");
@@ -65,7 +67,7 @@ export default function Home() {
   };
 
   useEffect(() => {
-    loadData();
+    loadData(true);
   }, []);
 
 
@@ -123,7 +125,7 @@ export default function Home() {
             <h3 className="font-semibold text-sm text-zinc-900">Σφάλμα Σύνδεσης</h3>
             <p className="text-xs text-zinc-500 mt-1">{loadError}</p>
           </div>
-          <Button onClick={loadData} size="sm" className="h-8 text-xs bg-zinc-900 text-white hover:bg-zinc-800">
+          <Button onClick={() => loadData(true)} size="sm" className="h-8 text-xs bg-zinc-900 text-white hover:bg-zinc-800">
             Δοκιμάστε ξανά
           </Button>
         </div>
@@ -133,9 +135,9 @@ export default function Home() {
 
   if (isLoading || !data) {
     return (
-      <div className="flex h-screen w-full items-center justify-center bg-zinc-50 text-zinc-700">
+      <div className="flex h-screen w-full items-center justify-center bg-background text-foreground">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-zinc-300 border-t-zinc-800 rounded-full animate-spin" />
+          <div className="w-8 h-8 border-2 border-zinc-300 border-t-zinc-800 dark:border-zinc-700 dark:border-t-zinc-200 rounded-full animate-spin" />
           <p className="text-xs text-zinc-500 font-mono tracking-wide">
             Φόρτωση συστήματος metaSchool...
           </p>
@@ -145,7 +147,7 @@ export default function Home() {
   }
 
   return (
-    <div className="h-screen w-full flex flex-col overflow-hidden bg-white font-sans text-xs selection:bg-zinc-800 selection:text-white">
+    <div className="h-screen w-full flex flex-col overflow-hidden bg-background text-foreground font-sans text-xs selection:bg-zinc-800 selection:text-white dark:selection:bg-zinc-700">
       <SiteHeader
         schoolName={data.schoolConfig?.schoolName}
         rightActions={
@@ -154,7 +156,7 @@ export default function Home() {
               variant="outline"
               size="sm"
               onClick={() => setActiveSheet("classes")}
-              className="h-6 px-2 text-[10px] font-sans border-zinc-200 text-zinc-700 hover:text-zinc-900 hover:bg-zinc-100"
+              className="h-6 px-2 text-[10px] font-sans border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800"
             >
               <GraduationCap className="w-3 h-3 mr-1" />
               Τμήματα
@@ -164,7 +166,7 @@ export default function Home() {
               variant="outline"
               size="sm"
               onClick={() => setActiveSheet("teachers")}
-              className="h-6 px-2 text-[10px] font-sans border-zinc-200 text-zinc-700 hover:text-zinc-900 hover:bg-zinc-100"
+              className="h-6 px-2 text-[10px] font-sans border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800"
             >
               <Users className="w-3 h-3 mr-1" />
               Εκπαιδευτικοί
@@ -174,7 +176,7 @@ export default function Home() {
               variant="outline"
               size="sm"
               onClick={() => setActiveSheet("subjects")}
-              className="h-6 px-2 text-[10px] font-sans border-zinc-200 text-zinc-700 hover:text-zinc-900 hover:bg-zinc-100"
+              className="h-6 px-2 text-[10px] font-sans border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800"
             >
               <BookOpen className="w-3 h-3 mr-1" />
               Μαθήματα
@@ -184,7 +186,7 @@ export default function Home() {
               variant="outline"
               size="sm"
               onClick={() => setActiveSheet("rules")}
-              className="h-6 px-2 text-[10px] font-sans border-zinc-200 text-zinc-700 hover:text-zinc-900 hover:bg-zinc-100"
+              className="h-6 px-2 text-[10px] font-sans border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800"
             >
               <CalendarDays className="w-3 h-3 mr-1" />
               Κανόνες
@@ -194,11 +196,11 @@ export default function Home() {
               size="sm"
               onClick={handleSolve}
               disabled={isSolving}
-              className="h-6 px-2.5 text-[10px] font-sans bg-zinc-900 hover:bg-zinc-800 text-white"
+              className="h-6 px-2.5 text-[10px] font-sans bg-zinc-900 dark:bg-zinc-100 hover:bg-zinc-800 dark:hover:bg-zinc-200 text-white dark:text-zinc-900"
             >
               <Sparkles
                 className={`w-3 h-3 mr-1 ${
-                  isSolving ? "animate-spin text-amber-300" : "text-amber-400"
+                  isSolving ? "animate-spin text-amber-300 dark:text-amber-600" : "text-amber-400 dark:text-amber-600"
                 }`}
               />
               {isSolving ? "Επίλυση..." : "Επίλυση"}
@@ -208,7 +210,7 @@ export default function Home() {
       />
 
       {/* Full-Screen Master Matrix Table */}
-      <main className="flex-1 overflow-auto bg-white relative">
+      <main className="flex-1 overflow-auto bg-background relative">
         <MasterMatrix
           data={data}
           onRefresh={loadData}
@@ -218,7 +220,7 @@ export default function Home() {
       </main>
 
       {/* Footer Bar */}
-      <footer className="h-6 flex-none border-t border-zinc-200 bg-zinc-50 px-3 flex items-center justify-between text-[10px] text-zinc-600 select-none z-30" />
+      <footer className="h-6 flex-none border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 px-3 flex items-center justify-between text-[10px] text-zinc-600 dark:text-zinc-400 select-none z-30" />
 
       {/* Slide-over Sheets for Managers */}
       <Sheet
@@ -227,7 +229,7 @@ export default function Home() {
       >
         <SheetContent
           side="right"
-          className="!w-screen sm:!w-screen !max-w-none inset-0 rounded-none overflow-hidden p-0 flex flex-col bg-zinc-100/60 border-none"
+          className="!w-screen sm:!w-screen !max-w-none inset-0 rounded-none overflow-hidden p-0 flex flex-col bg-zinc-100/60 dark:bg-zinc-950/80 border-none"
         >
           {activeSheet === "classes" && (
             <ClassesManager
