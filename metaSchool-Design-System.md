@@ -49,7 +49,9 @@
    - **Page Headings:** `text-lg` έως `text-xl` (`font-bold`, `tracking-tight`).
    - **Card / Section Titles:** `text-sm` έως `text-base` (`font-semibold text-zinc-900`).
    - **Body / Table Cells / Inputs:** `text-xs` (`text-zinc-700` / `text-zinc-800`).
-   - **Badges / Micro Tags / Matrix Slots:** `text-[9px]` έως `text-[11px]` (`font-bold` ή `font-medium`).
+   - **Teacher Tiles & Abbreviations:** 4 κεφαλαία γράμματα χωρίς τόνους (π.χ. `ΠΑΠΑ`, `ΚΩΝΣ`, `ΓΕΩΡ`).
+     - **Πρωινό Ωράριο (Default):** Στήλες `44px`, γραμματοσειρά `text-[11.5px] font-bold` (υποκελιά: `10px` / `9px`), με έντονους κάθετους διαχωριστές ημερών (`border-r-[3.5px] border-zinc-400 dark:border-zinc-500`) και ομοιόχρωμα παχιά οριζόντια χωρίσματα τμημάτων (`border-b-2 border-zinc-400 dark:border-zinc-500`).
+     - **Πλήρες (+Ολοήμερο):** Στήλες `36px`, γραμματοσειρά `text-[10px] font-bold` (υποκελιά: `9px` / `8px`), λεπτά χωρίσματα `border-b border-zinc-200 dark:border-zinc-800`.
    - **Subtitles & Help Text:** `text-[11px]` έως `text-xs` (`text-zinc-500` / `text-muted-foreground`).
 
 ---

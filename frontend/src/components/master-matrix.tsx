@@ -20,7 +20,7 @@ import {
   ContextMenuLabel,
 } from "@/components/ui/context-menu";
 import { getTeacherAbbr, getTeacherStyleClass, getTeacherTileInlineStyle } from "@/lib/teacher-utils";
-import { formatSpecialtyLabel } from "@/lib/specialties";
+import { formatSpecialtyLabel, getSpecialtyByCode, findSpecialty } from "@/lib/specialties";
 import {
   ArrowRightLeft,
   UserCheck,
@@ -32,16 +32,22 @@ import {
   ClipboardPaste,
   X,
   CalendarDays,
+  Users,
+  Check,
+  Lock,
 } from "lucide-react";
 import { toast } from "sonner";
 import { ClassTimetableModal } from "./class-timetable-modal";
 import { TeacherTimetableModal } from "./teacher-timetable-modal";
+import { StudentSelectModal } from "./student-select-modal";
 
 interface MasterMatrixProps {
   data: TimetableData;
   onRefresh: () => void;
   spotlightTeacherId: string | null;
   onSelectTeacherSpotlight: (teacherId: string | null) => void;
+  showAllDay?: boolean;
+  onToggleAllDay?: (show: boolean) => void;
 }
 
 export const MasterMatrix: React.FC<MasterMatrixProps> = ({
@@ -49,7 +55,12 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
   onRefresh,
   spotlightTeacherId,
   onSelectTeacherSpotlight,
+  showAllDay: controlledShowAllDay,
+  onToggleAllDay,
 }) => {
+  const [internalShowAllDay, setInternalShowAllDay] = useState(false);
+  const showAllDay = controlledShowAllDay !== undefined ? controlledShowAllDay : internalShowAllDay;
+
   // Floating tooltip state on left-click
   const [focusedTile, setFocusedTile] = useState<{
     slotId: string;
@@ -76,6 +87,9 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
 
   // Selected teacher for Teacher Timetable Modal (right-click on teacher tile)
   const [selectedTeacherForModal, setSelectedTeacherForModal] = useState<Teacher | null>(null);
+
+  // Selected slot for Student Selection Modal (right-click on support tile)
+  const [selectedSlotForStudentPicker, setSelectedSlotForStudentPicker] = useState<TimetableSlot | null>(null);
 
   // Maps for fast lookups
   const teacherMap = useMemo(
@@ -129,19 +143,53 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
     { index: 4, name: "Παρασκευή", dotColor: "bg-rose-500" },
   ];
 
-  // 10 period columns per day: 6 morning (0-5) and 4 all-day (6-9)
-  const periods = [
-    { index: 0, label: "1", isAllDay: false },
-    { index: 1, label: "2", isAllDay: false },
-    { index: 2, label: "3", isAllDay: false },
-    { index: 3, label: "4", isAllDay: false },
-    { index: 4, label: "5", isAllDay: false },
-    { index: 5, label: "6", isAllDay: false },
-    { index: 6, label: "1", isAllDay: true },
-    { index: 7, label: "2", isAllDay: true },
-    { index: 8, label: "3", isAllDay: true },
-    { index: 9, label: "4", isAllDay: true },
-  ];
+  const morningCount = useMemo(() => {
+    return data.schoolConfig?.periods?.length || 6;
+  }, [data.schoolConfig]);
+
+  const hasAllDay = useMemo(() => {
+    return Boolean(
+      data.schoolConfig?.hasAllDay !== undefined
+        ? data.schoolConfig.hasAllDay
+        : data.schoolConfig?.allDayPeriods && data.schoolConfig.allDayPeriods.length > 0
+    );
+  }, [data.schoolConfig]);
+
+  const allDayCount = useMemo(() => {
+    return hasAllDay ? (data.schoolConfig?.allDayPeriods?.length ?? 4) : 0;
+  }, [hasAllDay, data.schoolConfig]);
+
+  // Dynamic period columns per day derived from schoolConfig
+  const allPeriods = useMemo(() => {
+    const allDayList = hasAllDay
+      ? data.schoolConfig?.allDayPeriods || [
+          { index: 6, label: "1", startTime: "13:20", endTime: "14:00", isAllDay: true },
+          { index: 7, label: "2", startTime: "14:15", endTime: "15:00", isAllDay: true },
+          { index: 8, label: "3", startTime: "15:15", endTime: "16:00", isAllDay: true },
+          { index: 9, label: "4", startTime: "16:10", endTime: "16:55", isAllDay: true },
+        ]
+      : [];
+
+    const morning = Array.from({ length: morningCount }, (_, i) => ({
+      index: i,
+      label: `${i + 1}`,
+      isAllDay: false,
+    }));
+
+    const allDay = allDayList.map((p, i) => ({
+      index: p.index !== undefined ? p.index : 6 + i,
+      label: `${i + 1}`,
+      isAllDay: true,
+    }));
+
+    return [...morning, ...allDay];
+  }, [morningCount, hasAllDay, data.schoolConfig]);
+
+  // Filter periods dynamically based on showAllDay toggle
+  const periods = useMemo(() => {
+    if (showAllDay && allDayCount > 0) return allPeriods;
+    return allPeriods.filter((p) => !p.isAllDay);
+  }, [showAllDay, allDayCount, allPeriods]);
 
   // Classes sorted
   const sortedClasses = useMemo(() => {
@@ -173,10 +221,14 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
     const teacherName = teacher
       ? `${teacher.lastName} ${teacher.firstName} (${formatSpecialtyLabel(teacher.specialty)})`
       : "Χωρίς Ανάθεση";
+    const studentInfo =
+      slot.students && slot.students.length > 0
+        ? ` • 👥 Μαθητές (${slot.students.length}): ${slot.students.join(", ")}`
+        : "";
 
     setFocusedTile({
       slotId: slot.id,
-      teacherName,
+      teacherName: `${teacherName}${studentInfo}`,
       x: rect.left + rect.width / 2,
       y: rect.top,
     });
@@ -313,6 +365,23 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
     }
   };
 
+  // Save selected students for a slot
+  const handleSaveSlotStudents = async (slotId: string, students: string[]) => {
+    const res = await fetch("/api/timetable/slots", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        slotId,
+        students,
+      }),
+    });
+    const json = await res.json();
+    if (!res.ok || !json.success) {
+      throw new Error(json.error || "Αποτυχία αποθήκευσης μαθητών");
+    }
+    onRefresh();
+  };
+
   // Delete slot
   const handleDeleteSlot = async (slotId: string) => {
     try {
@@ -359,19 +428,39 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
     }
   };
 
+  // Helper for period display label
+  const getPeriodLabel = (period: number) => {
+    if (hasAllDay && period >= 6) {
+      return `${period - 5}η Ολοημέρου`;
+    }
+    return `${period + 1}η`;
+  };
+
   // Render individual tile wrapped in its own Context Menu
   const renderTileWithContextMenu = (
     slot: TimetableSlot,
     isSubTile: boolean,
     cls: ClassEntity,
     day: { index: number; name: string },
-    p: { index: number },
+    effectivePeriod: number,
     totalSlotsInCell: number
   ) => {
     const teacher = teacherMap.get(slot.teacherId);
+    const subject = subjectMap.get(slot.subjectId);
     const abbr = getTeacherAbbr(teacher);
     const styleClass = getTeacherStyleClass(abbr);
     const isUnassigned = slot.teacherId === "tch-unassigned";
+    const periodLabel = getPeriodLabel(effectivePeriod);
+
+    // Determine if this is a support slot (pull-out / complementary specialty)
+    const isSupportSlot = Boolean(
+      slot.isSupport ||
+      teacher?.isSupport ||
+      (subject?.allowedSpecialties && subject.allowedSpecialties.some(code => {
+        const sp = getSpecialtyByCode(code) || findSpecialty(code);
+        return sp?.type === "ΣΥΜΠΛΗΡΩΜΑΤΙΚΗ";
+      }))
+    );
 
     const isSpotlighted =
       !spotlightTeacherId || slot.teacherId === spotlightTeacherId;
@@ -394,7 +483,7 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
           >
             {abbr}
 
-            {/* Discreet round circle badge for pinned/locked slot (super small so it never covers letters) */}
+            {/* Discreet round circle badge for pinned/locked slot */}
             {slot.isLocked && (
               <span
                 className={`absolute ${
@@ -405,16 +494,186 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
                 title="Καρφιτσωμένη θέση"
               />
             )}
+
+            {/* Discreet student count badge indicator */}
+            {slot.students && slot.students.length > 0 && (
+              <span
+                className={`absolute ${
+                  isSubTile
+                    ? "bottom-0.5 right-0.5 px-0.5 text-[7px]"
+                    : "bottom-0.5 right-0.5 px-1 text-[8px]"
+                } rounded-full bg-purple-700 text-white font-mono font-bold leading-none pointer-events-none z-10 shadow-xs ring-[0.5px] ring-white/90`}
+                title={`Μαθητές (${slot.students.length}): ${slot.students.join(", ")}`}
+              >
+                {slot.students.length}
+              </span>
+            )}
           </div>
         </ContextMenuTrigger>
 
         <ContextMenuContent className="w-56 font-sans text-xs">
           <ContextMenuLabel className="font-semibold text-zinc-900 text-[11px] truncate">
-            {cls.name} • {day.name} {p.index + 1}η • [{abbr}] {isUnassigned ? "Κενή Θέση" : teacher?.lastName}
+            {cls.name} • {day.name} {periodLabel} • [{abbr}] {isUnassigned ? "Κενή Θέση" : teacher?.lastName}
           </ContextMenuLabel>
           <ContextMenuSeparator />
 
-          {/* 0. Πρόγραμμα Εκπαιδευτικού */}
+          {/* 0. Επιλογή Μαθητών Submenu (για συμπληρωματικές ειδικότητες / υποστήριξη) */}
+          {isSupportSlot && (() => {
+            const classStudents = cls.students || [];
+            const otherSlots = data.slots.filter(
+              (s) =>
+                s.id !== slot.id &&
+                s.day === slot.day &&
+                s.period === slot.period &&
+                s.classId === slot.classId
+            );
+            const occupiedStudentsMap = new Map<string, string>();
+            otherSlots.forEach((os) => {
+              if (os.students && Array.isArray(os.students)) {
+                const tch = teacherMap.get(os.teacherId);
+                const sub = subjectMap.get(os.subjectId);
+                const desc = `${sub?.title || sub?.code || "Ειδικότητα"} (${tch ? tch.lastName : ""})`;
+                os.students.forEach((st) => occupiedStudentsMap.set(st, desc));
+              }
+            });
+
+            const currentSlotStudents = slot.students || [];
+            const availableStudents = classStudents.filter((st) => !occupiedStudentsMap.has(st));
+
+            const handleToggleStudentInSubmenu = (e: React.MouseEvent, st: string) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const next = currentSlotStudents.includes(st)
+                ? currentSlotStudents.filter((s) => s !== st)
+                : [...currentSlotStudents, st];
+              handleSaveSlotStudents(slot.id, next);
+            };
+
+            const handleSelectAllInSubmenu = (e: React.MouseEvent) => {
+              e.preventDefault();
+              e.stopPropagation();
+              handleSaveSlotStudents(slot.id, availableStudents);
+              toast.info(`Επιλέχθηκαν ${availableStudents.length} διαθέσιμοι μαθητές.`);
+            };
+
+            const handleClearAllInSubmenu = (e: React.MouseEvent) => {
+              e.preventDefault();
+              e.stopPropagation();
+              handleSaveSlotStudents(slot.id, []);
+            };
+
+            return (
+              <>
+                <ContextMenuSub>
+                  <ContextMenuSubTrigger className="gap-2 font-medium text-purple-700 focus:text-purple-800 focus:bg-purple-50 cursor-pointer">
+                    <Users className="w-3.5 h-3.5 text-purple-600" />
+                    <span>
+                      Μαθητές {currentSlotStudents.length > 0 ? `(${currentSlotStudents.length})` : ""}
+                    </span>
+                  </ContextMenuSubTrigger>
+                  <ContextMenuSubContent className="w-64 max-h-72 overflow-y-auto p-1 font-sans">
+                    <div className="flex items-center justify-between px-2 py-1 text-[10.5px] font-semibold text-zinc-500 border-b border-zinc-100">
+                      <span>Επιλογή Μαθητών ({currentSlotStudents.length}/{classStudents.length})</span>
+                      <div className="flex items-center gap-1.5">
+                        {availableStudents.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={handleSelectAllInSubmenu}
+                            className="text-[10px] text-purple-600 hover:text-purple-800 hover:underline cursor-pointer"
+                          >
+                            Όλοι
+                          </button>
+                        )}
+                        {currentSlotStudents.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={handleClearAllInSubmenu}
+                            className="text-[10px] text-rose-600 hover:text-rose-800 hover:underline cursor-pointer"
+                          >
+                            Καθαρισμός
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="py-1 space-y-0.5">
+                      {classStudents.length === 0 ? (
+                        <div className="px-2 py-3 text-center text-xs text-zinc-400 italic">
+                          Δεν υπάρχουν μαθητές στο τμήμα
+                        </div>
+                      ) : (
+                        classStudents.map((st) => {
+                          const isOccupied = occupiedStudentsMap.has(st);
+                          const isSelected = currentSlotStudents.includes(st);
+
+                          if (isOccupied) {
+                            return (
+                              <div
+                                key={st}
+                                className="flex items-center justify-between gap-1.5 px-2 py-1 text-xs text-zinc-400 bg-zinc-50 dark:bg-zinc-900/50 rounded cursor-not-allowed select-none opacity-60"
+                                title={`Απασχολημένος: ${occupiedStudentsMap.get(st)}`}
+                              >
+                                <div className="flex items-center gap-1.5 truncate">
+                                  <Lock className="w-3 h-3 text-amber-600 flex-none" />
+                                  <span className="truncate">{st}</span>
+                                </div>
+                                <span className="text-[9px] font-mono text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/60 px-1 py-0.2 rounded border border-amber-200 dark:border-amber-800 flex-none">
+                                  {occupiedStudentsMap.get(st)}
+                                </span>
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <div
+                              key={st}
+                              onClick={(e) => handleToggleStudentInSubmenu(e, st)}
+                              className={`flex items-center justify-between gap-1.5 px-2 py-1 text-xs rounded cursor-pointer select-none transition-colors ${
+                                isSelected
+                                  ? "bg-purple-100 text-purple-900 font-semibold dark:bg-purple-950 dark:text-purple-100"
+                                  : "hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-800 dark:text-zinc-200"
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 truncate">
+                                <div
+                                  className={`w-3.5 h-3.5 rounded flex items-center justify-center border transition-all ${
+                                    isSelected
+                                      ? "bg-purple-600 border-purple-700 text-white"
+                                      : "border-zinc-300 bg-white dark:bg-zinc-900"
+                                  }`}
+                                >
+                                  {isSelected && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                                </div>
+                                <span className="truncate">{st}</span>
+                              </div>
+                              {isSelected && (
+                                <span className="text-[9px] font-bold text-purple-700 dark:text-purple-300 bg-purple-200/60 dark:bg-purple-900/60 px-1 py-0.2 rounded flex-none">
+                                  ✓
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+
+                    <div className="pt-1 border-t border-zinc-100">
+                      <ContextMenuItem
+                        onClick={() => setSelectedSlotForStudentPicker(slot)}
+                        className="gap-1.5 text-[10.5px] text-zinc-500 hover:text-purple-700 py-1 cursor-pointer"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>Προσθήκη / Διαχείριση Μαθητών...</span>
+                      </ContextMenuItem>
+                    </div>
+                  </ContextMenuSubContent>
+                </ContextMenuSub>
+                <ContextMenuSeparator />
+              </>
+            );
+          })()}
+
+          {/* 1. Πρόγραμμα Εκπαιδευτικού */}
           {!isUnassigned && teacher && (
             <>
               <ContextMenuItem
@@ -485,7 +744,7 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
               } else {
                 setSwapSourceSlot({
                   slot,
-                  label: `[${abbr}] ${cls.name} • ${day.name} ${p.index + 1}η`,
+                  label: `[${abbr}] ${cls.name} • ${day.name} ${periodLabel}`,
                 });
                 toast.info("Λειτουργία Εναλλαγής (Swap)", {
                   description: "Κάντε κλικ σε ένα άλλο κελί για να γίνει η εναλλαγή.",
@@ -500,7 +759,7 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
 
           {/* 3. Προσθήκη */}
           <ContextMenuItem
-            onClick={() => handleAddSplitSlot(cls.id, day.index, p.index)}
+            onClick={() => handleAddSplitSlot(cls.id, day.index, effectivePeriod)}
             disabled={totalSlotsInCell >= 3}
             className="gap-2"
           >
@@ -600,20 +859,15 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
         </div>
       )}
 
-      <table className="matrix-table text-center font-mono">
+      <table className={`matrix-table text-center font-mono ${!showAllDay ? "matrix-morning-only" : ""}`}>
         <colgroup>
           <col className="col-class" />
-          {/* 5 days x 10 period columns */}
-          <col className="col-period" span={6} />
-          <col className="col-period" span={4} />
-          <col className="col-period" span={6} />
-          <col className="col-period" span={4} />
-          <col className="col-period" span={6} />
-          <col className="col-period" span={4} />
-          <col className="col-period" span={6} />
-          <col className="col-period" span={4} />
-          <col className="col-period" span={6} />
-          <col className="col-period" span={4} />
+          {days.map((day) => (
+            <React.Fragment key={day.index}>
+              <col className="col-period" span={morningCount} />
+              {showAllDay && allDayCount > 0 && <col className="col-period" span={allDayCount} />}
+            </React.Fragment>
+          ))}
         </colgroup>
 
         {/* Header with Days & Hours */}
@@ -623,45 +877,61 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
             <th className="sticky-top-left-1 bg-zinc-200 dark:bg-zinc-800 border-r-2 border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 font-mono text-[10px]">
               ΤΜ
             </th>
-            {days.map((day, idx) => (
-              <th
-                key={day.index}
-                className={`sticky-day-head bg-zinc-100 dark:bg-zinc-900 ${
-                  idx === 4 ? "border-r border-zinc-200 dark:border-zinc-800" : "border-r-2 border-zinc-300 dark:border-zinc-700"
-                } text-zinc-900 dark:text-zinc-100 border-b border-zinc-200 dark:border-zinc-800`}
-                colSpan={10}
-              >
-                <span className="inline-flex items-center gap-1 font-bold">
-                  <span className={`w-1.5 h-1.5 rounded-full ${day.dotColor}`} />
-                  {day.name}
-                </span>
-              </th>
-            ))}
+            {days.map((day, idx) => {
+              const isLastDay = idx === days.length - 1;
+              let dayBorder = "border-r border-zinc-200 dark:border-zinc-800";
+              if (!isLastDay) {
+                dayBorder = !showAllDay
+                  ? "border-r-[3.5px] border-zinc-400 dark:border-zinc-500"
+                  : "border-r-2 border-zinc-300 dark:border-zinc-700";
+              }
+
+              return (
+                <th
+                  key={day.index}
+                  className={`sticky-day-head bg-zinc-100 dark:bg-zinc-900 ${dayBorder} text-zinc-900 dark:text-zinc-100 border-b border-zinc-200 dark:border-zinc-800`}
+                  colSpan={showAllDay && allDayCount > 0 ? morningCount + allDayCount : morningCount}
+                >
+                  <span className="inline-flex items-center gap-1 font-bold">
+                    <span className={`w-1.5 h-1.5 rounded-full ${day.dotColor}`} />
+                    {day.name}
+                  </span>
+                </th>
+              );
+            })}
           </tr>
 
-          {/* ROW 2: Hours: 1-6 morning, 1-4 all-day */}
+          {/* ROW 2: Hours: 1-N morning, 1-N all-day (if visible) */}
           <tr className="h-6 text-[9px] font-mono text-zinc-600 dark:text-zinc-400 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800">
             <th className="sticky-top-left-2 bg-zinc-200 dark:bg-zinc-800 border-r-2 border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 font-semibold">
               ΩΡΑ
             </th>
-            {days.map((day) =>
+            {days.map((day, dayIdx) =>
               periods.map((p, pIdx) => {
-                const isLastMorning = pIdx === 5;
-                const isLastAllDay = pIdx === 9;
-                const isAllDay = p.isAllDay;
+                const isLastPeriodOfDay = pIdx === periods.length - 1;
+                const isLastMorningWhenAllDay = showAllDay && allDayCount > 0 && pIdx === morningCount - 1;
+                const isLastDay = dayIdx === days.length - 1;
+                const isAllDayPeriod = p.isAllDay;
+
+                let borderClass = "border-r border-zinc-200 dark:border-zinc-800";
+                if (!showAllDay) {
+                  if (isLastPeriodOfDay && !isLastDay) {
+                    borderClass = "border-r-[3.5px] border-zinc-400 dark:border-zinc-500";
+                  }
+                } else {
+                  if (isLastMorningWhenAllDay || isLastPeriodOfDay) {
+                    borderClass = "border-r-2 border-zinc-300 dark:border-zinc-700";
+                  }
+                }
 
                 return (
                   <th
                     key={`${day.index}_${p.index}`}
                     className={`sticky-hour-head ${
-                      isAllDay
+                      isAllDayPeriod
                         ? "bg-amber-50/70 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 font-bold"
                         : "bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300"
-                    } ${
-                      isLastMorning || isLastAllDay
-                        ? "border-r-2 border-zinc-300 dark:border-zinc-700 font-bold"
-                        : "border-r border-zinc-200 dark:border-zinc-800"
-                    }`}
+                    } ${borderClass}`}
                   >
                     {p.label}
                   </th>
@@ -672,20 +942,31 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
         </thead>
 
         {/* Table Body */}
-        <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800 text-[10px]">
+        <tbody className={`divide-y ${!showAllDay ? "divide-zinc-400 dark:divide-zinc-500" : "divide-zinc-200 dark:divide-zinc-800"} text-[10px]`}>
           {sortedClasses.map((cls) => {
             const isResourceClass =
               cls.name.includes("Τ.Ε.") || cls.name.includes("ΕΝΤΑΞ");
+            const isAllDayClass = Boolean(
+              cls.isAllDay ||
+              cls.grade === "Ολοήμερο" ||
+              cls.name?.toUpperCase().includes("ΟΛΟΗΜΕΡ")
+            );
 
             return (
               <tr key={cls.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-900/50 group">
                 {/* Sticky Class Column */}
                 <td
                   className={`sticky-col ${
-                    isResourceClass
+                    isAllDayClass
+                      ? "bg-amber-100/80 dark:bg-amber-950/60 group-hover:bg-amber-200/90 dark:group-hover:bg-amber-900/80 text-amber-900 dark:text-amber-200 border-amber-300 dark:border-amber-700"
+                      : isResourceClass
                       ? "bg-purple-100 dark:bg-purple-950/60 group-hover:bg-purple-200 dark:group-hover:bg-purple-900/80 text-purple-900 dark:text-purple-200 border-purple-300 dark:border-purple-800"
                       : "bg-zinc-100 dark:bg-zinc-900 group-hover:bg-zinc-200 dark:group-hover:bg-zinc-800 text-zinc-900 dark:text-zinc-100 border-zinc-300 dark:border-zinc-700"
-                  } border-r-2 font-bold text-center select-none cursor-default hover:bg-zinc-200/90 dark:hover:bg-zinc-800 transition-colors`}
+                  } ${
+                    !showAllDay
+                      ? "border-b-2 border-zinc-400 dark:border-zinc-500 border-r-2"
+                      : "border-b border-zinc-200 dark:border-zinc-800 border-r-2"
+                  } font-bold text-center select-none cursor-default hover:bg-zinc-200/90 dark:hover:bg-zinc-800 transition-colors`}
                   title={`${cls.name} (Διπλό κλικ για αναλυτικό πρόγραμμα)`}
                   onDoubleClick={() => setSelectedClassForModal(cls)}
                 >
@@ -696,25 +977,93 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
                   </div>
                 </td>
 
-                {/* 50 period cells */}
-                {days.map((day) =>
+                {/* Period cells */}
+                {days.map((day, dayIdx) =>
                   periods.map((p, pIdx) => {
-                    const isLastMorning = pIdx === 5;
-                    const isLastAllDay = pIdx === 9;
-                    const isAllDay = p.isAllDay;
-                    const cellKey = `${cls.id}_${day.index}_${p.index}`;
+                    const isLastPeriodOfDay = pIdx === periods.length - 1;
+                    const isLastMorningWhenAllDay = showAllDay && allDayCount > 0 && pIdx === morningCount - 1;
+                    const isLastDay = dayIdx === days.length - 1;
+                    const isAllDayPeriod = p.isAllDay;
+
+                    let borderClass = "border-r border-zinc-200 dark:border-zinc-800";
+                    if (!showAllDay) {
+                      if (isLastPeriodOfDay && !isLastDay) {
+                        borderClass = "border-r-[3.5px] border-zinc-400 dark:border-zinc-500";
+                      }
+                    } else {
+                      if (isLastMorningWhenAllDay || isLastPeriodOfDay) {
+                        borderClass = "border-r-2 border-zinc-300 dark:border-zinc-700";
+                      }
+                    }
+
+                    // Determine effective database period for this class & column:
+                    // In compact view (!showAllDay):
+                    //   - Morning classes: pIdx -> DB periods 0..morningCount-1
+                    //   - All-Day class: pIdx (0..allDayCount-1) -> DB periods 6..6+allDayCount-1, remainder -> inactive (-)
+                    // In expanded view (showAllDay):
+                    //   - Morning classes: p.index (0..morningCount-1) and afternoon empty cells
+                    //   - All-Day class: pIdx < morningCount -> inactive (-), afternoon -> DB periods 6..
+                    let effectivePeriod = p.index;
+                    let isInactiveCell = false;
+
+                    if (!showAllDay) {
+                      if (isAllDayClass) {
+                        if (pIdx < allDayCount) {
+                          effectivePeriod = pIdx + 6;
+                        } else {
+                          isInactiveCell = true;
+                        }
+                      } else {
+                        effectivePeriod = p.index;
+                      }
+                    } else {
+                      if (isAllDayClass && pIdx < morningCount) {
+                        isInactiveCell = true;
+                      } else {
+                        effectivePeriod = p.index;
+                      }
+                    }
+
+                    if (isInactiveCell) {
+                      return (
+                        <td
+                          key={`${cls.id}_${day.index}_inactive_${pIdx}`}
+                          className={`matrix-cell-period ${borderClass} ${
+                            !showAllDay
+                              ? "border-b-2 border-zinc-400 dark:border-zinc-500"
+                              : "border-b border-zinc-200 dark:border-zinc-800"
+                          } bg-zinc-100/60 dark:bg-zinc-900/40 text-center select-none cursor-not-allowed`}
+                          title={
+                            isAllDayClass
+                              ? !showAllDay
+                                ? `${cls.name} • Δεν υπάρχει ${pIdx + 1}η ώρα στο Ολοήμερο`
+                                : `${cls.name} • Το Ολοήμερο λειτουργεί τις απογευματινές ώρες (${morningCount + 1}η-${morningCount + allDayCount}η)`
+                              : undefined
+                          }
+                        >
+                          <span className="text-zinc-300 dark:text-zinc-600 font-sans text-xs font-semibold select-none opacity-60">
+                            —
+                          </span>
+                        </td>
+                      );
+                    }
+
+                    const cellKey = `${cls.id}_${day.index}_${effectivePeriod}`;
                     const slots = slotsByCell.get(cellKey) || [];
+                    const periodLabel = getPeriodLabel(effectivePeriod);
 
                     return (
                       <td
                         key={cellKey}
-                        className={`${
-                          isLastMorning || isLastAllDay
-                            ? "border-r-2 border-zinc-300 dark:border-zinc-700"
-                            : "border-r border-zinc-200 dark:border-zinc-800"
+                        className={`matrix-cell-period ${borderClass} ${
+                          !showAllDay
+                            ? "border-b-2 border-zinc-400 dark:border-zinc-500"
+                            : "border-b border-zinc-200 dark:border-zinc-800"
                         } ${
-                          isAllDay ? "bg-amber-50/30 dark:bg-amber-950/20" : "bg-white dark:bg-zinc-950"
-                        } border-b border-zinc-200 dark:border-zinc-800`}
+                          isAllDayPeriod || effectivePeriod >= 6
+                            ? "bg-amber-50/30 dark:bg-amber-950/20"
+                            : "bg-white dark:bg-zinc-950"
+                        }`}
                       >
                         {slots.length === 0 ? (
                           /* Empty Cell with its own Context Menu */
@@ -722,7 +1071,7 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
                             <ContextMenuTrigger className="w-full h-full block">
                               <div
                                 onClick={() =>
-                                  handleEmptyCellClick(cls.id, day.index, p.index)
+                                  handleEmptyCellClick(cls.id, day.index, effectivePeriod)
                                 }
                                 className={`t-empty ${
                                   swapSourceSlot
@@ -734,7 +1083,7 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
 
                             <ContextMenuContent className="w-56 font-sans text-xs">
                               <ContextMenuLabel className="font-semibold text-zinc-900 text-[11px]">
-                                Τμήμα {cls.name} • {day.name} {p.index + 1}η
+                                Τμήμα {cls.name} • {day.name} {periodLabel}
                               </ContextMenuLabel>
                               <ContextMenuSeparator />
 
@@ -746,7 +1095,7 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
                                       handleAssignSlot(
                                         cls.id,
                                         day.index,
-                                        p.index,
+                                        effectivePeriod,
                                         copiedTeacher.id
                                       )
                                     }
@@ -766,7 +1115,7 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
                                       handleExecuteSwap(undefined, {
                                         classId: cls.id,
                                         day: day.index,
-                                        period: p.index,
+                                        period: effectivePeriod,
                                       })
                                     }
                                     className="gap-2 font-medium text-amber-700"
@@ -793,7 +1142,7 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
                                           handleAssignSlot(
                                             cls.id,
                                             day.index,
-                                            p.index,
+                                            effectivePeriod,
                                             t.id
                                           )
                                         }
@@ -822,7 +1171,7 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
                             false,
                             cls,
                             day,
-                            p,
+                            effectivePeriod,
                             1
                           )
                         ) : slots.length === 2 ? (
@@ -834,7 +1183,7 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
                                 true,
                                 cls,
                                 day,
-                                p,
+                                effectivePeriod,
                                 2
                               )
                             )}
@@ -848,7 +1197,7 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
                                 true,
                                 cls,
                                 day,
-                                p,
+                                effectivePeriod,
                                 slots.length
                               )
                             )}
@@ -881,6 +1230,20 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
           onClose={() => setSelectedTeacherForModal(null)}
           initialTeacher={selectedTeacherForModal}
           data={data}
+        />
+      )}
+
+      {/* Dedicated Student Selection Modal for Support Slots */}
+      {selectedSlotForStudentPicker && (
+        <StudentSelectModal
+          open={Boolean(selectedSlotForStudentPicker)}
+          onOpenChange={(open) => {
+            if (!open) setSelectedSlotForStudentPicker(null);
+          }}
+          slot={selectedSlotForStudentPicker}
+          data={data}
+          onSaveStudents={handleSaveSlotStudents}
+          onRefresh={onRefresh}
         />
       )}
     </div>

@@ -29,7 +29,10 @@ def solve_support_timetable(req: SolveRequest) -> SolveResponse:
     # Dynamic periods and days from school configuration
     num_days = len(req.schoolConfig.days) if req.schoolConfig.days else 5
     morning_periods = [p.index for p in req.schoolConfig.periods] if req.schoolConfig.periods else list(range(6))
-    allday_periods = [p.index for p in req.schoolConfig.allDayPeriods] if req.schoolConfig.allDayPeriods else [6, 7, 8, 9]
+    if req.schoolConfig.hasAllDay is False:
+        allday_periods = []
+    else:
+        allday_periods = [p.index for p in req.schoolConfig.allDayPeriods] if req.schoolConfig.allDayPeriods else [6, 7, 8, 9]
     all_periods = sorted(list(set(morning_periods + allday_periods)))
 
     # 1. Filter active teachers (BOTH basic and support)
@@ -507,7 +510,10 @@ def solve_timetable(req: SolveRequest) -> SolveResponse:
     # Dynamic periods and days from school configuration
     num_days = len(req.schoolConfig.days) if req.schoolConfig.days else 5
     morning_periods = [p.index for p in req.schoolConfig.periods] if req.schoolConfig.periods else list(range(6))
-    allday_periods = [p.index for p in req.schoolConfig.allDayPeriods] if req.schoolConfig.allDayPeriods else [6, 7, 8, 9]
+    if req.schoolConfig.hasAllDay is False:
+        allday_periods = []
+    else:
+        allday_periods = [p.index for p in req.schoolConfig.allDayPeriods] if req.schoolConfig.allDayPeriods else [6, 7, 8, 9]
     all_periods = sorted(list(set(morning_periods + allday_periods)))
 
     is_support_only = get_is_support_only_subjects(req)

@@ -15,6 +15,7 @@ import {
   TimetableSlot,
   Teacher,
   Subject,
+  PeriodConfig,
 } from "@/types";
 import { getTeacherTileInlineStyle, getTeacherAbbr } from "@/lib/teacher-utils";
 import { formatSpecialtyLabel } from "@/lib/specialties";
@@ -144,33 +145,59 @@ export const ClassTimetableModal: React.FC<ClassTimetableModalProps> = ({
     { start: "16:15", end: "17:00" },
   ];
 
-  // Periods list based on toggle
-  const morningPeriods = Array.from({ length: 6 }, (_, i) => {
-    const configPeriod = data.schoolConfig?.periods?.find((p) => p.index === i);
-    const start = configPeriod?.startTime || defaultMorningTimes[i]?.start || "";
-    const end = configPeriod?.endTime || defaultMorningTimes[i]?.end || "";
+  const morningList: PeriodConfig[] = data.schoolConfig?.periods && data.schoolConfig.periods.length > 0
+    ? data.schoolConfig.periods
+    : defaultMorningTimes.map((t, i) => ({
+        index: i,
+        label: `${i + 1}η ώρα`,
+        startTime: t.start,
+        endTime: t.end,
+        isAllDay: false,
+      }));
+
+  const hasAllDay = Boolean(
+    data.schoolConfig?.hasAllDay !== undefined
+      ? data.schoolConfig.hasAllDay
+      : data.schoolConfig?.allDayPeriods && data.schoolConfig.allDayPeriods.length > 0
+  );
+
+  const allDayList: PeriodConfig[] = hasAllDay
+    ? (data.schoolConfig?.allDayPeriods && data.schoolConfig.allDayPeriods.length > 0
+        ? data.schoolConfig.allDayPeriods
+        : defaultAllDayTimes.map((t, i) => ({
+            index: 6 + i,
+            label: `${i + 1}η Ολοημ.`,
+            startTime: t.start,
+            endTime: t.end,
+            isAllDay: true,
+          })))
+    : [];
+
+  const morningPeriods = morningList.map((p, i) => {
+    const idx = p.index !== undefined ? p.index : i;
+    const start = p.startTime || "";
+    const end = p.endTime || "";
     return {
-      index: i,
-      label: `${i + 1}η ώρα`,
+      index: idx,
+      label: p.label || `${i + 1}η ώρα`,
       timeRange: start && end ? `${start} - ${end}` : "",
       isAllDay: false,
     };
   });
 
-  const allDayPeriods = Array.from({ length: 4 }, (_, i) => {
-    const periodIdx = 6 + i;
-    const configPeriod = data.schoolConfig?.allDayPeriods?.find((p) => p.index === periodIdx);
-    const start = configPeriod?.startTime || defaultAllDayTimes[i]?.start || "";
-    const end = configPeriod?.endTime || defaultAllDayTimes[i]?.end || "";
+  const allDayPeriods = allDayList.map((p, i) => {
+    const idx = p.index !== undefined ? p.index : 6 + i;
+    const start = p.startTime || "";
+    const end = p.endTime || "";
     return {
-      index: periodIdx,
-      label: `${i + 1}η Ολοημ.`,
+      index: idx,
+      label: p.label || `${i + 1}η Ολοημ.`,
       timeRange: start && end ? `${start} - ${end}` : "",
       isAllDay: true,
     };
   });
 
-  const activePeriods = showAllDay
+  const activePeriods = showAllDay && hasAllDay && allDayPeriods.length > 0
     ? [...morningPeriods, ...allDayPeriods]
     : morningPeriods;
 
@@ -220,10 +247,15 @@ export const ClassTimetableModal: React.FC<ClassTimetableModalProps> = ({
             const tchName = tch
               ? `${tch.lastName} ${tch.firstName ? tch.firstName[0] + "." : ""}`
               : "";
+            const studentText =
+              s.students && s.students.length > 0
+                ? `<div class="students" style="font-size: 8.5pt; color: #6b21a8; margin-top: 3px; font-weight: 500;">👥 Μαθητές: <strong>${s.students.join(", ")}</strong></div>`
+                : "";
             tableHtml += `
               <div class="card ${s.isSupport ? "support" : ""}">
                 <div class="subject-title">${subj?.title || subj?.code || "—"}</div>
                 <div class="teacher-name">${tchName} ${tch?.specialty ? `(${tch.specialty})` : ""}</div>
+                ${studentText}
               </div>
             `;
           });
@@ -477,19 +509,21 @@ export const ClassTimetableModal: React.FC<ClassTimetableModalProps> = ({
           {/* Action Toolbar */}
           <div className="flex items-center gap-2 pr-6">
             {/* Toggle All Day */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowAllDay(!showAllDay)}
-              className={`h-7 px-2.5 text-[11px] font-sans ${
-                showAllDay
-                  ? "bg-amber-50 dark:bg-amber-950/50 text-amber-900 dark:text-amber-200 border-amber-200 dark:border-amber-800 hover:bg-amber-100"
-                  : "bg-background text-foreground hover:bg-muted"
-              }`}
-            >
-              <Clock className="w-3.5 h-3.5 mr-1 text-amber-600 dark:text-amber-400" />
-              {showAllDay ? "Απόκρυψη Ολοημέρου" : "Προβολή Ολοημέρου"}
-            </Button>
+            {hasAllDay && allDayPeriods.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowAllDay(!showAllDay)}
+                className={`h-7 px-2.5 text-[11px] font-sans ${
+                  showAllDay
+                    ? "bg-amber-50 dark:bg-amber-950/50 text-amber-900 dark:text-amber-200 border-amber-200 dark:border-amber-800 hover:bg-amber-100"
+                    : "bg-background text-foreground hover:bg-muted"
+                }`}
+              >
+                <Clock className="w-3.5 h-3.5 mr-1 text-amber-600 dark:text-amber-400" />
+                {showAllDay ? "Απόκρυψη Ολοημέρου" : "Προβολή Ολοημέρου"}
+              </Button>
+            )}
 
             {/* Print Button */}
             <Button
@@ -652,6 +686,16 @@ export const ClassTimetableModal: React.FC<ClassTimetableModalProps> = ({
                                         )}
                                       </div>
                                     </div>
+
+                                    {/* Students List Badge for Support Slots */}
+                                    {slot.students && slot.students.length > 0 && (
+                                      <div className="mt-1 pt-1 border-t border-purple-100 dark:border-purple-900 flex items-center gap-1 text-[9.5px] text-purple-900 dark:text-purple-200 bg-purple-100/70 dark:bg-purple-900/50 px-1.5 py-0.5 rounded font-medium">
+                                        <Users className="w-3 h-3 text-purple-700 dark:text-purple-300 flex-none" />
+                                        <span className="truncate" title={`Μαθητές: ${slot.students.join(", ")}`}>
+                                          Μαθητές: <strong>{slot.students.join(", ")}</strong>
+                                        </span>
+                                      </div>
+                                    )}
                                   </div>
                                 );
                               })}

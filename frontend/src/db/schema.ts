@@ -42,6 +42,7 @@ export const classes = sqliteTable("classes", {
   room: text("room"),
   isAllDay: integer("is_all_day", { mode: "boolean" }).default(false).notNull(),
   supportSpecialties: text("support_specialties"), // JSON array of specialty codes (e.g. ["ΠΕ26", "ΠΕ29"])
+  students: text("students"), // JSON array of student names
   weeklyHoursTarget: integer("weekly_hours_target").default(30).notNull(),
   supportHoursMin: integer("support_hours_min").default(0).notNull(),
   supportHoursMax: integer("support_hours_max").default(0).notNull(),
@@ -52,6 +53,7 @@ export const subGroups = sqliteTable("sub_groups", {
   id: text("id").primaryKey(),
   classId: text("class_id").notNull().references(() => classes.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
+  students: text("students"), // JSON array of student names for this subgroup
   isDefault: integer("is_default", { mode: "boolean" }).default(false).notNull(),
 });
 
@@ -77,6 +79,7 @@ export const timetableSlots = sqliteTable("timetable_slots", {
   isSupport: integer("is_support", { mode: "boolean" }).default(false).notNull(),
   layer: integer("layer").default(1).notNull(), // 1 = Core, 2 = Support
   isLocked: integer("is_locked", { mode: "boolean" }).default(false).notNull(),
+  students: text("students"), // JSON array of student names e.g. '["Γιάννης Π.", "Μαρία Κ."]'
 });
 
 export const appSettings = sqliteTable("app_settings", {

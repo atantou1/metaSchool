@@ -21,6 +21,7 @@ export async function POST(req: Request) {
       supportHoursMin,
       supportHoursMax,
       orderIndex,
+      students,
     } = body;
 
     const classId = id || `cls-${crypto.randomUUID().slice(0, 8)}`;
@@ -41,6 +42,7 @@ export async function POST(req: Request) {
       supportHoursMin: Number(supportHoursMin) || 0,
       supportHoursMax: Number(supportHoursMax) || 0,
       orderIndex: Number(orderIndex) || 0,
+      students: Array.isArray(students) ? JSON.stringify(students) : null,
     };
 
     const existing = await db

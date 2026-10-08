@@ -155,6 +155,13 @@
   max-width: 36px;
 }
 
+/* Morning Only Mode (When showAllDay is false: 44px + larger font) */
+.matrix-morning-only .col-period {
+  width: 44px;
+  min-width: 44px;
+  max-width: 44px;
+}
+
 .sticky-col {
   position: sticky;
   left: 0;
@@ -215,6 +222,26 @@
   box-sizing: border-box;
 }
 
+.matrix-morning-only tbody td.matrix-cell-period {
+  width: 44px !important;
+  min-width: 44px !important;
+  max-width: 44px !important;
+}
+
+/* Thicker horizontal dividers between classes (rows) in Morning-Only Mode - same color as day dividers */
+.matrix-morning-only tbody tr {
+  border-bottom-width: 2px !important;
+}
+
+.matrix-morning-only tbody td {
+  border-bottom-width: 2px !important;
+  border-bottom-color: #a1a1aa !important; /* zinc-400 - same as day dividers */
+}
+
+.dark .matrix-morning-only tbody td {
+  border-bottom-color: #71717a !important; /* zinc-500 - same as day dividers */
+}
+
 .matrix-table tbody td.sticky-col {
   width: 48px !important;
   min-width: 48px !important;
@@ -235,14 +262,30 @@
   height: 100%;
   border-radius: 0;
   font-weight: 700;
-  font-size: 11px;
-  letter-spacing: -0.01em;
+  font-size: 10px;
+  letter-spacing: -0.025em;
   line-height: 1;
   border: 1px solid rgba(0, 0, 0, 0.15);
   box-sizing: border-box;
   cursor: default;
   user-select: none;
   transition: filter 0.12s ease, transform 0.08s ease, opacity 0.15s ease;
+}
+
+/* Larger font in Morning-Only Mode */
+.matrix-morning-only .tile-single {
+  font-size: 11.5px;
+  letter-spacing: -0.01em;
+}
+
+.matrix-morning-only .split-stack-2 .sub-tile {
+  font-size: 10px;
+  letter-spacing: -0.01em;
+}
+
+.matrix-morning-only .split-stack-3 .sub-tile {
+  font-size: 9px;
+  letter-spacing: -0.01em;
 }
 
 .tile-single:hover {
@@ -276,7 +319,8 @@
   justify-content: center;
   border-radius: 0;
   font-weight: 700;
-  font-size: 9.5px;
+  font-size: 9px;
+  letter-spacing: -0.02em;
   line-height: 1;
   border: 1px solid rgba(0, 0, 0, 0.15);
   box-sizing: border-box;
@@ -316,7 +360,8 @@
   justify-content: center;
   border-radius: 0;
   font-weight: 700;
-  font-size: 8.5px;
+  font-size: 8px;
+  letter-spacing: -0.02em;
   line-height: 1;
   border: 1px solid rgba(0, 0, 0, 0.15);
   box-sizing: border-box;

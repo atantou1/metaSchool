@@ -117,7 +117,7 @@ export function normalizeGreekUpper(text: string): string {
 
 export function generateDefaultShortName(lastName: string): string {
   if (!lastName) return "";
-  return normalizeGreekUpper(lastName.trim().substring(0, 3));
+  return normalizeGreekUpper(lastName.trim().substring(0, 4));
 }
 
 interface InlineEditState {
@@ -2671,7 +2671,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
                 onChange={(e) => {
                   const val = e.target.value;
                   const updated = { ...inlineData, lastName: val };
-                  if (isNewDraft && (!inlineData.shortName || inlineData.shortName.length <= 3)) {
+                  if (isNewDraft && (!inlineData.shortName || inlineData.shortName.length <= 4)) {
                     updated.shortName = generateDefaultShortName(val);
                   }
                   setInlineData(updated);

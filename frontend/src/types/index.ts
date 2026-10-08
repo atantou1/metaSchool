@@ -59,6 +59,7 @@ export interface ClassEntity {
   room?: string | null;
   isAllDay?: boolean;
   supportSpecialties?: string[]; // Array of specialty codes e.g. ["ΠΕ26", "ΠΕ29"]
+  students?: string[]; // Array of student names
   weeklyHoursTarget?: number;
   supportHoursMin: number;
   supportHoursMax: number;
@@ -69,6 +70,7 @@ export interface SubGroup {
   id: string;
   classId: string;
   name: string;
+  students?: string[];
   isDefault: boolean;
 }
 
@@ -94,6 +96,7 @@ export interface TimetableSlot {
   isSupport: boolean;
   layer: number;
   isLocked?: boolean;
+  students?: string[];
 }
 
 export interface PeriodConfig {
@@ -101,14 +104,18 @@ export interface PeriodConfig {
   label: string;
   startTime: string;
   endTime: string;
+  isAllDay?: boolean;
 }
 
 export interface SchoolConfig {
   schoolName: string;
   schoolYear: string;
+  schoolType?: string;
+  hasAllDay?: boolean;
   days: string[];
   periods: PeriodConfig[];
   allDayPeriods?: PeriodConfig[];
+  allDayPeriodsCount?: number;
 }
 
 export interface TimetableData {

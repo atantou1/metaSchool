@@ -83,7 +83,7 @@ interface InlineClassEditState {
   headTeacherId: string;
   room: string;
   isAllDay: boolean;
-  supportSpecialties: string[];
+  students: string[];
 }
 
 interface RangeFilterPopoverProps {
@@ -536,8 +536,6 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
   const [headTeacherFilter, setHeadTeacherFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const [roomFilter, setRoomFilter] = useState("");
-  const [selectedSupportSpecialties, setSelectedSupportSpecialties] = useState<string[]>([]);
-  const [supportSearchQuery, setSupportSearchQuery] = useState("");
 
   // Inline row edit state ("__new__" for new draft row, or existing class.id)
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
@@ -579,16 +577,58 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
     return map;
   }, [data.teachers]);
 
+  const getClassSupportSpecialties = useMemo(() => {
+    return (classId: string) => {
+      const specsSet = new Set<string>();
+
+      // 1. Complementary specialties from subjects with allocated hours for this class
+      data.subjects
+        .filter((subj) => {
+          const classHours = subj.classHours?.[classId];
+          return (
+            classHours &&
+            (typeof classHours === "number"
+              ? classHours > 0
+              : classHours[0] > 0 || classHours[1] > 0)
+          );
+        })
+        .forEach((subj) => {
+          const specs =
+            subj.allowedSpecialties && subj.allowedSpecialties.length > 0
+              ? subj.allowedSpecialties
+              : subj.defaultSpecialty
+              ? [subj.defaultSpecialty]
+              : [];
+          specs.forEach((code) => {
+            const specObj = getSpecialtyByCode(code) || findSpecialty(code);
+            if (
+              specObj?.type === "ΣΥΜΠΛΗΡΩΜΑΤΙΚΗ" ||
+              SUPPORT_SPECIALTIES_LIST.some((s) => s.code === code)
+            ) {
+              specsSet.add(code);
+            }
+          });
+        });
+
+      // 2. Specialties from teachers assigned to this class who are declared as support (isSupport: true)
+      data.assignments.forEach((asg) => {
+        const clsId = subGroupToClassMap.get(asg.subGroupId);
+        if (clsId === classId) {
+          const teacher = teachersMap.get(asg.teacherId);
+          if (teacher && teacher.isSupport && teacher.specialty) {
+            specsSet.add(teacher.specialty);
+          }
+        }
+      });
+
+      return Array.from(specsSet);
+    };
+  }, [data.subjects, data.assignments, subGroupToClassMap, teachersMap]);
+
   // Filter handlers
   const toggleGradeFilter = (grade: string) => {
     setSelectedGrades((prev) =>
       prev.includes(grade) ? prev.filter((g) => g !== grade) : [...prev, grade]
-    );
-  };
-
-  const toggleSupportSpecialtyFilter = (code: string) => {
-    setSelectedSupportSpecialties((prev) =>
-      prev.includes(code) ? prev.filter((s) => s !== code) : [...prev, code]
     );
   };
 
@@ -599,7 +639,6 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
     setHeadTeacherFilter("all");
     setTypeFilter("all");
     setRoomFilter("");
-    setSelectedSupportSpecialties([]);
   };
 
   // Filtered classes
@@ -648,13 +687,6 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
         if (!room.includes(q)) return false;
       }
 
-      // 7. Support Specialties Filter (Multi-select)
-      if (selectedSupportSpecialties.length > 0) {
-        const specs = cls.supportSpecialties || [];
-        const hasMatch = selectedSupportSpecialties.some((s) => specs.includes(s));
-        if (!hasMatch) return false;
-      }
-
       return true;
     });
   }, [
@@ -665,7 +697,6 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
     headTeacherFilter,
     typeFilter,
     roomFilter,
-    selectedSupportSpecialties,
   ]);
 
   const hasActiveFilters =
@@ -674,8 +705,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
     studentsCountRange !== null ||
     headTeacherFilter !== "all" ||
     typeFilter !== "all" ||
-    roomFilter.trim() !== "" ||
-    selectedSupportSpecialties.length > 0;
+    roomFilter.trim() !== "";
 
   const activeFiltersCount =
     (nameFilter.trim() !== "" ? 1 : 0) +
@@ -683,8 +713,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
     (studentsCountRange !== null ? 1 : 0) +
     (headTeacherFilter !== "all" ? 1 : 0) +
     (typeFilter !== "all" ? 1 : 0) +
-    (roomFilter.trim() !== "" ? 1 : 0) +
-    (selectedSupportSpecialties.length > 0 ? 1 : 0);
+    (roomFilter.trim() !== "" ? 1 : 0);
 
   // Active tags for quick pill badges
   const activeTags = useMemo(() => {
@@ -743,14 +772,6 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
       });
     }
 
-    if (selectedSupportSpecialties.length > 0) {
-      list.push({
-        id: "support",
-        label: `Στήριξη: ${selectedSupportSpecialties.join(", ")}`,
-        clear: () => setSelectedSupportSpecialties([]),
-      });
-    }
-
     return list;
   }, [
     nameFilter,
@@ -759,7 +780,6 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
     headTeacherFilter,
     typeFilter,
     roomFilter,
-    selectedSupportSpecialties,
     data.teachers,
   ]);
 
@@ -788,7 +808,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
       headTeacherId: "",
       room: `Αίθουσα ${data.classes.length + 1}`,
       isAllDay: false,
-      supportSpecialties: [],
+      students: [],
     });
     setEditingRowId("__new__");
     setSelectedClassId(null);
@@ -811,7 +831,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
       headTeacherId: target.headTeacherId || "",
       room: target.room || "",
       isAllDay: target.isAllDay || false,
-      supportSpecialties: target.supportSpecialties || [],
+      students: target.students || [],
     });
     setEditingRowId("__new__");
     setSelectedClassId(null);
@@ -830,7 +850,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
       headTeacherId: cls.headTeacherId || "",
       room: cls.room || "",
       isAllDay: cls.isAllDay || false,
-      supportSpecialties: cls.supportSpecialties || [],
+      students: cls.students || [],
     });
     setEditingRowId(cls.id);
     setSelectedClassId(cls.id);
@@ -862,7 +882,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
       headTeacherId: inlineData.headTeacherId || null,
       room: inlineData.room.trim() || null,
       isAllDay: inlineData.isAllDay,
-      supportSpecialties: inlineData.supportSpecialties,
+      students: inlineData.students,
       weeklyHoursTarget: inlineData.isAllDay ? 20 : 30,
     };
 
@@ -918,20 +938,6 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
     window.addEventListener("keydown", handleKeyDown, true);
     return () => window.removeEventListener("keydown", handleKeyDown, true);
   }, [editingRowId, inlineData]);
-
-  // Toggle supportive specialty for inline edit
-  const toggleInlineSpecialty = (code: string) => {
-    if (!inlineData) return;
-    setInlineData((prev) => {
-      if (!prev) return prev;
-      const list = prev.supportSpecialties;
-      if (list.includes(code)) {
-        return { ...prev, supportSpecialties: list.filter((c) => c !== code) };
-      } else {
-        return { ...prev, supportSpecialties: [...list, code] };
-      }
-    });
-  };
 
   // Prompt delete modal
   const promptDeleteClass = () => {
@@ -1046,7 +1052,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
         </td>
 
         {/* Students Count Input */}
-        <td className="py-1.5 px-1.5 text-center border-r border-zinc-200">
+        <td className="py-1.5 px-1.5 text-center">
           <Input
             type="number"
             min={1}
@@ -1060,6 +1066,33 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
             }
             className={`h-7 text-xs w-16 bg-white ${isNewDraft ? "border-emerald-400" : "border-sky-300"} font-mono text-center px-1 mx-auto`}
           />
+        </td>
+
+        {/* Students Tags Popover */}
+        <td className="py-1.5 px-1.5 text-center border-r border-zinc-200 relative">
+          <Popover>
+            <PopoverTrigger type="button" className="h-7 text-[10.5px] px-2 w-full justify-center text-zinc-700 bg-white border border-zinc-300 rounded-md hover:bg-zinc-50 cursor-pointer shadow-2xs">
+              {inlineData.students?.length ? `${inlineData.students.length} μαθητές` : "+ Προσθήκη"}
+            </PopoverTrigger>
+            <PopoverContent className="w-64 p-3 z-[80]" align="center">
+              <div className="space-y-2 text-xs">
+                <p className="font-semibold text-zinc-800 text-[11px]">Ονόματα Μαθητών</p>
+                <p className="text-[10px] text-zinc-500 mb-1 leading-tight">Διαχωρίστε τα ονόματα με <strong>κόμμα</strong>. Χρήσιμο για μαθητές που χρειάζονται π.χ. Λογοθεραπεία.</p>
+                <textarea
+                  className="w-full text-xs p-2 border border-zinc-300 rounded-md shadow-2xs focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 focus:outline-hidden resize-none"
+                  rows={4}
+                  placeholder="π.χ. Γιώργος Π., Μαρία Κ."
+                  value={inlineData.students?.join(", ") || ""}
+                  onChange={(e) => {
+                    const str = e.target.value;
+                    const arr = str.split(",").map(s => s.trim()).filter(Boolean);
+                    setInlineData({...inlineData, students: arr});
+                  }}
+                  onKeyDown={(e) => e.stopPropagation()}
+                />
+              </div>
+            </PopoverContent>
+          </Popover>
         </td>
 
         {/* Head Teacher Select */}
@@ -1120,28 +1153,11 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
           />
         </td>
 
-        {/* Supportive Specialties Multi-toggle Chips */}
-        <td className="py-1.5 px-2">
-          <div className="flex items-center gap-1 flex-wrap">
-            {SUPPORT_SPECIALTIES_LIST.map((spec) => {
-              const isActive = inlineData.supportSpecialties.includes(spec.code);
-              return (
-                <button
-                  key={spec.code}
-                  type="button"
-                  onClick={() => toggleInlineSpecialty(spec.code)}
-                  title={`${spec.name} (${spec.code}): Κλικ για ενεργοποίηση στο τμήμα`}
-                  className={`px-1.5 py-0.5 rounded text-[10px] font-bold border transition-all ${
-                    isActive
-                      ? `${spec.color} shadow-2xs scale-105 ring-1 ring-black/10`
-                      : "bg-white border-zinc-200 text-zinc-300 hover:border-zinc-400"
-                  }`}
-                >
-                  {spec.short}
-                </button>
-              );
-            })}
-          </div>
+        {/* Supportive Specialties Multi-toggle Chips (Now read-only) */}
+        <td className="py-1.5 px-2 text-center">
+          <span className="text-zinc-400 text-[10px] italic select-none">
+            (Υπολογίζεται αυτόματα από τα μαθήματα)
+          </span>
         </td>
       </tr>
     );
@@ -1374,7 +1390,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
             <thead className="bg-zinc-50 border-b border-zinc-200 text-zinc-600 shadow-2xs select-none">
               {/* Row 1: Super Headers Grouping */}
               <tr className="border-b border-zinc-200 text-[10px] uppercase font-bold tracking-wider text-zinc-500">
-                <th colSpan={5} className="py-2 px-3 border-r border-zinc-200 bg-zinc-100/80 text-left">
+                <th colSpan={6} className="py-2 px-3 border-r border-zinc-200 bg-zinc-100/80 text-left">
                   ΒΑΣΙΚΑ ΣΤΟΙΧΕΙΑ ΤΜΗΜΑΤΟΣ
                 </th>
                 <th colSpan={3} className="py-2 px-3 border-r border-zinc-200 bg-zinc-100/80 text-center">
@@ -1391,7 +1407,8 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
                 <th className="py-2.5 px-3 min-w-[130px]" title="Όνομα τμήματος (π.χ. Α1)">Όνομα Τμήματος</th>
                 <th className="py-2.5 px-2 w-16 text-center" title="Συντομογραφία (π.χ. Α1)">Συντ.</th>
                 <th className="py-2.5 px-2.5 w-24 text-center" title="Τάξη / Βαθμίδα">Τάξη</th>
-                <th className="py-2.5 px-2 w-20 text-center border-r border-zinc-200" title="Αριθμός μαθητών">Μαθητές</th>
+                <th className="py-2.5 px-2 w-16 text-center" title="Αριθμός μαθητών">Αριθμός</th>
+                <th className="py-2.5 px-2 w-24 text-center border-r border-zinc-200" title="Μαθητές Ειδικών Αναγκών / Στήριξης">Μαθητές (Προαιρετ.)</th>
 
                 <th className="py-2.5 px-3 min-w-[190px]" title="Υπεύθυνος εκπαιδευτικός του τμήματος">Υπεύθυνος Τάξης</th>
                 <th className="py-2.5 px-2 w-24 text-center" title="Πρόγραμμα (Πρωινό / Ολοήμερο)">Πρόγραμμα</th>
@@ -1532,7 +1549,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
                   </th>
 
                   {/* 5. Students Count Filter (Dual-Thumb Range Slider) */}
-                  <th className="py-1 px-1 w-20 text-center border-r border-zinc-200">
+                  <th className="py-1 px-1 w-20 text-center">
                     <RangeFilterPopover
                       title="Αριθμός Μαθητών"
                       min={0}
@@ -1547,6 +1564,11 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
                         { label: "25-35", range: [25, 35] },
                       ]}
                     />
+                  </th>
+
+                  {/* 5.5. Students Names Filter (empty for now) */}
+                  <th className="py-1 px-1 w-24 text-center border-r border-zinc-200">
+                    <span className="text-zinc-300 text-[10px] font-mono">—</span>
                   </th>
 
                   {/* 6. Head Teacher Filter */}
@@ -1637,108 +1659,9 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
                     </div>
                   </th>
 
-                  {/* 9. Support Specialties Multi-Select Popover */}
-                  <th className="py-1 px-1.5 min-w-[200px]">
-                    <Popover>
-                      <PopoverTrigger
-                        type="button"
-                        className={`w-full h-7 text-[11px] px-2 rounded-md shadow-2xs transition-all flex items-center justify-between border cursor-pointer ${
-                          selectedSupportSpecialties.length > 0
-                            ? "bg-indigo-50 border-indigo-400 text-indigo-950 font-bold ring-1 ring-indigo-300/60"
-                            : "bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-50"
-                        }`}
-                      >
-                        <span className="truncate">
-                          {selectedSupportSpecialties.length === 0
-                            ? "Όλες"
-                            : selectedSupportSpecialties.length <= 2
-                            ? selectedSupportSpecialties.join(", ")
-                            : `${selectedSupportSpecialties.length} ειδικότητες`}
-                        </span>
-                        <ChevronDown className="w-3.5 h-3.5 shrink-0 opacity-50 ml-1" />
-                      </PopoverTrigger>
-                      <PopoverContent
-                        align="end"
-                        className="w-64 p-2 shadow-lg border border-zinc-200 bg-white text-xs z-50"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-zinc-100">
-                          <span className="font-semibold text-zinc-800 text-[11px]">
-                            Ειδικότητες Στήριξης {selectedSupportSpecialties.length > 0 && `(${selectedSupportSpecialties.length})`}
-                          </span>
-                          {selectedSupportSpecialties.length > 0 && (
-                            <button
-                              type="button"
-                              onClick={() => setSelectedSupportSpecialties([])}
-                              className="text-[10px] text-red-600 hover:text-red-700 font-medium cursor-pointer"
-                            >
-                              Καθαρισμός
-                            </button>
-                          )}
-                        </div>
-
-                        <div className="relative mb-2">
-                          <Search className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
-                          <Input
-                            value={supportSearchQuery}
-                            onChange={(e) => setSupportSearchQuery(e.target.value)}
-                            placeholder="Αναζήτηση..."
-                            className="h-6 text-[11px] pl-6 pr-5 py-0 bg-zinc-50 border-zinc-200 focus-visible:ring-1"
-                          />
-                          {supportSearchQuery && (
-                            <button
-                              type="button"
-                              onClick={() => setSupportSearchQuery("")}
-                              className="absolute right-1.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 cursor-pointer"
-                            >
-                              <X className="w-2.5 h-2.5" />
-                            </button>
-                          )}
-                        </div>
-
-                        <div className="max-h-56 overflow-y-auto space-y-0.5 pr-1">
-                          {SUPPORT_SPECIALTIES_LIST
-                            .filter((s) => {
-                              if (!supportSearchQuery.trim()) return true;
-                              const q = supportSearchQuery.toLowerCase().trim();
-                              return (
-                                s.code.toLowerCase().includes(q) ||
-                                s.name.toLowerCase().includes(q)
-                              );
-                            })
-                            .map((spec) => {
-                              const isChecked = selectedSupportSpecialties.includes(spec.code);
-                              return (
-                                <div
-                                  key={spec.code}
-                                  onClick={() => toggleSupportSpecialtyFilter(spec.code)}
-                                  className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors ${
-                                    isChecked
-                                      ? "bg-indigo-50/80 text-indigo-950 font-medium"
-                                      : "hover:bg-zinc-100 text-zinc-700"
-                                  }`}
-                                >
-                                  <div
-                                    className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition-all ${
-                                      isChecked
-                                        ? "bg-indigo-600 border-indigo-600 text-white"
-                                        : "border-zinc-300 bg-white"
-                                    }`}
-                                  >
-                                    {isChecked && <Check className="w-2.5 h-2.5 stroke-[3]" />}
-                                  </div>
-                                  <span className="font-mono font-bold text-[11px] shrink-0">
-                                    {spec.code}
-                                  </span>
-                                  <span className="text-[11px] text-zinc-600 truncate">
-                                    {spec.name}
-                                  </span>
-                                </div>
-                              );
-                            })}
-                        </div>
-                      </PopoverContent>
-                    </Popover>
+                  {/* 9. Support Specialties Filter (Removed) */}
+                  <th className="py-1 px-1.5 min-w-[200px] text-center">
+                    <span className="text-zinc-300 text-[10px] font-mono">—</span>
                   </th>
                 </tr>
               )}
@@ -1754,7 +1677,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
                 const isEditing = editingRowId === cls.id && inlineData !== null;
                 const headTeacher = cls.headTeacherId ? teachersMap.get(cls.headTeacherId) : null;
                 const displayShortName = normalizeGreekUpper(cls.shortName || cls.name);
-                const specialtiesList = cls.supportSpecialties || [];
+                const specialtiesList = getClassSupportSpecialties(cls.id);
 
                 /* 1. ROW IN EDIT MODE */
                 if (isEditing) {
@@ -1806,8 +1729,32 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
                     </td>
 
                     {/* Students Count */}
-                    <td className="py-2.5 px-2 text-center font-mono text-zinc-700 border-r border-zinc-100">
+                    <td className="py-2.5 px-2 text-center font-mono text-zinc-700">
                       {cls.studentsCount || 20}
+                    </td>
+
+                    {/* Students Names */}
+                    <td className="py-2.5 px-2 text-center border-r border-zinc-100 relative">
+                      {cls.students && cls.students.length > 0 ? (
+                        <Popover>
+                          <PopoverTrigger className="text-[10.5px] font-medium text-indigo-600 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded cursor-pointer hover:bg-indigo-100 hover:border-indigo-300 transition-colors">
+                            {cls.students.length} μαθητές
+                          </PopoverTrigger>
+                          <PopoverContent className="w-56 p-2 z-[60]" align="center">
+                            <div className="text-[11px] font-semibold text-zinc-800 mb-1.5 border-b border-zinc-100 pb-1">Μαθητές Τμήματος</div>
+                            <ul className="text-[11px] text-zinc-700 space-y-1 max-h-40 overflow-y-auto">
+                              {cls.students.map((st, i) => (
+                                <li key={i} className="flex items-center gap-1.5">
+                                  <div className="w-1 h-1 rounded-full bg-indigo-400 shrink-0" />
+                                  <span className="truncate">{st}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </PopoverContent>
+                        </Popover>
+                      ) : (
+                        <span className="text-zinc-300 text-[11px]">—</span>
+                      )}
                     </td>
 
                     {/* Head Teacher */}

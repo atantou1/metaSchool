@@ -108,6 +108,7 @@ interface ClassHoursSliderPopoverProps {
   classNameLabel: string;
   value: [number, number];
   onChange: (value: [number, number]) => void;
+  onApplyToAll?: (value: [number, number]) => void;
   min?: number;
   max?: number;
   step?: number;
@@ -119,6 +120,7 @@ const ClassHoursSliderPopover: React.FC<ClassHoursSliderPopoverProps> = ({
   classNameLabel,
   value,
   onChange,
+  onApplyToAll,
   min = 0,
   max = 10,
   step = 1,
@@ -553,7 +555,24 @@ const ClassHoursSliderPopover: React.FC<ClassHoursSliderPopoverProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="mt-2.5 pt-2 border-t border-zinc-100 flex justify-end">
+        <div className="mt-2.5 pt-2 border-t border-zinc-100 flex justify-between items-center">
+          {onApplyToAll ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                onApplyToAll([localLow, localHigh]);
+                setIsOpen(false);
+              }}
+              className="h-6 px-2 text-[10.5px] border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 hover:text-indigo-800 transition-colors shadow-none cursor-pointer"
+              title="Εφαρμογή αυτών των ωρών σε όλα τα τμήματα (πλην Ολοήμερου)"
+            >
+              Εφαρμογή σε όλα
+            </Button>
+          ) : (
+            <div />
+          )}
           <Button
             type="button"
             size="sm"
@@ -1186,6 +1205,20 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
                         [c.id]: range,
                       },
                     });
+                  }}
+                  onApplyToAll={(range) => {
+                    const newClassHours = { ...inlineData.classHours };
+                    sortedClasses.forEach((sc) => {
+                      const isAllDay = Boolean(sc.isAllDay || sc.grade === "Ολοήμερο" || sc.name?.toLowerCase().includes("ολοήμερ"));
+                      if (!isAllDay) {
+                        newClassHours[sc.id] = range;
+                      }
+                    });
+                    setInlineData({
+                      ...inlineData,
+                      classHours: newClassHours,
+                    });
+                    toast.success(`Οι ώρες εφαρμόστηκαν σε όλα τα τμήματα πλην Ολοήμερου (${range[0]}${range[1] !== range[0] ? '-' + range[1] : ''}ω).`);
                   }}
                 />
               </div>

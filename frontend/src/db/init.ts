@@ -33,7 +33,7 @@ export async function initializeDatabase() {
     }
   }
 
-  // Ensure new columns exist on subjects table
+  // Ensure new columns exist on subjects and timetable_slots tables
   try {
     await client.execute("ALTER TABLE subjects ADD COLUMN allowed_specialties TEXT");
   } catch {}
@@ -42,6 +42,9 @@ export async function initializeDatabase() {
   } catch {}
   try {
     await client.execute("ALTER TABLE subjects ADD COLUMN class_hours TEXT");
+  } catch {}
+  try {
+    await client.execute("ALTER TABLE timetable_slots ADD COLUMN students TEXT");
   } catch {}
 
   // Check if school settings exist
@@ -59,17 +62,18 @@ export async function initializeDatabase() {
       days: ["Δευτέρα", "Τρίτη", "Τετάρτη", "Πέμπτη", "Παρασκευή"],
       periods: [
         { index: 0, label: "1η Ώρα", startTime: "08:15", endTime: "09:00" },
-        { index: 1, label: "2η Ώρα", startTime: "09:05", endTime: "09:50" },
-        { index: 2, label: "3η Ώρα", startTime: "10:05", endTime: "10:50" },
-        { index: 3, label: "4η Ώρα", startTime: "10:55", endTime: "11:40" },
-        { index: 4, label: "5η Ώρα", startTime: "11:55", endTime: "12:35" },
-        { index: 5, label: "6η Ώρα", startTime: "12:40", endTime: "13:15" },
+        { index: 1, label: "2η Ώρα", startTime: "09:00", endTime: "09:40" },
+        { index: 2, label: "3η Ώρα", startTime: "10:00", endTime: "10:45" },
+        { index: 3, label: "4η Ώρα", startTime: "10:45", endTime: "11:30" },
+        { index: 4, label: "5η Ώρα", startTime: "11:45", endTime: "12:25" },
+        { index: 5, label: "6η Ώρα", startTime: "12:35", endTime: "13:15" },
       ],
+      allDayPeriodsCount: 4,
       allDayPeriods: [
         { index: 6, label: "1η Ολοημέρου", startTime: "13:20", endTime: "14:00" },
         { index: 7, label: "2η Ολοημέρου", startTime: "14:15", endTime: "15:00" },
         { index: 8, label: "3η Ολοημέρου", startTime: "15:15", endTime: "16:00" },
-        { index: 9, label: "4η Ολοημέρου", startTime: "16:15", endTime: "17:00" },
+        { index: 9, label: "4η Ολοημέρου", startTime: "16:10", endTime: "16:55" },
       ],
     };
 

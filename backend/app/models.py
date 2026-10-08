@@ -71,6 +71,8 @@ class SchoolConfigInput(BaseModel):
     schoolName: str = "metaSchool"
     schoolYear: str = "2026-2027"
     days: List[str] = ["Δευτέρα", "Τρίτη", "Τετάρτη", "Πέμπτη", "Παρασκευή"]
+    hasAllDay: Optional[bool] = True
+    schoolType: Optional[str] = None
     periods: List[PeriodConfig] = []
     allDayPeriods: List[PeriodConfig] = []
     requireFirstAndLastHour: Optional[bool] = None

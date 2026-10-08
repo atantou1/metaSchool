@@ -16,14 +16,36 @@ export interface TeacherStyle {
 
 export { TEACHER_50_PALETTE, getTeacherTileStyle };
 
+/**
+ * Strips Greek accent marks and converts text to uppercase.
+ * Handles both composite characters (Ά, Έ, etc.) and decomposed unicode sequences.
+ */
+export function stripGreekAccents(text: string): string {
+  if (!text) return "";
+  return text
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/Ά/g, "Α")
+    .replace(/Έ/g, "Ε")
+    .replace(/Ή/g, "Η")
+    .replace(/Ί/g, "Ι")
+    .replace(/Ϊ/g, "Ι")
+    .replace(/Ό/g, "Ο")
+    .replace(/Ύ/g, "Υ")
+    .replace(/Ϋ/g, "Υ")
+    .replace(/Ώ/g, "Ω");
+}
+
 export function getTeacherAbbr(teacher?: Teacher | null, fallbackName?: string): string {
   if (teacher?.id === "tch-unassigned") return "+";
   if (!teacher && !fallbackName) return "—";
-  const name = teacher?.lastName || teacher?.firstName || fallbackName || "";
-  const trimmed = name.trim();
+  const raw = teacher?.shortName || teacher?.lastName || teacher?.firstName || fallbackName || "";
+  const trimmed = raw.trim();
   if (trimmed === "Χωρίς Ανάθεση") return "+";
-  if (trimmed.length <= 3) return trimmed.toUpperCase();
-  return trimmed.substring(0, 3).toUpperCase();
+  const clean = stripGreekAccents(trimmed);
+  if (clean.length <= 4) return clean;
+  return clean.substring(0, 4);
 }
 
 /** Get inline CSS properties for a teacher tile with contrast text and border */

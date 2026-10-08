@@ -66,10 +66,12 @@ export async function GET() {
           ...c,
           isAllDay: Boolean(c.isAllDay),
           supportSpecialties: c.supportSpecialties ? JSON.parse(c.supportSpecialties) : [],
+          students: c.students ? JSON.parse(c.students) : [],
         })),
         subGroups: allSubGroups.map((sg) => ({
           ...sg,
           isDefault: Boolean(sg.isDefault),
+          students: sg.students ? JSON.parse(sg.students) : [],
         })),
         assignments: allAssignments.map((a) => ({
           ...a,
@@ -79,6 +81,7 @@ export async function GET() {
           ...s,
           isSupport: Boolean(s.isSupport),
           isLocked: Boolean(s.isLocked),
+          students: s.students ? JSON.parse(s.students) : [],
         })),
         schoolConfig,
         rules: allRules.map((r) => ({

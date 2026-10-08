@@ -76,6 +76,7 @@ export async function POST(req: Request) {
       isSupport,
       layer: isSupport ? 2 : 1,
       isLocked: false,
+      students: Array.isArray(body.students) ? JSON.stringify(body.students) : null,
     });
 
     return NextResponse.json({ success: true, slotId });
@@ -210,6 +211,18 @@ export async function PATCH(req: Request) {
         .where(eq(schema.timetableSlots.id, slotId));
 
       return NextResponse.json({ success: true, slotId, targetDay, targetPeriod });
+    }
+
+    // 5. Updating students list
+    if (body.students !== undefined) {
+      await db
+        .update(schema.timetableSlots)
+        .set({
+          students: Array.isArray(body.students) ? JSON.stringify(body.students) : null,
+        })
+        .where(eq(schema.timetableSlots.id, slotId));
+
+      return NextResponse.json({ success: true, slotId, students: body.students });
     }
 
     return NextResponse.json(

@@ -24,6 +24,8 @@ import {
   Users,
   BookOpen,
   Sparkles,
+  Columns2,
+  Columns3,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -31,6 +33,7 @@ export default function Home() {
   const [data, setData] = useState<TimetableData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSolving, setIsSolving] = useState(false);
+  const [showAllDay, setShowAllDay] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [activeSheet, setActiveSheet] = useState<
     "classes" | "teachers" | "subjects" | "rules" | null
@@ -182,12 +185,52 @@ export default function Home() {
     );
   }
 
+  const morningCount = data?.schoolConfig?.periods?.length || 6;
+  const hasAllDay = Boolean(
+    data?.schoolConfig?.hasAllDay !== undefined
+      ? data.schoolConfig.hasAllDay
+      : data?.schoolConfig?.allDayPeriods && data.schoolConfig.allDayPeriods.length > 0
+  );
+  const allDayCount = hasAllDay ? (data?.schoolConfig?.allDayPeriods?.length ?? 4) : 0;
+
   return (
     <div className="h-screen w-full flex flex-col overflow-hidden bg-background text-foreground font-sans text-xs selection:bg-zinc-800 selection:text-white dark:selection:bg-zinc-700">
       <SiteHeader
         schoolName={data.schoolConfig?.schoolName}
         rightActions={
           <>
+            {/* View Mode Toggle: Συμπαγές vs Αναλυτικό - Icons only */}
+            {hasAllDay && allDayCount > 0 && (
+              <div className="flex items-center bg-zinc-100 dark:bg-zinc-800 p-0.5 rounded-lg border border-zinc-200/80 dark:border-zinc-700 mr-1.5 shadow-2xs">
+                <button
+                  type="button"
+                  onClick={() => setShowAllDay(false)}
+                  className={`p-1 rounded-md transition-all cursor-pointer ${
+                    !showAllDay
+                      ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-xs"
+                      : "text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+                  }`}
+                  title={`Συμπαγής προβολή ${morningCount} ωρών (όλα τα τμήματα και το Ολοήμερο στις ώρες 1-${allDayCount})`}
+                  aria-label={`Συμπαγής προβολή ${morningCount} ωρών`}
+                >
+                  <Columns2 className={`w-3.5 h-3.5 ${!showAllDay ? "text-blue-600 dark:text-blue-400" : "text-zinc-400"}`} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAllDay(true)}
+                  className={`p-1 rounded-md transition-all cursor-pointer ${
+                    showAllDay
+                      ? "bg-white dark:bg-zinc-700 text-zinc-900 dark:text-zinc-100 shadow-xs"
+                      : "text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+                  }`}
+                  title={`Αναλυτική προβολή ${morningCount + allDayCount} ωρών (διαχωρισμός Πρωινού 1-${morningCount} και Ολοημέρου 1-${allDayCount} σε ξεχωριστές στήλες)`}
+                  aria-label={`Αναλυτική προβολή ${morningCount + allDayCount} ωρών`}
+                >
+                  <Columns3 className={`w-3.5 h-3.5 ${showAllDay ? "text-indigo-600 dark:text-indigo-400" : "text-zinc-400"}`} />
+                </button>
+              </div>
+            )}
+
             <Button
               variant="outline"
               size="sm"
@@ -266,6 +309,8 @@ export default function Home() {
           onRefresh={loadData}
           spotlightTeacherId={spotlightTeacherId}
           onSelectTeacherSpotlight={setSpotlightTeacherId}
+          showAllDay={showAllDay}
+          onToggleAllDay={setShowAllDay}
         />
       </main>
 

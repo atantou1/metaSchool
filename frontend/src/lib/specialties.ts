@@ -182,7 +182,7 @@ export function getSupportSpecialties(level: "primary" | "secondary" | "all" = "
       level === "all" ||
       (level === "primary" && s.isPrimary) ||
       (level === "secondary" && s.isSecondary);
-    return isLevelMatch && (s.type === "ΣΥΜΠΛΗΡΩΜΑΤΙΚΗ" || s.code === "ΠΕ71");
+    return isLevelMatch && s.type === "ΣΥΜΠΛΗΡΩΜΑΤΙΚΗ";
   });
 }
 
