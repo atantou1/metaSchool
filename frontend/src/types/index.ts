@@ -45,6 +45,7 @@ export interface Subject {
   allowedSpecialties?: string[] | null; // e.g. ["ΠΕ70", "ΠΕ71"]
   defaultSpecialty?: string | null;
   classHours?: Record<string, [number, number] | number> | null;
+  classTeachers?: Record<string, string | null> | null;
   maxPerDay?: number | null;
 }
 

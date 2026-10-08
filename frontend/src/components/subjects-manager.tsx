@@ -95,6 +95,7 @@ interface InlineSubjectEditState {
   color: string;
   allowedSpecialties: string[];
   classHours: Record<string, [number, number]>;
+  classTeachers: Record<string, string | null>;
   maxPerDay: number | null;
 }
 
@@ -902,8 +903,10 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
       CLASS_15_PALETTE[data.subjects.length % CLASS_15_PALETTE.length].hex;
 
     const initialHours: Record<string, [number, number]> = {};
+    const initialTeachers: Record<string, string | null> = {};
     sortedClasses.forEach((c) => {
       initialHours[c.id] = [0, 0];
+      initialTeachers[c.id] = null;
     });
 
     setInlineData({
@@ -912,6 +915,7 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
       color: nextColor,
       allowedSpecialties: ["ΠΕ70"],
       classHours: initialHours,
+      classTeachers: initialTeachers,
       maxPerDay: null,
     });
     setEditingRowId("__new__");
@@ -927,8 +931,10 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
     }
 
     const targetHours: Record<string, [number, number]> = {};
+    const targetTeachers: Record<string, string | null> = {};
     sortedClasses.forEach((c) => {
       targetHours[c.id] = normalizeClassHours(target.classHours?.[c.id]);
+      targetTeachers[c.id] = target.classTeachers?.[c.id] || null;
     });
 
     const targetSpecs =
@@ -944,6 +950,7 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
       color: target.color || "#3b82f6",
       allowedSpecialties: targetSpecs,
       classHours: targetHours,
+      classTeachers: targetTeachers,
       maxPerDay: target.maxPerDay || null,
     });
     setEditingRowId("__new__");
@@ -954,8 +961,10 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
   // Start editing existing subject row
   const startInlineEdit = (subj: Subject) => {
     const hours: Record<string, [number, number]> = {};
+    const teachers: Record<string, string | null> = {};
     sortedClasses.forEach((c) => {
       hours[c.id] = normalizeClassHours(subj.classHours?.[c.id]);
+      teachers[c.id] = subj.classTeachers?.[c.id] || null;
     });
 
     const specs =
@@ -972,6 +981,7 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
       color: subj.color || "#3b82f6",
       allowedSpecialties: specs,
       classHours: hours,
+      classTeachers: teachers,
       maxPerDay: subj.maxPerDay || null,
     });
     setEditingRowId(subj.id);
@@ -995,8 +1005,10 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
     const finalCode = normalizeGreekUpper(inlineData.code.trim());
 
     const cleanHours: Record<string, [number, number]> = {};
+    const cleanTeachers: Record<string, string | null> = {};
     sortedClasses.forEach((c) => {
       cleanHours[c.id] = inlineData.classHours[c.id] || [0, 0];
+      cleanTeachers[c.id] = inlineData.classTeachers[c.id] || null;
     });
 
     const payload = {
@@ -1007,6 +1019,7 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
       allowedSpecialties: inlineData.allowedSpecialties,
       defaultSpecialty: inlineData.allowedSpecialties[0] || "ΠΕ70",
       classHours: cleanHours,
+      classTeachers: cleanTeachers,
       maxPerDay: inlineData.maxPerDay,
     };
 
@@ -1189,10 +1202,16 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
         {/* Class Hours Range Sliders */}
         {sortedClasses.map((c) => {
           const isLanguage = isLanguageSubject(inlineData.title, inlineData.code);
-          const maxAllowed = isLanguage ? 24 : 10;
+          const maxAllowed = c.id === "cls-a1" ? 50 : (isLanguage ? 24 : 10);
+          
+          // Find eligible teachers for this subject
+          const eligibleTeachers = data.teachers.filter(
+            (t) => t.isActive && inlineData.allowedSpecialties.includes(t.specialty)
+          );
+
           return (
-            <td key={c.id} className="py-1.5 px-1 text-center">
-              <div className="flex justify-center">
+            <td key={c.id} className="py-1.5 px-1 text-center align-top">
+              <div className="flex flex-col items-center justify-center gap-1">
                 <ClassHoursSliderPopover
                   classNameLabel={c.name}
                   value={inlineData.classHours[c.id] || [0, 0]}
@@ -1221,6 +1240,39 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
                     toast.success(`Οι ώρες εφαρμόστηκαν σε όλα τα τμήματα πλην Ολοήμερου (${range[0]}${range[1] !== range[0] ? '-' + range[1] : ''}ω).`);
                   }}
                 />
+                {(() => {
+                  const selectedId = inlineData.classTeachers?.[c.id];
+                  const selectedT = selectedId ? data.teachers.find(t => t.id === selectedId) : null;
+                  const selectColor = selectedT ? selectedT.color : undefined;
+                  return (
+                    <select
+                      className="text-[9px] font-medium h-5 w-[42px] bg-muted/50 border border-border/50 rounded text-center appearance-none cursor-pointer outline-none focus:ring-1 focus:ring-primary overflow-hidden text-ellipsis whitespace-nowrap px-0.5"
+                      style={{ color: selectColor }}
+                      title="Ανάθεση Εκπαιδευτικού"
+                      value={inlineData.classTeachers?.[c.id] || ""}
+                      onChange={(e) => {
+                        setInlineData({
+                          ...inlineData,
+                          classTeachers: {
+                            ...inlineData.classTeachers,
+                            [c.id]: e.target.value || null,
+                          }
+                        });
+                      }}
+                    >
+                      <option value="" style={{ color: "inherit" }}>ΟΛΟΙ</option>
+                      {eligibleTeachers.map(t => {
+                        const normalized = t.lastName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+                        const label = normalized.substring(0, 4);
+                        return (
+                          <option key={t.id} value={t.id} style={{ color: t.color }}>
+                            {label}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  );
+                })()}
               </div>
             </td>
           );
@@ -1476,7 +1528,7 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
                   Μέγ./Ημέρα
                 </th>
                 {sortedClasses.map((c) => (
-                  <th key={c.id} className="py-2.5 px-1.5 w-14 text-center" title={`Ώρες διδασκαλίας: ${c.name}`}>
+                  <th key={c.id} className="py-2.5 px-1.5 min-w-[72px] text-center" title={`Ώρες διδασκαλίας: ${c.name}`}>
                     {c.name}
                   </th>
                 ))}
@@ -1771,22 +1823,54 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
                       const [low, high] = range;
                       const isZero = low === 0 && high === 0;
                       const isRange = low !== high;
+                      
+                      const assignedTeacherId = subj.classTeachers?.[c.id];
+                      let assignedLabel = null;
+                      let assignedColor = null;
+                      if (assignedTeacherId) {
+                        const t = data.teachers.find(t => t.id === assignedTeacherId);
+                        if (t) {
+                          const normalized = t.lastName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+                          assignedLabel = normalized.substring(0, 4);
+                          assignedColor = t.color || "#71717a";
+                        }
+                      }
 
                       return (
                         <td
                           key={c.id}
-                          className="py-2.5 px-1.5 text-center font-mono text-[11px]"
+                          className="py-2.5 px-1.5 text-center align-middle"
                         >
                           {isZero ? (
                             <span className="text-zinc-300">—</span>
-                          ) : isRange ? (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-50 border border-amber-200 text-amber-900 font-bold font-mono text-[11px] shadow-2xs">
-                              {low}-{high}ω
-                            </span>
                           ) : (
-                            <span className="font-bold text-zinc-900 bg-zinc-50/70 px-1.5 py-0.5 rounded border border-zinc-200/60">
-                              {low}ω
-                            </span>
+                            <div className="flex justify-center">
+                              {assignedLabel ? (
+                                <div 
+                                  className="inline-flex flex-wrap items-center justify-center rounded px-1.5 py-0.5 border shadow-2xs"
+                                  style={{ 
+                                    backgroundColor: `${assignedColor}1A`, 
+                                    borderColor: `${assignedColor}4D`,
+                                    color: assignedColor 
+                                  }}
+                                  title={`Ανάθεση: ${assignedLabel}`}
+                                >
+                                  <span className="font-bold font-mono text-[11px]">
+                                    {isRange ? `${low}-${high}ω` : `${low}ω`}
+                                  </span>
+                                  <span className="mx-1 text-[8px] opacity-60">•</span>
+                                  <span className="font-bold text-[9px] tracking-tight">{assignedLabel}</span>
+                                </div>
+                              ) : isRange ? (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-50 border border-amber-200 text-amber-900 font-bold font-mono text-[11px] shadow-2xs">
+                                  {low}-{high}ω
+                                </span>
+                              ) : (
+                                <span className="font-bold text-zinc-900 bg-zinc-50/70 px-1.5 py-0.5 rounded border border-zinc-200/60 font-mono text-[11px]">
+                                  {low}ω
+                                </span>
+                              )}
+                            </div>
                           )}
                         </td>
                       );

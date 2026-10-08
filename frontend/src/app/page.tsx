@@ -11,6 +11,7 @@ import { SubjectsManager } from "@/components/subjects-manager";
 import { RulesManager } from "@/components/rules-manager";
 import { DiagnosticsModal } from "@/components/diagnostics-modal";
 import { SiteHeader } from "@/components/site-header";
+import { ScheduleActionsBar } from "@/components/schedule-actions-bar";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -44,6 +45,7 @@ export default function Home() {
   const [diagnosticsModalOpen, setDiagnosticsModalOpen] = useState(false);
   const [diagnosticItems, setDiagnosticItems] = useState<ConflictDiagnosticItem[]>([]);
   const [diagnosticConflicts, setDiagnosticConflicts] = useState<string[]>([]);
+  const [isDeepDiagnosing, setIsDeepDiagnosing] = useState(false);
 
   const loadData = async (isInitial = false) => {
     if (isInitial || !data) {
@@ -116,6 +118,33 @@ export default function Home() {
     }
   };
 
+  const handleRunDeepDiagnostics = async () => {
+    setIsDeepDiagnosing(true);
+    setDiagnosticsModalOpen(true); // Keep modal open
+    try {
+      const res = await fetch("/api/timetable/diagnose", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+
+      const resData = await res.json();
+      if (!res.ok || !resData.success) {
+        toast.error("Σφάλμα Βαθιάς Διάγνωσης", {
+          description: resData.error || "Δεν ήταν δυνατή η εκτέλεση βαθιάς διάγνωσης.",
+        });
+      } else {
+        setDiagnosticItems(resData.diagnosticItems || []);
+        toast.success("Η Βαθιά Διάγνωση Ολοκληρώθηκε", {
+          description: `Βρέθηκαν ${resData.diagnosticItems?.length || 0} αιτίες.`,
+        });
+      }
+    } catch (err: any) {
+      toast.error("Σφάλμα σύνδεσης", { description: err.message });
+    } finally {
+      setIsDeepDiagnosing(false);
+    }
+  };
 
   const handleSolveSupport = async () => {
     setIsSolving(true);
@@ -230,6 +259,8 @@ export default function Home() {
                 </button>
               </div>
             )}
+
+            <ScheduleActionsBar currentSlots={data.slots || []} onScheduleLoaded={() => loadData(false)} />
 
             <Button
               variant="outline"
@@ -374,6 +405,8 @@ export default function Home() {
           }
         }}
         onRetrySolve={handleSolve}
+        onRunDeepDiagnostics={handleRunDeepDiagnostics}
+        isDeepDiagnosing={isDeepDiagnosing}
       />
     </div>
   );

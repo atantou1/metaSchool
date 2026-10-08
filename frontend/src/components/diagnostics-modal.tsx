@@ -25,6 +25,7 @@ import {
   RotateCw,
   X,
   Layers,
+  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -35,6 +36,8 @@ interface DiagnosticsModalProps {
   conflicts?: string[];
   onNavigateToTab?: (tab: "teachers" | "classes" | "subjects" | "rules", targetId?: string) => void;
   onRetrySolve?: () => void;
+  onRunDeepDiagnostics?: () => void;
+  isDeepDiagnosing?: boolean;
 }
 
 export function DiagnosticsModal({
@@ -44,6 +47,8 @@ export function DiagnosticsModal({
   conflicts = [],
   onNavigateToTab,
   onRetrySolve,
+  onRunDeepDiagnostics,
+  isDeepDiagnosing = false,
 }: DiagnosticsModalProps) {
   const [activeCategory, setActiveCategory] = useState<string>("all");
   const [copied, setCopied] = useState(false);
@@ -141,6 +146,36 @@ export function DiagnosticsModal({
               </DialogDescription>
             </div>
           </div>
+
+          {/* Deep Diagnostics CTA (only show if not already probed) */}
+          {!isDeepDiagnosing && onRunDeepDiagnostics && !items.some(i => i.id.startsWith("probe_") || i.id === "deep_no_single_cause") && (
+            <div className="mt-4 bg-white/70 border border-amber-200/60 rounded-xl p-3 shadow-xs">
+              <div className="flex items-start gap-3">
+                <div className="flex-1">
+                  <h4 className="text-sm font-bold text-zinc-900">Δεν είναι ξεκάθαρο το πρόβλημα;</h4>
+                  <p className="text-xs text-zinc-600 mt-0.5">Εκτελέστε Βαθιά Διάγνωση για να ελέγξει ο αλγόριθμος τους κανόνες έναν-έναν και να βρει ακριβώς τι φταίει.</p>
+                </div>
+                <Button 
+                  onClick={onRunDeepDiagnostics} 
+                  className="bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs shadow-sm h-8"
+                >
+                  <Sparkles className="w-3.5 h-3.5 mr-1.5" />
+                  Βαθιά Διάγνωση
+                </Button>
+              </div>
+            </div>
+          )}
+          
+          {/* Deep Diagnostics Loading State */}
+          {isDeepDiagnosing && (
+            <div className="mt-4 bg-white/70 border border-amber-200/60 rounded-xl p-4 shadow-xs flex flex-col items-center justify-center gap-3">
+              <div className="w-8 h-8 border-2 border-zinc-200 border-t-amber-500 rounded-full animate-spin" />
+              <div className="text-center">
+                <h4 className="text-sm font-bold text-zinc-900">Εκτέλεση Βαθιάς Διάγνωσης...</h4>
+                <p className="text-xs text-zinc-600 mt-1">Ο αλγόριθμος αναλύει τις συγκρούσεις. Αυτό μπορεί να διαρκέσει λίγο (~30 δευτερόλεπτα).</p>
+              </div>
+            </div>
+          )}
 
           {/* Category Filter Pills */}
           <div className="flex items-center gap-1.5 mt-4 pt-3 border-t border-zinc-200/60 flex-wrap">

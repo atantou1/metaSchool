@@ -107,6 +107,11 @@ def solve_support_timetable(req: SolveRequest) -> SolveResponse:
                 c_id = c.id
                 c_is_allday = c.isAllDay
 
+                # 0. Manual Teacher Assignment Check
+                manual_t_id = s.classTeachers.get(c_id) if getattr(s, 'classTeachers', None) else None
+                if manual_t_id and manual_t_id != t_id:
+                    continue
+
                 # Same logic as basic solver: morning HT strictly in own class, etc.
                 if is_morning_ht and c_ht != c_id:
                     continue
@@ -503,8 +508,12 @@ def solve_support_timetable(req: SolveRequest) -> SolveResponse:
 
 
 
-def solve_timetable(req: SolveRequest) -> SolveResponse:
+def solve_timetable(req: SolveRequest, *, disabled_groups: set = None, relaxed_teachers: set = None, probe_time_limit: float = None) -> SolveResponse:
     start_time = time.time()
+    if disabled_groups is None:
+        disabled_groups = set()
+    if relaxed_teachers is None:
+        relaxed_teachers = set()
     model = cp_model.CpModel()
 
     # Dynamic periods and days from school configuration
@@ -586,6 +595,11 @@ def solve_timetable(req: SolveRequest) -> SolveResponse:
                 c_id = c.id
                 c_is_allday = c.isAllDay
 
+                # 0. Manual Teacher Assignment Check
+                manual_t_id = s.classTeachers.get(c_id) if getattr(s, 'classTeachers', None) else None
+                if manual_t_id and manual_t_id != t_id:
+                    continue
+
                 # 1. Morning Head Teacher: STRICTLY in their own class (all hours: whole-class or subgroup)
                 if is_morning_ht and c_ht != c_id:
                     continue
@@ -630,8 +644,11 @@ def solve_timetable(req: SolveRequest) -> SolveResponse:
         t_id = t.id
         t_max_h = t.maxWeeklyHours
         t_vars = [y[key] for key in eligible_tuples if key[0] == t_id]
-        if t_vars:
-            model.Add(sum(t_vars) == t_max_h)
+        if t_vars and "weekly_hours" not in disabled_groups:
+            if t_id in relaxed_teachers:
+                model.Add(sum(t_vars) <= t_max_h)
+            else:
+                model.Add(sum(t_vars) == t_max_h)
 
 
     # 5b. Teacher availability & daily workload
@@ -697,7 +714,7 @@ def solve_timetable(req: SolveRequest) -> SolveResponse:
                     if d_list and p < len(d_list):
                         is_avail = d_list[p]
 
-                if not is_avail:
+                if not is_avail and "availability" not in disabled_groups:
                     for v in p_vars:
                         model.Add(v == 0)
                     p_act = model.NewBoolVar(f"pun_{t_id[:4]}_{d}_{p}")
@@ -717,35 +734,41 @@ def solve_timetable(req: SolveRequest) -> SolveResponse:
             w_d = model.NewBoolVar(f"w_{t_id[:4]}_{d}")
             eff_min = min(min_h, eff_max_h) if min_h else 1
 
-            if is_regular_tch and t_max_h > 0:
-                if d in valid_avail_days:
-                    # If the teacher has enough weekly hours to cover all available days, they MUST work on this day
-                    if t_max_h >= num_valid_days:
-                        model.Add(w_d == 1)
-                        if min_h and min_h > 0:
-                            if num_valid_days * min_h <= t_max_h:
-                                eff_min = min(min_h, eff_max_h)
+            if "daily_workload" not in disabled_groups:
+                if is_regular_tch and t_max_h > 0:
+                    if d in valid_avail_days:
+                        # If the teacher has enough weekly hours to cover all available days, they MUST work on this day
+                        if t_max_h >= num_valid_days:
+                            model.Add(w_d == 1)
+                            if min_h and min_h > 0:
+                                if num_valid_days * min_h <= t_max_h:
+                                    eff_min = min(min_h, eff_max_h)
+                                else:
+                                    eff_min = max(1, t_max_h // num_valid_days)
                             else:
-                                eff_min = max(1, t_max_h // num_valid_days)
+                                eff_min = 1
+                            model.Add(daily_hours >= eff_min)
+                            model.Add(daily_hours <= eff_max_h)
                         else:
-                            eff_min = 1
-                        model.Add(daily_hours >= eff_min)
-                        model.Add(daily_hours <= eff_max_h)
+                            eff_min = min(min_h, eff_max_h) if min_h else 1
+                            model.Add(daily_hours >= eff_min * w_d)
+                            model.Add(daily_hours <= eff_max_h * w_d)
+                    else:
+                        model.Add(w_d == 0)
+                        model.Add(daily_hours == 0)
+                else:
+                    if d not in valid_avail_days:
+                        model.Add(w_d == 0)
+                        model.Add(daily_hours == 0)
                     else:
                         eff_min = min(min_h, eff_max_h) if min_h else 1
                         model.Add(daily_hours >= eff_min * w_d)
                         model.Add(daily_hours <= eff_max_h * w_d)
-                else:
-                    model.Add(w_d == 0)
-                    model.Add(daily_hours == 0)
             else:
+                # When daily_workload is disabled, only enforce non-available days = 0
                 if d not in valid_avail_days:
                     model.Add(w_d == 0)
                     model.Add(daily_hours == 0)
-                else:
-                    eff_min = min(min_h, eff_max_h) if min_h else 1
-                    model.Add(daily_hours >= eff_min * w_d)
-                    model.Add(daily_hours <= eff_max_h * w_d)
 
             # Enforce first & last available hour requirement if enabled
             # Can be configured per teacher (cons.requireFirstAndLastHour) or globally (schoolConfig / req)
@@ -757,7 +780,7 @@ def solve_timetable(req: SolveRequest) -> SolveResponse:
             elif getattr(req, 'requireFirstAndLastHour', None) is not None:
                 req_edge = req.requireFirstAndLastHour
 
-            if req_edge and avail_p_on_day:
+            if req_edge and avail_p_on_day and "edge_hours" not in disabled_groups:
                 first_p = min(avail_p_on_day)
                 last_p = max(avail_p_on_day)
                 if first_p == last_p:
@@ -775,13 +798,13 @@ def solve_timetable(req: SolveRequest) -> SolveResponse:
                         model.Add(daily_p_dict[first_p] + daily_p_dict[last_p] >= w_d - is_multi)
 
             # Max consecutive hours constraint (sliding window within active shift)
-            if max_ch and max_ch < len(t_periods):
+            if max_ch and max_ch < len(t_periods) and "max_consecutive" not in disabled_groups:
                 for i in range(len(t_periods) - max_ch):
                     consec = [daily_p_dict[t_periods[i + offset]] for offset in range(max_ch + 1)]
                     model.Add(sum(consec) <= max_ch)
 
             # Max consecutive gaps constraint
-            if max_cg is not None and len(t_periods) >= 3:
+            if max_cg is not None and len(t_periods) >= 3 and "gaps" not in disabled_groups:
                 for i in range(len(t_periods)):
                     for j in range(i + 1, len(t_periods)):
                         p_start = t_periods[i]
@@ -795,7 +818,7 @@ def solve_timetable(req: SolveRequest) -> SolveResponse:
                                 model.Add(daily_p_dict[p_start] + daily_p_dict[p_end] <= 1)
 
             # Max total gaps per day constraint (span - daily_hours <= max_tg_day)
-            if max_tg_day is not None:
+            if max_tg_day is not None and "gaps" not in disabled_groups:
                 if max_tg_day == 0:
                     for i in range(len(t_periods)):
                         for j in range(i + 2, len(t_periods)):
@@ -835,7 +858,10 @@ def solve_timetable(req: SolveRequest) -> SolveResponse:
                 is_default_active = model.NewBoolVar(f"def_act_c{c_id}_d{d}_p{p}")
                 is_split_active = model.NewBoolVar(f"split_act_c{c_id}_d{d}_p{p}")
                 
-                model.Add(is_default_active + is_split_active == 1)
+                if "class_coverage" not in disabled_groups:
+                    model.Add(is_default_active + is_split_active == 1)
+                else:
+                    model.Add(is_default_active + is_split_active <= 1)
                 
                 # If Main is active: >=1 teacher in Main, 0 in Split
                 model.Add(sum(def_vars) >= 1).OnlyEnforceIf(is_default_active)
@@ -860,14 +886,15 @@ def solve_timetable(req: SolveRequest) -> SolveResponse:
             if ch and len(ch) >= 2:
                 min_h = ch[0]
                 max_h = ch[1]
-                if min_h > 0:
-                    model.Add(sum(s_c_vars) >= min_h)
-                if max_h > 0:
-                    model.Add(sum(s_c_vars) <= max_h)
+                if "subject_hours" not in disabled_groups:
+                    if min_h > 0:
+                        model.Add(sum(s_c_vars) >= min_h)
+                    if max_h > 0:
+                        model.Add(sum(s_c_vars) <= max_h)
 
             # Max occurrences per day constraint
             max_per_day = getattr(s, "maxPerDay", None)
-            if max_per_day is not None and max_per_day > 0:
+            if max_per_day is not None and max_per_day > 0 and "subject_hours" not in disabled_groups:
                 for d in range(num_days):
                     daily_occurrences = []
                     for p in morning_periods:
@@ -880,7 +907,7 @@ def solve_timetable(req: SolveRequest) -> SolveResponse:
                         model.Add(sum(daily_occurrences) <= max_per_day)
 
     # 8. Locked / Fixed slots
-    if req.fixedSlots:
+    if req.fixedSlots and "fixed_slots" not in disabled_groups:
         for fixed in req.fixedSlots:
             matching_keys = [
                 k for k in eligible_tuples
@@ -898,7 +925,7 @@ def solve_timetable(req: SolveRequest) -> SolveResponse:
 
     # 9. Solve CP-SAT Model
     solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = 30.0
+    solver.parameters.max_time_in_seconds = probe_time_limit if probe_time_limit else 30.0
     solver.parameters.num_search_workers = 8
 
     status_1 = solver.Solve(model)

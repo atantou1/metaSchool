@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { id, title, code, color, allowedSpecialties, defaultSpecialty, classHours, maxPerDay } = body;
+    const { id, title, code, color, allowedSpecialties, defaultSpecialty, classHours, classTeachers, maxPerDay } = body;
 
     const subjectId = id || `sub-${crypto.randomUUID().slice(0, 8)}`;
     const specialtiesArray = Array.isArray(allowedSpecialties)
@@ -21,6 +21,13 @@ export async function POST(req: Request) {
         ? JSON.stringify(classHours)
         : typeof classHours === "string"
         ? classHours
+        : null;
+
+    const classTeachersJson =
+      typeof classTeachers === "object" && classTeachers !== null
+        ? JSON.stringify(classTeachers)
+        : typeof classTeachers === "string"
+        ? classTeachers
         : null;
 
     const existing = await db
@@ -39,6 +46,7 @@ export async function POST(req: Request) {
           allowedSpecialties: specialtiesJson,
           defaultSpecialty: specialtiesArray[0] || defaultSpecialty || null,
           classHours: weeklyHoursJson,
+          classTeachers: classTeachersJson,
           maxPerDay: maxPerDay || null,
         })
         .where(eq(schema.subjects.id, subjectId));
@@ -51,6 +59,7 @@ export async function POST(req: Request) {
         allowedSpecialties: specialtiesJson,
         defaultSpecialty: specialtiesArray[0] || defaultSpecialty || null,
         classHours: weeklyHoursJson,
+        classTeachers: classTeachersJson,
         maxPerDay: maxPerDay || null,
       });
     }

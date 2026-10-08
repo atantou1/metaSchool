@@ -8,6 +8,7 @@ from .models import (
     ValidateMoveResponse,
 )
 from .solver import solve_timetable, solve_support_timetable, validate_move
+from .solver_diagnostics_deep import deep_diagnose
 
 app = FastAPI(
     title="metaSchool Timetable Solver API",
@@ -52,6 +53,14 @@ def solve_support_endpoint(req: SolveRequest):
 def validate_endpoint(req: ValidateMoveRequest):
     try:
         response = validate_move(req)
+        return response
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/diagnose")
+def diagnose_endpoint(req: SolveRequest):
+    try:
+        response = deep_diagnose(req)
         return response
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

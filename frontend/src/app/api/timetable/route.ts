@@ -61,6 +61,7 @@ export async function GET() {
             : [],
           defaultSpecialty: s.defaultSpecialty || null,
           classHours: s.classHours ? JSON.parse(s.classHours) : null,
+          classTeachers: s.classTeachers ? JSON.parse(s.classTeachers) : null,
         })),
         classes: allClasses.map((c) => ({
           ...c,

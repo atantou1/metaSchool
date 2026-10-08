@@ -28,6 +28,7 @@ export const subjects = sqliteTable("subjects", {
   allowedSpecialties: text("allowed_specialties"), // JSON string e.g. '["ΠΕ70","ΠΕ71"]'
   defaultSpecialty: text("default_specialty"), // Legacy single specialty e.g. "ΠΕ70"
   classHours: text("class_hours"), // JSON string mapping classId to [min, max] hours
+  classTeachers: text("class_teachers"), // JSON string mapping classId to teacherId
   maxPerDay: integer("max_per_day"), // Max times a class can have this subject per day
 });
 
@@ -97,6 +98,16 @@ export const rules = sqliteTable("rules", {
   params: text("params").notNull(),        // JSON payload — shape depends on rule type
   isActive: integer("is_active", { mode: "boolean" }).default(true).notNull(),
   source: text("source").default("manual").notNull(), // "manual" | "ai"
+  createdAt: text("created_at").$defaultFn(() => new Date().toISOString()).notNull(),
+  updatedAt: text("updated_at").$defaultFn(() => new Date().toISOString()).notNull(),
+});
+
+export const schedules = sqliteTable("schedules", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  slotsData: text("slots_data").notNull(), // JSON payload of the timetable slots
+  isPublished: integer("is_published", { mode: "boolean" }).default(false).notNull(),
   createdAt: text("created_at").$defaultFn(() => new Date().toISOString()).notNull(),
   updatedAt: text("updated_at").$defaultFn(() => new Date().toISOString()).notNull(),
 });
