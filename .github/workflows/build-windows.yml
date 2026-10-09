@@ -43,10 +43,10 @@ jobs:
           node-version: 22
 
       - name: Install Dependencies & Build Frontend
+        working-directory: frontend
         run: |
           npm install
-          npm --prefix frontend install
-          npm --prefix frontend run build
+          npm run build
 
       # 3. Setup Rust Toolchain
       - name: Setup Rust toolchain
