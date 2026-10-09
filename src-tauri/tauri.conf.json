@@ -5,7 +5,7 @@
   "identifier": "com.metaschool.app",
   "build": {
     "beforeDevCommand": "npm run dev --prefix frontend",
-    "beforeBuildCommand": "npm run build --prefix frontend",
+    "beforeBuildCommand": "",
     "devUrl": "http://localhost:3000",
     "frontendDist": "dist"
   },
@@ -28,7 +28,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["nsis"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

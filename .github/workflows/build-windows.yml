@@ -55,7 +55,7 @@ jobs:
 
       - name: Build Tauri Desktop App
         run: |
-          npm run tauri build
+          npm run tauri build -- --verbose
 
       # 4. Upload Installer Artifacts
       - name: Upload Windows Installers
