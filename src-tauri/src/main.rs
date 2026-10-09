@@ -9,8 +9,8 @@ fn main() {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 if let Ok(sidecar_command) = handle.shell().sidecar("backend") {
-                    if let Ok((mut _rx, mut _child)) = sidecar_command.spawn() {
-                        while let Some(_event) = _rx.recv().await {
+                    if let Ok((_rx, _child)) = sidecar_command.spawn() {
+                        while let Ok(_event) = _rx.recv().await {
                             // Backend process event loop
                         }
                     }
