@@ -60,7 +60,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          projectPath: './src-tauri'
+          args: --verbose
 
       # 5. Upload Installer Artifacts
       - name: Upload Windows Installers
