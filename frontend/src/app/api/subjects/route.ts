@@ -30,6 +30,13 @@ export async function POST(req: Request) {
         ? classTeachers
         : null;
 
+    const classAssignmentsJson =
+      typeof body.classAssignments === "object" && body.classAssignments !== null
+        ? JSON.stringify(body.classAssignments)
+        : typeof body.classAssignments === "string"
+        ? body.classAssignments
+        : null;
+
     const existing = await db
       .select()
       .from(schema.subjects)
@@ -47,6 +54,7 @@ export async function POST(req: Request) {
           defaultSpecialty: specialtiesArray[0] || defaultSpecialty || null,
           classHours: weeklyHoursJson,
           classTeachers: classTeachersJson,
+          classAssignments: classAssignmentsJson,
           maxPerDay: maxPerDay || null,
         })
         .where(eq(schema.subjects.id, subjectId));
@@ -60,6 +68,7 @@ export async function POST(req: Request) {
         defaultSpecialty: specialtiesArray[0] || defaultSpecialty || null,
         classHours: weeklyHoursJson,
         classTeachers: classTeachersJson,
+        classAssignments: classAssignmentsJson,
         maxPerDay: maxPerDay || null,
       });
     }

@@ -33,7 +33,8 @@ class SubjectInput(BaseModel):
     color: str = "#71717a"
     allowedSpecialties: Optional[List[str]] = []
     classHours: Optional[Dict[str, List[int]]] = {}
-    classTeachers: Optional[Dict[str, Optional[str]]] = {}
+    classTeachers: Optional[Dict[str, Optional[Any]]] = {}
+    classAssignments: Optional[Dict[str, List[Dict[str, Any]]]] = {}
     maxPerDay: Optional[int] = None
 
 class ClassInput(BaseModel):

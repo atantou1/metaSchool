@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect, useRef } from "react";
-import { TimetableData, Subject } from "@/types";
+import { TimetableData, Subject, Teacher } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { UnifiedAssignmentPopover } from "@/components/UnifiedAssignmentPopover";
 import {
   Dialog,
   DialogContent,
@@ -41,6 +42,13 @@ import { normalizeGreekUpper } from "./teachers-manager";
 import { getSpecialties, getSpecialtyByCode, findSpecialty } from "@/lib/specialties";
 import { ClassColorPicker } from "@/components/class-color-picker";
 import { CLASS_15_PALETTE } from "@/lib/palette";
+
+export function normalizeAssignedTeachers(val: string | string[] | null | undefined): string[] {
+  if (!val) return [];
+  if (Array.isArray(val)) return val.filter(Boolean);
+  if (typeof val === "string") return val.trim() ? [val.trim()] : [];
+  return [];
+}
 
 interface SubjectsManagerProps {
   data: TimetableData;
@@ -95,7 +103,8 @@ interface InlineSubjectEditState {
   color: string;
   allowedSpecialties: string[];
   classHours: Record<string, [number, number]>;
-  classTeachers: Record<string, string | null>;
+  classTeachers: Record<string, string[]>;
+  classAssignments: Record<string, any[]>;
   maxPerDay: number | null;
 }
 
@@ -589,6 +598,265 @@ const ClassHoursSliderPopover: React.FC<ClassHoursSliderPopoverProps> = ({
 };
 
 /* ========================================================================== */
+/* MULTI-TEACHER ASSIGNMENT POPOVER FOR INLINE EDIT ROW                       */
+/* ========================================================================== */
+interface ClassTeacherMultiSelectPopoverProps {
+  smartDefaultIds?: string[];
+  classNameLabel: string;
+  selectedTeacherIds: string[];
+  eligibleTeachers: Teacher[];
+  onChange: (teacherIds: string[]) => void;
+  onApplyToAll?: (teacherIds: string[]) => void;
+}
+
+const getSmartDefaultIds = (c: any, eligible: Teacher[]): string[] => {
+  if (c.headTeacherId && eligible.some((t) => t.id === c.headTeacherId)) return [c.headTeacherId];
+  if (eligible.length === 1) return [eligible[0].id];
+  return ["all"];
+};
+
+const ClassTeacherMultiSelectPopover: React.FC<ClassTeacherMultiSelectPopoverProps> = ({
+  classNameLabel,
+  selectedTeacherIds,
+  smartDefaultIds,
+  eligibleTeachers,
+  onChange,
+  onApplyToAll,
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const toggleTeacher = (id: string) => {
+    let current = selectedTeacherIds.filter(v => v !== "all");
+    if (current.includes(id)) {
+      onChange(current.filter((tId) => tId !== id));
+    } else {
+      onChange([...current, id]);
+    }
+  };
+
+  const filteredTeachers = useMemo(() => {
+    if (!searchQuery.trim()) return eligibleTeachers;
+    const q = searchQuery.toLowerCase().trim();
+    return eligibleTeachers.filter((t) => {
+      const full = `${t.lastName} ${t.firstName} ${t.specialty}`.toLowerCase();
+      return full.includes(q);
+    });
+  }, [eligibleTeachers, searchQuery]);
+
+  // Determine trigger label
+  const isUsingSmartDefault = selectedTeacherIds.length === 0 && smartDefaultIds && smartDefaultIds.length > 0 && smartDefaultIds[0] !== "all";
+  const displayIds = selectedTeacherIds.length > 0 ? selectedTeacherIds : (smartDefaultIds || []);
+
+  let triggerText = "ΟΛΟΙ";
+  let triggerTitle = "Ανάθεση: Όλοι οι επιλέξιμοι εκπαιδευτικοί";
+  let isCustom = false;
+  let isSmart = isUsingSmartDefault;
+
+  if (selectedTeacherIds.includes("all") || (displayIds.length === 0)) {
+     triggerText = "ΟΛΟΙ";
+     triggerTitle = "Ανάθεση: ΟΛΟΙ";
+     isCustom = selectedTeacherIds.includes("all");
+     isSmart = false;
+  } else if (displayIds.length === 1) {
+    const t = eligibleTeachers.find((t) => t.id === selectedTeacherIds[0]);
+    if (t) {
+      const rawName = t.shortName || t.lastName || t.firstName || "";
+      triggerText = rawName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().substring(0, 4);
+      triggerTitle = `Ανάθεση: ${t.lastName} ${t.firstName}`;
+      isCustom = true;
+    }
+  } else if (selectedTeacherIds.length === 2) {
+    const names = selectedTeacherIds.map((id) => {
+      const t = eligibleTeachers.find((t) => t.id === id);
+      const raw = t?.shortName || t?.lastName || t?.firstName || "";
+      return raw.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().substring(0, 4);
+    });
+    triggerText = names.join("/");
+    triggerTitle = `Ανάθεση (2): ${selectedTeacherIds.map(id => eligibleTeachers.find(t => t.id === id)?.lastName).filter(Boolean).join(", ")}`;
+    isCustom = true;
+  } else if (selectedTeacherIds.length > 2) {
+    triggerText = `${selectedTeacherIds.length} εκπ.`;
+    triggerTitle = `Ανάθεση (${selectedTeacherIds.length} εκπαιδευτικοί)`;
+    isCustom = true;
+  }
+
+  return (
+    <Popover open={isOpen} onOpenChange={setIsOpen}>
+      <PopoverTrigger
+        type="button"
+        title={triggerTitle}
+        className={`h-5 w-[44px] px-1 rounded flex items-center justify-between gap-0.5 text-[9px] font-mono font-semibold transition-all cursor-pointer shadow-2xs border ${
+          isSmart
+            ? "bg-emerald-50 hover:bg-emerald-100/80 text-emerald-700 border-emerald-200/90"
+            : isCustom
+              ? displayIds.length > 1
+                ? "bg-indigo-50 hover:bg-indigo-100/80 text-indigo-950 border-indigo-200/90"
+                : "bg-zinc-100 hover:bg-zinc-200/80 text-zinc-800 border-zinc-300"
+              : "bg-zinc-50 hover:bg-zinc-100 text-zinc-500 border-zinc-200/80"
+        }`}
+      >
+        <span className="truncate tracking-tight">{triggerText}</span>
+        <ChevronDown className="w-2.5 h-2.5 opacity-40 shrink-0" />
+      </PopoverTrigger>
+      <PopoverContent
+        align="center"
+        className="w-64 p-2.5 shadow-xl border border-zinc-200 bg-white text-xs z-50 rounded-xl animate-in fade-in zoom-in-95"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between pb-2 mb-2 border-b border-zinc-100">
+          <div className="flex items-center gap-1.5">
+            <Users className="w-3.5 h-3.5 text-zinc-600" />
+            <span className="font-bold text-zinc-800 text-xs">
+              Ανάθεση: {classNameLabel}
+            </span>
+          </div>
+          {selectedTeacherIds.length > 0 && (
+            <button
+              type="button"
+              onClick={() => onChange([])}
+              className="text-[10.5px] text-red-600 hover:text-red-700 font-medium cursor-pointer"
+            >
+              Επαναφορά
+            </button>
+          )}
+        </div>
+
+        <p className="text-[10px] text-zinc-500 mb-2 leading-tight">
+          Επιλέξτε έναν ή περισσότερους εκπαιδευτικούς που μπορούν να διδάξουν στο {classNameLabel}.
+        </p>
+
+        {/* Option: ΟΛΟΙ (Χωρίς περιορισμό) */}
+        <div
+          onClick={() => onChange(["all"])}
+          className={`flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors mb-1.5 border ${
+            selectedTeacherIds.includes("all") || (!isUsingSmartDefault && displayIds.length === 0)
+              ? "bg-zinc-100 border-zinc-300 font-medium text-zinc-900"
+              : "hover:bg-zinc-50 border-transparent text-zinc-600"
+          }`}
+        >
+          <div
+            className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0 transition-all ${
+              selectedTeacherIds.includes("all") || (!isUsingSmartDefault && displayIds.length === 0)
+                ? "bg-zinc-900 border-zinc-900 text-white"
+                : "border-zinc-300 bg-white"
+            }`}
+          >
+            {(selectedTeacherIds.includes("all") || (!isUsingSmartDefault && displayIds.length === 0)) && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[11px] font-semibold">ΟΛΟΙ (Χωρίς περιορισμό)</span>
+            <span className="text-[9.5px] text-zinc-400">Οποιοσδήποτε επιλέξιμος εκπαιδευτικός</span>
+          </div>
+        </div>
+
+        {/* Search if more than 5 teachers */}
+        {eligibleTeachers.length > 5 && (
+          <div className="relative mb-2">
+            <Search className="w-3 h-3 absolute left-2 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Αναζήτηση εκπαιδευτικού..."
+              className="h-6 text-[11px] pl-6 pr-5 py-0 bg-zinc-50 border-zinc-200 focus-visible:ring-1"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 cursor-pointer"
+              >
+                <X className="w-2.5 h-2.5" />
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Teachers List */}
+        <div className="max-h-52 overflow-y-auto space-y-0.5 pr-0.5">
+          {filteredTeachers.length === 0 ? (
+            <p className="text-zinc-400 italic text-[11px] py-2 text-center">
+              Δεν βρέθηκαν εκπαιδευτικοί
+            </p>
+          ) : (
+            filteredTeachers.map((t) => {
+              const isChecked = displayIds.includes(t.id);
+              const rawName = t.shortName || t.lastName || t.firstName || "";
+              const label = rawName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().substring(0, 4);
+
+              return (
+                <div
+                  key={t.id}
+                  onClick={() => toggleTeacher(t.id)}
+                  className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-colors border select-none ${
+                    isChecked
+                      ? isSmart ? "bg-emerald-50/80 border-emerald-200 text-emerald-900 font-medium" : "bg-indigo-50/80 border-indigo-200 text-indigo-950 font-medium"
+                      : "hover:bg-zinc-50 border-transparent text-zinc-700"
+                  }`}
+                >
+                  <div
+                    className={`w-3.5 h-3.5 rounded flex items-center justify-center shrink-0 transition-all border ${
+                      isChecked
+                        ? (isSmart ? "bg-emerald-500 border-emerald-500 text-white" : "bg-indigo-600 border-indigo-600 text-white")
+                        : "border-zinc-300 bg-white"
+                    }`}
+                  >
+                    {isChecked && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                  </div>
+                  <span
+                    className="w-2 h-2 rounded-full shrink-0"
+                    style={{ backgroundColor: t.color || "#71717a" }}
+                  />
+                  <span className="font-mono font-bold text-[11px] shrink-0 text-zinc-800">
+                    {label}
+                  </span>
+                  <span className="text-[11px] text-zinc-700 truncate">
+                    {t.lastName} {t.firstName}
+                  </span>
+                  <span className="text-[9.5px] font-mono text-zinc-400 shrink-0 ml-auto">
+                    {t.specialty}
+                  </span>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="mt-2.5 pt-2 border-t border-zinc-100 flex justify-between items-center">
+          {onApplyToAll ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                onApplyToAll(selectedTeacherIds);
+                setIsOpen(false);
+              }}
+              className="h-6 px-2 text-[10.5px] border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors shadow-none cursor-pointer"
+              title="Εφαρμογή αυτής της ανάθεσης σε όλα τα τμήματα (πλην Ολοήμερου)"
+            >
+              Εφαρμογή σε όλα
+            </Button>
+          ) : (
+            <div />
+          )}
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => setIsOpen(false)}
+            className="h-6 px-3 text-[11px] bg-zinc-900 hover:bg-zinc-800 text-white font-semibold cursor-pointer shadow-2xs"
+          >
+            Έτοιμο
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+};
+
+/* ========================================================================== */
 /* MULTI-SPECIALTY SELECT POPOVER FOR INLINE EDIT ROW                         */
 /* ========================================================================== */
 interface SpecialtyMultiSelectPopoverProps {
@@ -903,10 +1171,12 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
       CLASS_15_PALETTE[data.subjects.length % CLASS_15_PALETTE.length].hex;
 
     const initialHours: Record<string, [number, number]> = {};
-    const initialTeachers: Record<string, string | null> = {};
+    const initialTeachers: Record<string, string[]> = {};
+    const initialAssignments: Record<string, any[]> = {};
     sortedClasses.forEach((c) => {
       initialHours[c.id] = [0, 0];
-      initialTeachers[c.id] = null;
+      initialTeachers[c.id] = [];
+      initialAssignments[c.id] = [];
     });
 
     setInlineData({
@@ -916,6 +1186,7 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
       allowedSpecialties: ["ΠΕ70"],
       classHours: initialHours,
       classTeachers: initialTeachers,
+      classAssignments: initialAssignments,
       maxPerDay: null,
     });
     setEditingRowId("__new__");
@@ -931,10 +1202,14 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
     }
 
     const targetHours: Record<string, [number, number]> = {};
-    const targetTeachers: Record<string, string | null> = {};
+    const targetTeachers: Record<string, string[]> = {};
+    const targetAssignments: Record<string, any[]> = {};
     sortedClasses.forEach((c) => {
       targetHours[c.id] = normalizeClassHours(target.classHours?.[c.id]);
-      targetTeachers[c.id] = target.classTeachers?.[c.id] || null;
+      targetTeachers[c.id] = normalizeAssignedTeachers(target.classTeachers?.[c.id]);
+      targetAssignments[c.id] = target.classAssignments?.[c.id]
+        ? JSON.parse(JSON.stringify(target.classAssignments[c.id]))
+        : [];
     });
 
     const targetSpecs =
@@ -951,6 +1226,7 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
       allowedSpecialties: targetSpecs,
       classHours: targetHours,
       classTeachers: targetTeachers,
+      classAssignments: targetAssignments,
       maxPerDay: target.maxPerDay || null,
     });
     setEditingRowId("__new__");
@@ -961,10 +1237,14 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
   // Start editing existing subject row
   const startInlineEdit = (subj: Subject) => {
     const hours: Record<string, [number, number]> = {};
-    const teachers: Record<string, string | null> = {};
+    const teachers: Record<string, string[]> = {};
+    const assignments: Record<string, any[]> = {};
     sortedClasses.forEach((c) => {
       hours[c.id] = normalizeClassHours(subj.classHours?.[c.id]);
-      teachers[c.id] = subj.classTeachers?.[c.id] || null;
+      teachers[c.id] = normalizeAssignedTeachers(subj.classTeachers?.[c.id]);
+      assignments[c.id] = subj.classAssignments?.[c.id]
+        ? JSON.parse(JSON.stringify(subj.classAssignments[c.id]))
+        : [];
     });
 
     const specs =
@@ -982,6 +1262,7 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
       allowedSpecialties: specs,
       classHours: hours,
       classTeachers: teachers,
+      classAssignments: assignments,
       maxPerDay: subj.maxPerDay || null,
     });
     setEditingRowId(subj.id);
@@ -1005,10 +1286,18 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
     const finalCode = normalizeGreekUpper(inlineData.code.trim());
 
     const cleanHours: Record<string, [number, number]> = {};
-    const cleanTeachers: Record<string, string | null> = {};
+    const cleanTeachers: Record<string, string[] | null> = {};
+    const cleanAssignments: Record<string, any[]> = {};
     sortedClasses.forEach((c) => {
       cleanHours[c.id] = inlineData.classHours[c.id] || [0, 0];
-      cleanTeachers[c.id] = inlineData.classTeachers[c.id] || null;
+      const asgs = inlineData.classAssignments?.[c.id] || [];
+      cleanAssignments[c.id] = asgs;
+      if (asgs.length > 0) {
+        cleanTeachers[c.id] = asgs.map((a) => a.teacherId);
+      } else {
+        const tList = inlineData.classTeachers[c.id];
+        cleanTeachers[c.id] = tList && tList.length > 0 ? tList : null;
+      }
     });
 
     const payload = {
@@ -1020,6 +1309,7 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
       defaultSpecialty: inlineData.allowedSpecialties[0] || "ΠΕ70",
       classHours: cleanHours,
       classTeachers: cleanTeachers,
+      classAssignments: cleanAssignments,
       maxPerDay: inlineData.maxPerDay,
     };
 
@@ -1201,8 +1491,8 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
 
         {/* Class Hours Range Sliders */}
         {sortedClasses.map((c) => {
-          const isLanguage = isLanguageSubject(inlineData.title, inlineData.code);
-          const maxAllowed = c.id === "cls-a1" ? 50 : (isLanguage ? 24 : 10);
+          const isAllDay = Boolean(c.isAllDay || c.grade === "Ολοήμερο" || c.name?.toLowerCase().includes("ολοήμερ"));
+          const maxAllowed = isAllDay ? 50 : 35;
           
           // Find eligible teachers for this subject
           const eligibleTeachers = data.teachers.filter(
@@ -1212,67 +1502,55 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
           return (
             <td key={c.id} className="py-1.5 px-1 text-center align-top">
               <div className="flex flex-col items-center justify-center gap-1">
-                <ClassHoursSliderPopover
+                <UnifiedAssignmentPopover
                   classNameLabel={c.name}
-                  value={inlineData.classHours[c.id] || [0, 0]}
-                  max={maxAllowed}
-                  onChange={(range) => {
-                    setInlineData({
-                      ...inlineData,
-                      classHours: {
-                        ...inlineData.classHours,
-                        [c.id]: range,
-                      },
-                    });
+                  classHours={inlineData.classHours[c.id] || [0, 0]}
+                  assignments={inlineData.classAssignments?.[c.id] || []}
+                  eligibleTeachers={eligibleTeachers}
+                  smartDefaultIds={getSmartDefaultIds(c, eligibleTeachers)}
+                  maxAllowedHours={maxAllowed}
+                  onChangeHours={(range) => {
+                    setInlineData((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            classHours: { ...prev.classHours, [c.id]: range },
+                          }
+                        : null
+                    );
                   }}
-                  onApplyToAll={(range) => {
-                    const newClassHours = { ...inlineData.classHours };
-                    sortedClasses.forEach((sc) => {
-                      const isAllDay = Boolean(sc.isAllDay || sc.grade === "Ολοήμερο" || sc.name?.toLowerCase().includes("ολοήμερ"));
-                      if (!isAllDay) {
-                        newClassHours[sc.id] = range;
-                      }
+                  onApplyHoursToAll={(range) => {
+                    setInlineData((prev) => {
+                      if (!prev) return null;
+                      const newClassHours = { ...prev.classHours };
+                      sortedClasses.forEach((sc) => {
+                        const isAllDay = Boolean(
+                          sc.isAllDay ||
+                            sc.grade === "Ολοήμερο" ||
+                            sc.name?.toLowerCase().includes("ολοήμερ")
+                        );
+                        if (!isAllDay) newClassHours[sc.id] = range;
+                      });
+                      return { ...prev, classHours: newClassHours };
                     });
-                    setInlineData({
-                      ...inlineData,
-                      classHours: newClassHours,
-                    });
-                    toast.success(`Οι ώρες εφαρμόστηκαν σε όλα τα τμήματα πλην Ολοήμερου (${range[0]}${range[1] !== range[0] ? '-' + range[1] : ''}ω).`);
+                    toast.success(
+                      `Οι ώρες εφαρμόστηκαν σε όλα τα τμήματα πλην Ολοήμερου.`
+                    );
+                  }}
+                  onChangeAssignments={(assignments) => {
+                    setInlineData((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            classAssignments: {
+                              ...prev.classAssignments,
+                              [c.id]: assignments,
+                            },
+                          }
+                        : null
+                    );
                   }}
                 />
-                {(() => {
-                  const selectedId = inlineData.classTeachers?.[c.id];
-                  const selectedT = selectedId ? data.teachers.find(t => t.id === selectedId) : null;
-                  const selectColor = selectedT ? selectedT.color : undefined;
-                  return (
-                    <select
-                      className="text-[9px] font-medium h-5 w-[42px] bg-muted/50 border border-border/50 rounded text-center appearance-none cursor-pointer outline-none focus:ring-1 focus:ring-primary overflow-hidden text-ellipsis whitespace-nowrap px-0.5"
-                      style={{ color: selectColor }}
-                      title="Ανάθεση Εκπαιδευτικού"
-                      value={inlineData.classTeachers?.[c.id] || ""}
-                      onChange={(e) => {
-                        setInlineData({
-                          ...inlineData,
-                          classTeachers: {
-                            ...inlineData.classTeachers,
-                            [c.id]: e.target.value || null,
-                          }
-                        });
-                      }}
-                    >
-                      <option value="" style={{ color: "inherit" }}>ΟΛΟΙ</option>
-                      {eligibleTeachers.map(t => {
-                        const normalized = t.lastName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
-                        const label = normalized.substring(0, 4);
-                        return (
-                          <option key={t.id} value={t.id} style={{ color: t.color }}>
-                            {label}
-                          </option>
-                        );
-                      })}
-                    </select>
-                  );
-                })()}
               </div>
             </td>
           );
@@ -1528,7 +1806,7 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
                   Μέγ./Ημέρα
                 </th>
                 {sortedClasses.map((c) => (
-                  <th key={c.id} className="py-2.5 px-1.5 min-w-[72px] text-center" title={`Ώρες διδασκαλίας: ${c.name}`}>
+                  <th key={c.id} className="py-2.5 px-1.5 min-w-[56px] text-center" title={`Ώρες διδασκαλίας: ${c.name}`}>
                     {c.name}
                   </th>
                 ))}
@@ -1817,56 +2095,174 @@ export const SubjectsManager: React.FC<SubjectsManagerProps> = ({
                       )}
                     </td>
 
-                    {/* Hours Per Class */}
+                    {/* Assignments Per Class */}
                     {sortedClasses.map((c) => {
                       const range = normalizeClassHours(subj.classHours?.[c.id]);
-                      const [low, high] = range;
+                      let [low, high] = range;
+
+                      const assignments = subj.classAssignments?.[c.id] || [];
+                      const isUsingSmartDefault = assignments.length === 0;
+
+                      if (low === 0 && high === 0 && assignments.length > 0) {
+                        const withHours = assignments.filter(
+                          (a: any) => a.hours && a.teacherId !== "all"
+                        );
+                        if (withHours.length > 0) {
+                          low = withHours.reduce(
+                            (sum: number, a: any) =>
+                              sum + (a.hours ? a.hours[0] : 0),
+                            0
+                          );
+                          high = withHours.reduce(
+                            (sum: number, a: any) =>
+                              sum + (a.hours ? a.hours[1] : 0),
+                            0
+                          );
+                        }
+                      }
+
                       const isZero = low === 0 && high === 0;
                       const isRange = low !== high;
-                      
-                      const assignedTeacherId = subj.classTeachers?.[c.id];
-                      let assignedLabel = null;
-                      let assignedColor = null;
-                      if (assignedTeacherId) {
-                        const t = data.teachers.find(t => t.id === assignedTeacherId);
-                        if (t) {
-                          const normalized = t.lastName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
-                          assignedLabel = normalized.substring(0, 4);
-                          assignedColor = t.color || "#71717a";
+
+                      let teacherLabel: string | null = null;
+                      let teacherTooltip: string | null = null;
+
+                      const eligibleTeachers = data.teachers.filter(
+                        (t) =>
+                          !subj.allowedSpecialties?.length ||
+                          subj.allowedSpecialties.includes(t.specialty)
+                      );
+                      const smartDefaults = getSmartDefaultIds(c, eligibleTeachers);
+
+                      const displayedIds = isUsingSmartDefault
+                        ? smartDefaults
+                        : assignments.map((a) => a.teacherId);
+
+                      const tooltipParts: string[] = [];
+                      if (displayedIds.length === 1) {
+                        const tId = displayedIds[0];
+                        if (tId === "all") {
+                          teacherLabel = "ΟΛΟΙ";
+                          tooltipParts.push("ΟΛΟΙ (Οποιοσδήποτε)");
+                        } else {
+                          const t = data.teachers.find((t) => t.id === tId);
+                          const asg = assignments.find((a: any) => a.teacherId === tId);
+                          const hStr = asg?.hours
+                            ? ` (${asg.hours[0]}${
+                                asg.hours[1] !== asg.hours[0]
+                                  ? "-" + asg.hours[1]
+                                  : ""
+                              }ω)`
+                            : "";
+                          if (t) {
+                            const rawName =
+                              t.shortName || t.lastName || t.firstName || "";
+                            teacherLabel = rawName
+                              .normalize("NFD")
+                              .replace(/[\u0300-\u036f]/g, "")
+                              .toUpperCase()
+                              .substring(0, 4);
+                            tooltipParts.push(`${t.lastName} ${t.firstName}${hStr}`);
+                          }
                         }
+                      } else if (displayedIds.length === 2) {
+                        const names = displayedIds.map((id) => {
+                          if (id === "all") {
+                            tooltipParts.push("ΟΛΟΙ");
+                            return "ΟΛΟ";
+                          }
+                          const t = data.teachers.find((t) => t.id === id);
+                          const asg = assignments.find((a: any) => a.teacherId === id);
+                          const hStr = asg?.hours
+                            ? ` (${asg.hours[0]}${
+                                asg.hours[1] !== asg.hours[0]
+                                  ? "-" + asg.hours[1]
+                                  : ""
+                              }ω)`
+                            : "";
+                          const raw =
+                            t?.shortName || t?.lastName || t?.firstName || "";
+                          if (t) {
+                            tooltipParts.push(`${t.lastName} ${t.firstName}${hStr}`);
+                          }
+                          return raw
+                            .normalize("NFD")
+                            .replace(/[\u0300-\u036f]/g, "")
+                            .toUpperCase()
+                            .substring(0, 4);
+                        });
+                        teacherLabel = names.join("/");
+                      } else if (displayedIds.length > 2) {
+                        teacherLabel = `${displayedIds.length} εκπ.`;
+                        displayedIds.forEach((id) => {
+                          if (id === "all") {
+                            tooltipParts.push("ΟΛΟΙ");
+                          } else {
+                            const t = data.teachers.find((t) => t.id === id);
+                            const asg = assignments.find((a: any) => a.teacherId === id);
+                            const hStr = asg?.hours
+                              ? ` (${asg.hours[0]}${
+                                  asg.hours[1] !== asg.hours[0]
+                                    ? "-" + asg.hours[1]
+                                    : ""
+                                }ω)`
+                              : "";
+                            if (t) {
+                              tooltipParts.push(`${t.lastName} ${t.firstName}${hStr}`);
+                            }
+                          }
+                        });
+                      }
+
+                      if (tooltipParts.length > 0) {
+                        teacherTooltip = isUsingSmartDefault
+                          ? `Προεπιλογή: ${tooltipParts.join(", ")}`
+                          : `Ανάθεση: ${tooltipParts.join(", ")}`;
                       }
 
                       return (
                         <td
                           key={c.id}
-                          className="py-2.5 px-1.5 text-center align-middle"
+                          className="py-2 px-1 text-center align-middle"
                         >
                           {isZero ? (
                             <span className="text-zinc-300">—</span>
                           ) : (
                             <div className="flex justify-center">
-                              {assignedLabel ? (
-                                <div 
-                                  className="inline-flex flex-wrap items-center justify-center rounded px-1.5 py-0.5 border shadow-2xs"
-                                  style={{ 
-                                    backgroundColor: `${assignedColor}1A`, 
-                                    borderColor: `${assignedColor}4D`,
-                                    color: assignedColor 
-                                  }}
-                                  title={`Ανάθεση: ${assignedLabel}`}
+                              {teacherLabel ? (
+                                <div
+                                  className={`inline-flex flex-col items-center justify-center rounded px-1.5 py-0.5 border shadow-2xs leading-none min-w-[36px] ${
+                                    isUsingSmartDefault && smartDefaults[0] !== "all"
+                                      ? "bg-emerald-50 border-emerald-200"
+                                      : "bg-zinc-100 border-zinc-200/80"
+                                  }`}
+                                  title={teacherTooltip || undefined}
                                 >
-                                  <span className="font-bold font-mono text-[11px]">
+                                  <span
+                                    className={`font-bold font-mono text-[11px] ${
+                                      isUsingSmartDefault && smartDefaults[0] !== "all"
+                                        ? "text-emerald-800"
+                                        : "text-zinc-800"
+                                    }`}
+                                  >
                                     {isRange ? `${low}-${high}ω` : `${low}ω`}
                                   </span>
-                                  <span className="mx-1 text-[8px] opacity-60">•</span>
-                                  <span className="font-bold text-[9px] tracking-tight">{assignedLabel}</span>
+                                  <span
+                                    className={`font-semibold font-mono text-[9px] tracking-tight mt-0.5 ${
+                                      isUsingSmartDefault && smartDefaults[0] !== "all"
+                                        ? "text-emerald-600"
+                                        : "text-zinc-600"
+                                    }`}
+                                  >
+                                    {teacherLabel}
+                                  </span>
                                 </div>
                               ) : isRange ? (
-                                <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-50 border border-amber-200 text-amber-900 font-bold font-mono text-[11px] shadow-2xs">
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-zinc-100 border border-zinc-200/80 text-zinc-800 font-bold font-mono text-[11px] shadow-2xs">
                                   {low}-{high}ω
                                 </span>
                               ) : (
-                                <span className="font-bold text-zinc-900 bg-zinc-50/70 px-1.5 py-0.5 rounded border border-zinc-200/60 font-mono text-[11px]">
+                                <span className="font-bold text-zinc-800 bg-zinc-100 px-1.5 py-0.5 rounded border border-zinc-200/80 font-mono text-[11px] shadow-2xs">
                                   {low}ω
                                 </span>
                               )}

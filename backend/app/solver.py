@@ -108,9 +108,14 @@ def solve_support_timetable(req: SolveRequest) -> SolveResponse:
                 c_is_allday = c.isAllDay
 
                 # 0. Manual Teacher Assignment Check
-                manual_t_id = s.classTeachers.get(c_id) if getattr(s, 'classTeachers', None) else None
-                if manual_t_id and manual_t_id != t_id:
-                    continue
+                manual_t = s.classTeachers.get(c_id) if getattr(s, 'classTeachers', None) else None
+                if manual_t:
+                    if isinstance(manual_t, list):
+                        if manual_t and t_id not in manual_t:
+                            continue
+                    elif isinstance(manual_t, str) and manual_t.strip():
+                        if manual_t != t_id:
+                            continue
 
                 # Same logic as basic solver: morning HT strictly in own class, etc.
                 if is_morning_ht and c_ht != c_id:
@@ -541,7 +546,7 @@ def solve_timetable(req: SolveRequest, *, disabled_groups: set = None, relaxed_t
         for t in teachers
     }
 
-    # 2. Build subgroup mappings (default group 0, split A group 1, split B group 2)
+    # 2. Build subgroup mappings (default group 0, split A group 1, split B group 2, split C group 3)
     subgroups_by_class = {}
     for c in classes:
         c_sgs = [sg for sg in req.subGroups if sg.classId == c.id]
@@ -551,11 +556,13 @@ def solve_timetable(req: SolveRequest, *, disabled_groups: set = None, relaxed_t
         sg_splits = [sg for sg in c_sgs if not sg.isDefault]
         sg_a_id = sg_splits[0].id if len(sg_splits) > 0 else f"grp-{c.id}-subA"
         sg_b_id = sg_splits[1].id if len(sg_splits) > 1 else f"grp-{c.id}-subB"
+        sg_c_id = sg_splits[2].id if len(sg_splits) > 2 else f"grp-{c.id}-subC"
 
         subgroups_by_class[c.id] = {
             0: sg_def_id,
             1: sg_a_id,
             2: sg_b_id,
+            3: sg_c_id,
         }
 
     # 3. Build subject eligibility and class hours
@@ -595,35 +602,45 @@ def solve_timetable(req: SolveRequest, *, disabled_groups: set = None, relaxed_t
                 c_id = c.id
                 c_is_allday = c.isAllDay
 
-                # 0. Manual Teacher Assignment Check
-                manual_t_id = s.classTeachers.get(c_id) if getattr(s, 'classTeachers', None) else None
-                if manual_t_id and manual_t_id != t_id:
-                    continue
+                # 0. Smart Default & Manual Teacher Assignment
+                assignments = getattr(s, 'classAssignments', {}).get(c_id, [])
+                allowed_teacher_ids = []
+                is_all = False
 
-                # 1. Morning Head Teacher: STRICTLY in their own class (all hours: whole-class or subgroup)
-                if is_morning_ht and c_ht != c_id:
-                    continue
-
-                # 2. All-Day Head Teacher: in All-Day class (during all-day periods) OR in morning classes (for remaining hours)
-                if is_allday_ht:
-                    if c_is_allday:
-                        if c_ht != c_id:
-                            continue
-                        valid_periods = allday_periods
+                if not assignments:
+                    # Apply Smart Default
+                    eligible_for_subj = [t_obj for t_obj in teachers if not subject_allowed_spec[s_id] or t_obj.specialty in subject_allowed_spec[s_id]]
+                    ht_id = c.headTeacherId
+                    if ht_id and any(t_obj.id == ht_id for t_obj in eligible_for_subj):
+                        allowed_teacher_ids = [ht_id]
+                    elif len(eligible_for_subj) == 1:
+                        allowed_teacher_ids = [eligible_for_subj[0].id]
                     else:
-                        valid_periods = morning_periods
+                        is_all = True
                 else:
-                    if not c_is_allday:
-                        if not t_is_morning:
-                            continue
-                        valid_periods = morning_periods
-                    else:
-                        if not t_is_allday:
-                            continue
-                        valid_periods = allday_periods
+                    for a in assignments:
+                        tid = a.get("teacherId")
+                        if tid == "all":
+                            is_all = True
+                            break
+                        elif tid:
+                            allowed_teacher_ids.append(tid)
 
-                for g_idx in [0, 1, 2]:
-                    # All-Day Head teacher teaching in morning classes teaches in subgroup/co-teaching (g_idx in (1, 2))
+                if not is_all and t_id not in allowed_teacher_ids:
+                    continue
+
+                # 1. Valid Periods Check (Morning vs All-Day)
+                if not c_is_allday:
+                    if not t_is_morning:
+                        continue
+                    valid_periods = morning_periods
+                else:
+                    if not t_is_allday:
+                        continue
+                    valid_periods = allday_periods
+
+                for g_idx in [0, 1, 2, 3]:
+                    # All-Day Head teacher teaching in morning classes teaches in subgroup (g_idx in (1, 2, 3))
                     if is_allday_ht and not c_is_allday and g_idx == 0:
                         continue
 
@@ -853,25 +870,52 @@ def solve_timetable(req: SolveRequest, *, disabled_groups: set = None, relaxed_t
                 def_vars = [y[k] for k in eligible_tuples if k[2] == c_id and k[3] == 0 and k[4] == d and k[5] == p]
                 sg1_vars = [y[k] for k in eligible_tuples if k[2] == c_id and k[3] == 1 and k[4] == d and k[5] == p]
                 sg2_vars = [y[k] for k in eligible_tuples if k[2] == c_id and k[3] == 2 and k[4] == d and k[5] == p]
+                sg3_vars = [y[k] for k in eligible_tuples if k[2] == c_id and k[3] == 3 and k[4] == d and k[5] == p]
 
-                # HARD CONSTRAINT: Every class period must have EXACTLY 1 active session type (Main OR Split)
-                is_default_active = model.NewBoolVar(f"def_act_c{c_id}_d{d}_p{p}")
-                is_split_active = model.NewBoolVar(f"split_act_c{c_id}_d{d}_p{p}")
+                support_vars = [y[k] for k in eligible_tuples if k[2] == c_id and k[4] == d and k[5] == p and teacher_by_id[k[0]].isSupport]
                 
+                total_teachers = sum(def_vars) + sum(sg1_vars) + sum(sg2_vars) + sum(sg3_vars)
+
+                # HARD CONSTRAINT: Max 1 teacher per subgroup (No Co-teaching)
+                model.Add(sum(def_vars) <= 1)
+                model.Add(sum(sg1_vars) <= 1)
+                model.Add(sum(sg2_vars) <= 1)
+                model.Add(sum(sg3_vars) <= 1)
+
+                is_0 = model.NewBoolVar(f"c{c_id[:4]}_d{d}_p{p}_0")
+                is_1 = model.NewBoolVar(f"c{c_id[:4]}_d{d}_p{p}_1")
+                is_2 = model.NewBoolVar(f"c{c_id[:4]}_d{d}_p{p}_2")
+                is_3 = model.NewBoolVar(f"c{c_id[:4]}_d{d}_p{p}_3")
+
+                # Exactly one of these states must be true (class can have 0, 1, 2, or 3 teachers)
+                model.AddExactlyOne([is_0, is_1, is_2, is_3])
+
+                model.Add(total_teachers == 0).OnlyEnforceIf(is_0)
+                model.Add(total_teachers == 1).OnlyEnforceIf(is_1)
+                model.Add(total_teachers == 2).OnlyEnforceIf(is_2)
+                model.Add(total_teachers == 3).OnlyEnforceIf(is_3)
+
+                # If exactly 1 teacher: Must be in Main, cannot be Support
+                model.Add(sum(def_vars) == 1).OnlyEnforceIf(is_1)
+                model.Add(sum(sg1_vars) == 0).OnlyEnforceIf(is_1)
+                model.Add(sum(sg2_vars) == 0).OnlyEnforceIf(is_1)
+                model.Add(sum(sg3_vars) == 0).OnlyEnforceIf(is_1)
+                model.Add(sum(support_vars) == 0).OnlyEnforceIf(is_1)
+
+                # If exactly 2 teachers: Must be in SubA and SubB
+                model.Add(sum(def_vars) == 0).OnlyEnforceIf(is_2)
+                model.Add(sum(sg1_vars) == 1).OnlyEnforceIf(is_2)
+                model.Add(sum(sg2_vars) == 1).OnlyEnforceIf(is_2)
+                model.Add(sum(sg3_vars) == 0).OnlyEnforceIf(is_2)
+
+                # If exactly 3 teachers: Must be in SubA, SubB, and SubC
+                model.Add(sum(def_vars) == 0).OnlyEnforceIf(is_3)
+                model.Add(sum(sg1_vars) == 1).OnlyEnforceIf(is_3)
+                model.Add(sum(sg2_vars) == 1).OnlyEnforceIf(is_3)
+                model.Add(sum(sg3_vars) == 1).OnlyEnforceIf(is_3)
+
                 if "class_coverage" not in disabled_groups:
-                    model.Add(is_default_active + is_split_active == 1)
-                else:
-                    model.Add(is_default_active + is_split_active <= 1)
-                
-                # If Main is active: >=1 teacher in Main, 0 in Split
-                model.Add(sum(def_vars) >= 1).OnlyEnforceIf(is_default_active)
-                model.Add(sum(sg1_vars) == 0).OnlyEnforceIf(is_default_active)
-                model.Add(sum(sg2_vars) == 0).OnlyEnforceIf(is_default_active)
-                
-                # If Split is active: 0 teachers in Main, >=1 in Split A, >=1 in Split B
-                model.Add(sum(def_vars) == 0).OnlyEnforceIf(is_split_active)
-                model.Add(sum(sg1_vars) >= 1).OnlyEnforceIf(is_split_active)
-                model.Add(sum(sg2_vars) >= 1).OnlyEnforceIf(is_split_active)
+                    model.Add(is_0 == 0)
 
     # 7. Subject hours per class from the Subjects table
     for c in classes:
@@ -891,6 +935,19 @@ def solve_timetable(req: SolveRequest, *, disabled_groups: set = None, relaxed_t
                         model.Add(sum(s_c_vars) >= min_h)
                     if max_h > 0:
                         model.Add(sum(s_c_vars) <= max_h)
+
+            # Per-teacher hour constraints from classAssignments
+            c_assignments = getattr(s, 'classAssignments', {}).get(c_id, [])
+            if c_assignments and "subject_hours" not in disabled_groups:
+                for a in c_assignments:
+                    tid = a.get("teacherId")
+                    thours = a.get("hours")
+                    if tid and tid != "all" and thours and isinstance(thours, (list, tuple)) and len(thours) >= 2:
+                        t_vars = [y[k] for k in eligible_tuples if k[2] == c_id and k[1] == s_id and k[0] == tid]
+                        if thours[0] > 0:
+                            model.Add(sum(t_vars) >= thours[0])
+                        if thours[1] > 0:
+                            model.Add(sum(t_vars) <= thours[1])
 
             # Max occurrences per day constraint
             max_per_day = getattr(s, "maxPerDay", None)

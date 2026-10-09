@@ -29,6 +29,7 @@ export const subjects = sqliteTable("subjects", {
   defaultSpecialty: text("default_specialty"), // Legacy single specialty e.g. "ΠΕ70"
   classHours: text("class_hours"), // JSON string mapping classId to [min, max] hours
   classTeachers: text("class_teachers"), // JSON string mapping classId to teacherId
+  classAssignments: text("class_assignments"), // JSON string mapping classId to array of {teacherId: string, hours: [min, max]}
   maxPerDay: integer("max_per_day"), // Max times a class can have this subject per day
 });
 

@@ -97,6 +97,7 @@ export async function POST(req: Request) {
         allowedSpecialties: s.allowedSpecialties ? JSON.parse(s.allowedSpecialties) : (s.defaultSpecialty ? [s.defaultSpecialty] : []),
         classHours: s.classHours ? JSON.parse(s.classHours) : {},
         classTeachers: s.classTeachers ? JSON.parse(s.classTeachers) : {},
+        classAssignments: s.classAssignments ? JSON.parse(s.classAssignments) : {},
         maxPerDay: s.maxPerDay,
       })),
       classes: allClasses.map((c) => ({
@@ -194,13 +195,14 @@ export async function POST(req: Request) {
         if (!existingSubGroupIds.has(slot.subGroupId)) {
           const isA = slot.subGroupId.endsWith("subA");
           const isB = slot.subGroupId.endsWith("subB");
-          const name = isA ? "Ομάδα Α" : isB ? "Ομάδα Β" : "Ολομέλεια";
+          const isC = slot.subGroupId.endsWith("subC");
+          const name = isA ? "Ομάδα Α" : isB ? "Ομάδα Β" : isC ? "Ομάδα Γ" : "Ολομέλεια";
           try {
             await db.insert(schema.subGroups).values({
               id: slot.subGroupId,
               classId: slot.classId,
               name,
-              isDefault: !isA && !isB,
+              isDefault: !isA && !isB && !isC,
             });
             existingSubGroupIds.add(slot.subGroupId);
           } catch (e) {}

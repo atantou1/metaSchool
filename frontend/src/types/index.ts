@@ -37,6 +37,11 @@ export interface Teacher {
   constraints?: TeacherConstraints | null;
 }
 
+export interface SubjectAssignment {
+  teacherId: string;
+  hours?: [number, number] | null;
+}
+
 export interface Subject {
   id: string;
   title: string;
@@ -45,7 +50,8 @@ export interface Subject {
   allowedSpecialties?: string[] | null; // e.g. ["ΠΕ70", "ΠΕ71"]
   defaultSpecialty?: string | null;
   classHours?: Record<string, [number, number] | number> | null;
-  classTeachers?: Record<string, string | null> | null;
+  classTeachers?: Record<string, string | string[] | null> | null;
+  classAssignments?: Record<string, SubjectAssignment[]> | null;
   maxPerDay?: number | null;
 }
 
