@@ -46,6 +46,20 @@ jobs:
           npm install
           npm run build
 
+      - name: Package Next.js standalone and Node sidecar
+        shell: bash
+        run: |
+          # Copy public and static to standalone
+          cp -r frontend/public frontend/.next/standalone/frontend/public 2>/dev/null || true
+          cp -r frontend/.next/static frontend/.next/standalone/frontend/.next/static 2>/dev/null || true
+          
+          # Move standalone to src-tauri/resources
+          mkdir -p src-tauri/resources
+          mv frontend/.next/standalone src-tauri/resources/
+          
+          # Download node.exe for Windows sidecar
+          curl -sL "https://nodejs.org/dist/v20.11.1/win-x64/node.exe" -o src-tauri/binaries/node-x86_64-pc-windows-msvc.exe
+
       # ── 3. Node: Install root Tauri CLI ──
       - name: Install root Tauri CLI
         run: |

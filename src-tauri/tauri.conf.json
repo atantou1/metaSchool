@@ -37,7 +37,11 @@
       "icons/icon.ico"
     ],
     "externalBin": [
-      "binaries/backend"
+      "binaries/backend",
+      "binaries/node"
+    ],
+    "resources": [
+      "resources/standalone"
     ]
   },
   "plugins": {
