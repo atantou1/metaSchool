@@ -52,11 +52,10 @@
     async function checkServer() {
       attempts++;
       try {
-        const res = await fetch("http://127.0.0.1:3000/api/timetable", { cache: "no-store" });
-        if (res.ok) {
-          window.location.replace("http://127.0.0.1:3000");
-          return;
-        }
+        const res = await fetch("http://127.0.0.1:3000/api/timetable", { cache: "no-store", mode: "no-cors" });
+        // If the promise resolves, the server is up (even if opaque due to CORS)
+        window.location.replace("http://127.0.0.1:3000");
+        return;
       } catch (e) {
         if (attempts > 15) {
           document.getElementById("status").innerText = "Εκκίνηση βάσης δεδομένων και solver...";

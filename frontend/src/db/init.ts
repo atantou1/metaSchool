@@ -311,7 +311,9 @@ export async function initializeDatabase() {
   const existingAssignments = await db.select().from(schema.lessonAssignments).limit(1);
   if (existingAssignments.length === 0) {
     console.log("Seeding full school curriculum assignments...");
-    const fullAssignments = generateFullSchoolAssignments();
+    const allClasses = await db.select().from(schema.classes);
+    const allSubGroups = await db.select().from(schema.subGroups);
+    const fullAssignments = generateFullSchoolAssignments(allClasses, allSubGroups);
 
     for (const asg of fullAssignments) {
       await db.insert(schema.lessonAssignments).values({
