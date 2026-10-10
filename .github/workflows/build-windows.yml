@@ -57,6 +57,11 @@ jobs:
           mkdir -p frontend/.next/standalone/frontend/src/db
           cp -r frontend/src/db/migrations frontend/.next/standalone/frontend/src/db/
           
+          # Force copy native modules that Turbopack often misses
+          mkdir -p frontend/.next/standalone/node_modules
+          cp -r frontend/node_modules/@libsql frontend/.next/standalone/node_modules/ 2>/dev/null || true
+          cp -r frontend/node_modules/drizzle-orm frontend/.next/standalone/node_modules/ 2>/dev/null || true
+          
           # Move standalone to src-tauri/resources
           mkdir -p src-tauri/resources
           mv frontend/.next/standalone src-tauri/resources/
