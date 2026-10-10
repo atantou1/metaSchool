@@ -53,6 +53,10 @@ jobs:
           cp -r frontend/public frontend/.next/standalone/frontend/public 2>/dev/null || true
           cp -r frontend/.next/static frontend/.next/standalone/frontend/.next/static 2>/dev/null || true
           
+          # Copy migrations for SQLite initialization
+          mkdir -p frontend/.next/standalone/frontend/src/db
+          cp -r frontend/src/db/migrations frontend/.next/standalone/frontend/src/db/
+          
           # Move standalone to src-tauri/resources
           mkdir -p src-tauri/resources
           mv frontend/.next/standalone src-tauri/resources/
