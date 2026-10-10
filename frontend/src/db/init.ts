@@ -13,39 +13,28 @@ export async function initializeDatabase() {
   console.log("Checking database schema...");
 
   // Read and execute initial migration SQL
-  const migrationPath = path.join(
-    process.cwd(),
-    "src/db/migrations/0000_skinny_tony_stark.sql"
-  );
-  if (fs.existsSync(migrationPath)) {
-    const sql = fs.readFileSync(migrationPath, "utf-8");
-    const statements = sql
-      .split("--> statement-breakpoint")
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
+  const migrationsDir = path.join(process.cwd(), "src/db/migrations");
+  if (fs.existsSync(migrationsDir)) {
+    const files = fs.readdirSync(migrationsDir);
+    const sqlFiles = files.filter((f) => f.endsWith(".sql")).sort();
 
-    for (const stmt of statements) {
-      try {
-        await client.execute(stmt);
-      } catch (err: unknown) {
-        // Table may already exist
+    for (const file of sqlFiles) {
+      const migrationPath = path.join(migrationsDir, file);
+      const sql = fs.readFileSync(migrationPath, "utf-8");
+      const statements = sql
+        .split("--> statement-breakpoint")
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+
+      for (const stmt of statements) {
+        try {
+          await client.execute(stmt);
+        } catch (err: unknown) {
+          // Table may already exist
+        }
       }
     }
   }
-
-  // Ensure new columns exist on subjects and timetable_slots tables
-  try {
-    await client.execute("ALTER TABLE subjects ADD COLUMN allowed_specialties TEXT");
-  } catch {}
-  try {
-    await client.execute("ALTER TABLE subjects ADD COLUMN default_specialty TEXT");
-  } catch {}
-  try {
-    await client.execute("ALTER TABLE subjects ADD COLUMN class_hours TEXT");
-  } catch {}
-  try {
-    await client.execute("ALTER TABLE timetable_slots ADD COLUMN students TEXT");
-  } catch {}
 
   // Check if school settings exist
   const existingSettings = await db
