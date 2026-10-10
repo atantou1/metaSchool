@@ -30,20 +30,37 @@ fn main() {
                     if let Ok(app_data_dir) = handle2.path().app_data_dir() {
                         let _ = std::fs::create_dir_all(&app_data_dir);
                         let db_path = app_data_dir.join("metaschool.db");
-                        let db_url = format!("file:{}", db_path.to_string_lossy());
+                        
+                        let db_url = if cfg!(windows) {
+                            format!("file:///{}", db_path.to_string_lossy().replace('\\', "/"))
+                        } else {
+                            format!("file:{}", db_path.to_string_lossy())
+                        };
                         
                         if let Ok(sidecar_command) = handle2.shell().sidecar("node") {
                             let cmd = sidecar_command
                                 .current_dir(standalone_dir)
-                                .env("DATABASE_URL", db_url)
+                                .env("DATABASE_URL", db_url.clone())
                                 .env("PORT", "3000")
                                 .env("HOSTNAME", "127.0.0.1")
                                 .arg(server_js.to_string_lossy().to_string());
                                 
                             if let Ok((mut _rx, _child)) = cmd.spawn() {
-                                while let Some(_event) = _rx.recv().await {
-                                    // Node process event loop
-                                }
+                                tauri::async_runtime::spawn(async move {
+                                    use tauri_plugin_shell::process::CommandEvent;
+                                    use std::io::Write;
+                                    let log_path = app_data_dir.join("node_debug.log");
+                                    if let Ok(mut file) = std::fs::File::create(&log_path) {
+                                        let _ = writeln!(file, "Starting Node.js with DATABASE_URL: {}", db_url);
+                                        while let Some(event) = _rx.recv().await {
+                                            match event {
+                                                CommandEvent::Stdout(line) => { let _ = writeln!(file, "OUT: {}", String::from_utf8_lossy(&line)); }
+                                                CommandEvent::Stderr(line) => { let _ = writeln!(file, "ERR: {}", String::from_utf8_lossy(&line)); }
+                                                _ => {}
+                                            }
+                                        }
+                                    }
+                                });
                             }
                         }
                     }
