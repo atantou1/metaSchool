@@ -1,18 +1,26 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use tauri::Manager;
+use std::sync::Mutex;
+use tauri::{Manager, RunEvent};
+use tauri_plugin_shell::process::CommandChild;
 use tauri_plugin_shell::ShellExt;
+
+struct SidecarTracker(Mutex<Vec<CommandChild>>);
 
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .setup(|app| {
+            app.manage(SidecarTracker(Mutex::new(Vec::new())));
             let handle = app.handle().clone();
             
             // Spawn Python backend
             tauri::async_runtime::spawn(async move {
                 if let Ok(sidecar_command) = handle.shell().sidecar("backend") {
-                    if let Ok((mut _rx, _child)) = sidecar_command.spawn() {
+                    if let Ok((mut _rx, child)) = sidecar_command.spawn() {
+                        if let Some(tracker) = handle.try_state::<SidecarTracker>() {
+                            tracker.0.lock().unwrap().push(child);
+                        }
                         while let Some(_event) = _rx.recv().await {
                             // Backend process event loop
                         }
@@ -45,7 +53,10 @@ fn main() {
                                 .env("HOSTNAME", "127.0.0.1")
                                 .arg(server_js.to_string_lossy().to_string());
                                 
-                            if let Ok((mut _rx, _child)) = cmd.spawn() {
+                            if let Ok((mut _rx, child)) = cmd.spawn() {
+                                if let Some(tracker) = handle2.try_state::<SidecarTracker>() {
+                                    tracker.0.lock().unwrap().push(child);
+                                }
                                 tauri::async_runtime::spawn(async move {
                                     use tauri_plugin_shell::process::CommandEvent;
                                     use std::io::Write;
@@ -69,6 +80,16 @@ fn main() {
 
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running metaSchool application");
+        .build(tauri::generate_context!())
+        .expect("error while building metaSchool application")
+        .run(|app_handle, event| {
+            if let RunEvent::Exit = event {
+                if let Some(tracker) = app_handle.try_state::<SidecarTracker>() {
+                    let mut children = tracker.0.lock().unwrap();
+                    for child in children.drain(..) {
+                        let _ = child.kill();
+                    }
+                }
+            }
+        });
 }
