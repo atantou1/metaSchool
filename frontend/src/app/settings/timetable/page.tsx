@@ -22,8 +22,10 @@ import {
   Sparkles,
   Layers,
   GraduationCap,
+  Users,
+  Search,
 } from "lucide-react";
-import { PeriodConfig, SchoolConfig } from "@/types";
+import { PeriodConfig, SchoolConfig, Teacher } from "@/types";
 
 // Official Presets for Greek Schools
 const PRESETS = {
@@ -136,11 +138,17 @@ export default function TimetableSettingsPage() {
   // Solver setting
   const [forceExtremeHours, setForceExtremeHours] = useState(false);
 
+  // Simultaneous Cross-Class Sessions Setting
+  const [enableSimultaneousSessions, setEnableSimultaneousSessions] = useState(false);
+  const [teachersList, setTeachersList] = useState<Teacher[]>([]);
+  const [selectedSimultaneousIds, setSelectedSimultaneousIds] = useState<Set<string>>(new Set());
+  const [teacherSearch, setTeacherSearch] = useState("");
+
   // Fetch initial settings
   const loadSettings = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/settings?keys=school_config,timetable.force_extreme_hours");
+      const res = await fetch("/api/settings?keys=school_config,timetable.force_extreme_hours,timetable.allow_simultaneous_sessions");
       const data = await res.json();
 
       if (data.school_config) {
@@ -170,6 +178,33 @@ export default function TimetableSettingsPage() {
           data["timetable.force_extreme_hours"] === "true" ||
             data["timetable.force_extreme_hours"] === true
         );
+      }
+
+      // Fetch teachers to initialize cross-class checklist
+      try {
+        const teachersRes = await fetch("/api/teachers");
+        const teachersData = await teachersRes.json();
+        if (teachersData.success && Array.isArray(teachersData.teachers)) {
+          setTeachersList(teachersData.teachers);
+          const simultaneousSet = new Set<string>();
+          teachersData.teachers.forEach((t: Teacher) => {
+            if (t.constraints?.allowSimultaneousSessions) {
+              simultaneousSet.add(t.id);
+            }
+          });
+          setSelectedSimultaneousIds(simultaneousSet);
+
+          if (data["timetable.allow_simultaneous_sessions"] !== undefined) {
+            setEnableSimultaneousSessions(
+              data["timetable.allow_simultaneous_sessions"] === "true" ||
+                data["timetable.allow_simultaneous_sessions"] === true
+            );
+          } else if (simultaneousSet.size > 0) {
+            setEnableSimultaneousSessions(true);
+          }
+        }
+      } catch (tErr) {
+        console.error("Failed to load teachers for cross-class settings:", tErr);
       }
     } catch (error) {
       console.error("Failed to load settings:", error);
@@ -328,6 +363,7 @@ export default function TimetableSettingsPage() {
       const payload = {
         school_config: updatedSchoolConfig,
         "timetable.force_extreme_hours": forceExtremeHours,
+        "timetable.allow_simultaneous_sessions": enableSimultaneousSessions,
       };
 
       const res = await fetch("/api/settings", {
@@ -337,6 +373,55 @@ export default function TimetableSettingsPage() {
       });
 
       if (!res.ok) throw new Error("Failed to save");
+
+      // Save teachers cross-class constraints
+      const teachersToEnable: string[] = [];
+      const teachersToDisable: string[] = [];
+
+      teachersList.forEach((t) => {
+        const currentlyAllowed = Boolean(t.constraints?.allowSimultaneousSessions);
+        const shouldBeAllowed = enableSimultaneousSessions && selectedSimultaneousIds.has(t.id);
+        if (shouldBeAllowed && !currentlyAllowed) {
+          teachersToEnable.push(t.id);
+        } else if (!shouldBeAllowed && currentlyAllowed) {
+          teachersToDisable.push(t.id);
+        }
+      });
+
+      if (teachersToEnable.length > 0) {
+        await fetch("/api/teachers", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            teacherIds: teachersToEnable,
+            updates: { constraints: { allowSimultaneousSessions: true } },
+            modifiedFields: ["allowSimultaneousSessions"],
+          }),
+        });
+      }
+
+      if (teachersToDisable.length > 0) {
+        await fetch("/api/teachers", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            teacherIds: teachersToDisable,
+            updates: { constraints: { allowSimultaneousSessions: false } },
+            modifiedFields: ["allowSimultaneousSessions"],
+          }),
+        });
+      }
+
+      // Update local teachers list state
+      setTeachersList((prev) =>
+        prev.map((t) => ({
+          ...t,
+          constraints: {
+            ...t.constraints,
+            allowSimultaneousSessions: enableSimultaneousSessions && selectedSimultaneousIds.has(t.id),
+          },
+        }))
+      );
 
       setSchoolConfig(updatedSchoolConfig);
       toast.success("Οι ρυθμίσεις αποθηκεύτηκαν επιτυχώς!", {
@@ -362,6 +447,15 @@ export default function TimetableSettingsPage() {
       </div>
     );
   }
+
+  const filteredTeachers = teachersList.filter((t) => {
+    if (!teacherSearch.trim()) return true;
+    const q = teacherSearch.toLowerCase();
+    const fullName = `${t.lastName} ${t.firstName}`.toLowerCase();
+    const spec = (t.specialty || "").toLowerCase();
+    const short = (t.shortName || "").toLowerCase();
+    return fullName.includes(q) || spec.includes(q) || short.includes(q);
+  });
 
   return (
     <div className="space-y-6 max-w-5xl pb-12 font-sans">
@@ -712,7 +806,156 @@ export default function TimetableSettingsPage() {
         </CardContent>
       </Card>
 
-      {/* SECTION 3: ΠΑΡΑΜΕΤΡΟΙ ΕΠΙΛΥΤΗ */}
+      {/* SECTION 3: ΔΙΑΤΜΗΜΑΤΙΚΕΣ / ΟΜΑΔΙΚΕΣ ΣΥΝΕΔΡΙΕΣ */}
+      <Card className="shadow-xs border-zinc-200 dark:border-zinc-800">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 rounded-md bg-purple-50 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800">
+                <Users className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+              </div>
+              <div>
+                <CardTitle className="text-sm font-bold flex items-center gap-2">
+                  Δυνατότητα Διατμηματικών / Ομαδικών Συνεδριών
+                  {enableSimultaneousSessions && (
+                    <Badge variant="outline" className="text-[10px] bg-purple-50 text-purple-700 border-purple-300">
+                      {selectedSimultaneousIds.size} {selectedSimultaneousIds.size === 1 ? "εκπαιδευτικός" : "εκπαιδευτικοί"}
+                    </Badge>
+                  )}
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Επιτρέπει σε επιλεγμένους εκπαιδευτικούς να πραγματοποιούν ταυτόχρονη διδασκαλία σε πολλαπλά τμήματα την ίδια ώρα (π.χ. Λογοθεραπεία, Ψυχολόγοι, Τμήμα Ένταξης).
+                </CardDescription>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch
+                checked={enableSimultaneousSessions}
+                onCheckedChange={setEnableSimultaneousSessions}
+              />
+            </div>
+          </div>
+        </CardHeader>
+        {enableSimultaneousSessions && (
+          <CardContent className="space-y-4 pt-0 border-t border-zinc-100 dark:border-zinc-800/80 mt-2">
+            <div className="bg-purple-50/60 dark:bg-purple-950/30 border border-purple-200/80 dark:border-purple-900/60 rounded-lg p-3 text-xs text-purple-900 dark:text-purple-200 flex items-start gap-2.5 mt-3">
+              <Sparkles className="w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p className="font-semibold">
+                  Ταυτόχρονη διδασκαλία χωρίς διπλοχρέωση ωρών:
+                </p>
+                <p className="text-[11px] text-purple-800 dark:text-purple-300">
+                  Για όσους εκπαιδευτικούς είναι επιλεγμένοι παρακάτω, οι ταυτόχρονες ώρες σε διαφορετικά τμήματα προσμετρώνται ως <strong>1 πραγματική διδακτική ώρα</strong> στο εβδομαδιαίο τους ωράριο. Για τους υπόλοιπους εκπαιδευτικούς, η ανάθεση σε δεύτερο τμήμα την ίδια ώρα παραμένει κλειδωμένη.
+                </p>
+              </div>
+            </div>
+
+            {/* Filter and Quick Actions */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-2 pt-1">
+              <div className="relative w-full sm:w-80">
+                <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+                <input
+                  type="text"
+                  placeholder="Αναζήτηση εκπαιδευτικού ή ειδικότητας..."
+                  value={teacherSearch}
+                  onChange={(e) => setTeacherSearch(e.target.value)}
+                  className="w-full h-8 pl-8 pr-3 text-xs rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 focus:outline-hidden focus:ring-1 focus:ring-purple-500"
+                />
+              </div>
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const eepIds = teachersList
+                      .filter((t) => t.isSupport || t.specialty?.includes("21") || t.specialty?.includes("23") || t.specialty?.includes("29"))
+                      .map((t) => t.id);
+                    setSelectedSimultaneousIds((prev) => new Set([...prev, ...eepIds]));
+                  }}
+                  className="text-[11px] h-7 px-2.5 text-zinc-700 dark:text-zinc-300 cursor-pointer"
+                >
+                  Επιλογή Ειδικοτήτων ΕΕΠ/ΕΒΠ
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSelectedSimultaneousIds(new Set())}
+                  disabled={selectedSimultaneousIds.size === 0}
+                  className="text-[11px] h-7 px-2.5 text-rose-600 hover:text-rose-700 disabled:opacity-40 cursor-pointer"
+                >
+                  Αποεπιλογή όλων
+                </Button>
+              </div>
+            </div>
+
+            {/* Teacher List */}
+            <div className="border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-hidden max-h-72 overflow-y-auto divide-y divide-zinc-100 dark:divide-zinc-800 bg-white dark:bg-zinc-900">
+              {filteredTeachers.length === 0 ? (
+                <div className="p-4 text-center text-xs text-zinc-400">
+                  Δεν βρέθηκαν εκπαιδευτικοί.
+                </div>
+              ) : (
+                filteredTeachers.map((tch) => {
+                  const isChecked = selectedSimultaneousIds.has(tch.id);
+                  return (
+                    <label
+                      key={tch.id}
+                      className={`flex items-center justify-between p-2.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors cursor-pointer select-none ${
+                        isChecked ? "bg-purple-50/40 dark:bg-purple-950/30" : ""
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            const next = new Set(selectedSimultaneousIds);
+                            if (e.target.checked) {
+                              next.add(tch.id);
+                            } else {
+                              next.delete(tch.id);
+                            }
+                            setSelectedSimultaneousIds(next);
+                          }}
+                          className="w-4 h-4 rounded text-purple-600 border-zinc-300 focus:ring-purple-500 cursor-pointer"
+                        />
+                        <span
+                          className="w-2.5 h-2.5 rounded-full shrink-0"
+                          style={{ backgroundColor: tch.color || "#71717a" }}
+                        />
+                        <div className="flex flex-col">
+                          <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">
+                            {tch.lastName} {tch.firstName}
+                          </span>
+                          <span className="text-[10px] text-zinc-500">
+                            {tch.specialty || "—"} {tch.shortName ? `(${tch.shortName})` : ""}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {tch.isSupport && (
+                          <Badge variant="outline" className="text-[9.5px] border-sky-200 text-sky-700 bg-sky-50 py-0 px-1.5">
+                            Συμπληρωματική
+                          </Badge>
+                        )}
+                        {isChecked && (
+                          <Badge variant="outline" className="text-[9.5px] border-purple-300 bg-purple-100 text-purple-800 font-bold py-0 px-1.5">
+                            Επιτρέπεται
+                          </Badge>
+                        )}
+                      </div>
+                    </label>
+                  );
+                })
+              )}
+            </div>
+          </CardContent>
+        )}
+      </Card>
+
+      {/* SECTION 4: ΠΑΡΑΜΕΤΡΟΙ ΕΠΙΛΥΤΗ */}
       <Card className="shadow-xs border-zinc-200 dark:border-zinc-800">
         <CardHeader className="pb-3">
           <div className="flex items-center gap-2">

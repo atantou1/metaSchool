@@ -2888,27 +2888,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
           </button>
         </td>
 
-        {/* Cross-Class Simultaneous Sessions Toggle */}
-        <td className="py-2 px-1 text-center">
-          <button
-            type="button"
-            onClick={() => {
-              markBulkField("allowSimultaneousSessions");
-              setInlineData({
-                ...inlineData,
-                allowSimultaneousSessions: !inlineData.allowSimultaneousSessions,
-              });
-            }}
-            className={`px-1.5 py-0.5 rounded text-[10px] font-medium border transition-all ${
-              inlineData.allowSimultaneousSessions
-                ? "bg-purple-100 border-purple-300 text-purple-800 font-bold"
-                : "bg-white border-zinc-200 text-zinc-400 hover:border-zinc-300"
-            } ${isBulkMode && modifiedBulkFields.has("allowSimultaneousSessions") ? "ring-2 ring-indigo-500" : ""}`}
-            title="Κλικ για αλλαγή (Ταυτόχρονη διατμηματική διδασκαλία / ομαδικές συνεδρίες)"
-          >
-            {inlineData.allowSimultaneousSessions ? "Ναι" : "Όχι"}
-          </button>
-        </td>
+
 
         {/* Status Toggle */}
         <td className="py-2 px-1.5 text-center border-r border-zinc-200">
@@ -3398,7 +3378,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
                 <th colSpan={4} className="py-2 px-3 border-r border-zinc-200 bg-zinc-100/80 text-left">
                   ΒΑΣΙΚΑ ΣΤΟΙΧΕΙΑ
                 </th>
-                <th colSpan={7} className="py-2 px-3 border-r border-zinc-200 bg-zinc-100/80 text-center">
+                <th colSpan={6} className="py-2 px-3 border-r border-zinc-200 bg-zinc-100/80 text-center">
                   ΙΔΙΟΤΗΤΕΣ & ΡΟΛΟΙ
                 </th>
                 <th colSpan={4} className="py-2 px-3 border-r border-zinc-200 bg-zinc-100/80 text-center">
@@ -3423,7 +3403,6 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
                 <th className="py-2.5 px-2 w-14 text-center" title="Διδάσκει στο Πρωινό Πρόγραμμα">Πρωινό</th>
                 <th className="py-2.5 px-2 w-16 text-center" title="Διδάσκει στο Ολοήμερο Πρόγραμμα">Ολοήμερο</th>
                 <th className="py-2.5 px-2.5 w-24 text-center" title="Τύπος ανάθεσης">Τύπος</th>
-                <th className="py-2.5 px-2 w-20 text-center" title="Επιτρέπεται ταυτόχρονη διατμηματική διδασκαλία / ομαδική συνεδρία σε διαφορετικά τμήματα">Διατμηματικό</th>
                 <th className="py-2.5 px-2.5 w-20 text-center border-r border-zinc-200" title="Κατάσταση">Κατάσταση</th>
 
                 {/* Days & Hours (5) - Compact Days Column */}
@@ -3730,8 +3709,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
                     </Select>
                   </th>
 
-                  {/* Empty cell for Simultaneous Sessions column in filter row */}
-                  <th className="py-1 px-0.5 w-20 text-center" />
+
 
                   {/* 10. Status Filter */}
                   <th className="py-1 px-1 w-20 text-center border-r border-zinc-200">
@@ -4029,16 +4007,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
                       )}
                     </td>
 
-                    {/* Cross-Class Simultaneous Sessions */}
-                    <td className="py-2.5 px-2 text-center">
-                      {tch.constraints?.allowSimultaneousSessions ? (
-                        <Badge variant="outline" className="text-[10px] font-semibold border-purple-300 bg-purple-50 text-purple-700 px-1.5 py-0.5" title="Επιτρέπεται ταυτόχρονη διατμηματική διδασκαλία / ομαδικές συνεδρίες">
-                          Ναι
-                        </Badge>
-                      ) : (
-                        <span className="text-zinc-300 text-xs font-mono">—</span>
-                      )}
-                    </td>
+
 
                     {/* Status */}
                     <td className="py-2.5 px-2.5 text-center border-r border-zinc-100">

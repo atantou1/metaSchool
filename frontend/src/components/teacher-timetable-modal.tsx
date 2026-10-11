@@ -10,13 +10,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   ClassEntity,
   TimetableData,
   TimetableSlot,
@@ -28,18 +21,13 @@ import { getTeacherTileInlineStyle, getTeacherAbbr } from "@/lib/teacher-utils";
 import { formatSpecialtyLabel } from "@/lib/specialties";
 import {
   Printer,
-  Download,
-  CalendarDays,
-  User,
+  FileText,
   Users,
   Clock,
   Lock,
-  Layers,
-  Sparkles,
   Coffee,
-  CheckCircle2,
-  CalendarCheck,
-  Building,
+  ChevronDown,
+  Check,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -57,11 +45,14 @@ export const TeacherTimetableModal: React.FC<TeacherTimetableModalProps> = ({
   data,
 }) => {
   const printAreaRef = useRef<HTMLDivElement>(null);
+  const [isExportingWord, setIsExportingWord] = useState(false);
 
   // Selected teacher state (allows switching from dropdown inside the modal)
   const [selectedTeacherId, setSelectedTeacherId] = useState<string>(
     initialTeacher?.id || ""
   );
+  const [isTeacherDropdownOpen, setIsTeacherDropdownOpen] = useState(false);
+  const teacherDropdownRef = useRef<HTMLDivElement>(null);
 
   // Sync when initialTeacher prop changes
   useEffect(() => {
@@ -69,6 +60,20 @@ export const TeacherTimetableModal: React.FC<TeacherTimetableModalProps> = ({
       setSelectedTeacherId(initialTeacher.id);
     }
   }, [initialTeacher?.id]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (teacherDropdownRef.current && !teacherDropdownRef.current.contains(e.target as Node)) {
+        setIsTeacherDropdownOpen(false);
+      }
+    };
+    if (isTeacherDropdownOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isTeacherDropdownOpen]);
 
   // Fast maps
   const teacherMap = useMemo(
@@ -105,16 +110,8 @@ export const TeacherTimetableModal: React.FC<TeacherTimetableModalProps> = ({
     return teacherSlots.some((s) => s.period >= 6);
   }, [teacherSlots]);
 
-  // Toggle for showing all-day periods
-  const [showAllDay, setShowAllDay] = useState<boolean>(() => {
-    return Boolean(currentTeacher?.isAllDay || hasAllDaySlots);
-  });
-
-  useEffect(() => {
-    if (currentTeacher) {
-      setShowAllDay(Boolean(currentTeacher.isAllDay || hasAllDaySlots));
-    }
-  }, [currentTeacher, hasAllDaySlots]);
+  // Automatically include all-day if teacher is marked as all-day or has all-day slots
+  const isTeacherAllDay = Boolean(currentTeacher?.isAllDay || hasAllDaySlots);
 
   // Index teacher slots by `day_period`
   const slotsByCell = useMemo(() => {
@@ -129,13 +126,11 @@ export const TeacherTimetableModal: React.FC<TeacherTimetableModalProps> = ({
   }, [teacherSlots]);
 
   // Index co-teachers by `classId_day_period`
-  // To identify if another teacher is co-teaching or support in the same class/slot
   const coTeachersByCell = useMemo(() => {
     if (!currentTeacher) return new Map<string, Teacher[]>();
     const map = new Map<string, Teacher[]>();
 
     for (const slot of teacherSlots) {
-      const key = `${slot.classId}_${slot.day}_${slot.period}`;
       const otherSlots = data.slots.filter(
         (s) =>
           s.classId === slot.classId &&
@@ -269,7 +264,7 @@ export const TeacherTimetableModal: React.FC<TeacherTimetableModalProps> = ({
     ? data.schoolConfig.periods
     : defaultMorningTimes.map((t, i) => ({
         index: i,
-        label: `${i + 1}η ώρα`,
+        label: `${i + 1}η`,
         startTime: t.start,
         endTime: t.end,
         isAllDay: false,
@@ -286,7 +281,7 @@ export const TeacherTimetableModal: React.FC<TeacherTimetableModalProps> = ({
         ? data.schoolConfig.allDayPeriods
         : defaultAllDayTimes.map((t, i) => ({
             index: 6 + i,
-            label: `${i + 1}η Ολοημ.`,
+            label: `${i + 1}η`,
             startTime: t.start,
             endTime: t.end,
             isAllDay: true,
@@ -299,25 +294,27 @@ export const TeacherTimetableModal: React.FC<TeacherTimetableModalProps> = ({
     const end = p.endTime || "";
     return {
       index: idx,
-      label: p.label || `${i + 1}η ώρα`,
+      label: `${i + 1}η`,
       timeRange: start && end ? `${start} - ${end}` : "",
       isAllDay: false,
     };
   });
 
+  // All-day periods continue after 6th period as 1η, 2η, etc.
   const allDayPeriods = allDayList.map((p, i) => {
     const idx = p.index !== undefined ? p.index : 6 + i;
     const start = p.startTime || "";
     const end = p.endTime || "";
     return {
       index: idx,
-      label: p.label || `${i + 1}η Ολοημ.`,
+      label: `${i + 1}η`,
       timeRange: start && end ? `${start} - ${end}` : "",
       isAllDay: true,
     };
   });
 
-  const activePeriods = showAllDay && hasAllDay && allDayPeriods.length > 0
+  // Automatically show all-day periods when teacher teaches all-day
+  const activePeriods = isTeacherAllDay && hasAllDay && allDayPeriods.length > 0
     ? [...morningPeriods, ...allDayPeriods]
     : morningPeriods;
 
@@ -329,8 +326,7 @@ export const TeacherTimetableModal: React.FC<TeacherTimetableModalProps> = ({
       return;
     }
 
-    const schoolName = data.schoolConfig?.schoolName || "Δημοτικό Σχολείο";
-    const schoolYear = data.schoolConfig?.schoolYear || "2026-2027";
+    const heading = `Πρόγραμμα: ${currentTeacher.lastName} ${currentTeacher.firstName} (${formatSpecialtyLabel(currentTeacher.specialty)})`;
 
     let tableHtml = `
       <table class="timetable">
@@ -348,46 +344,43 @@ export const TeacherTimetableModal: React.FC<TeacherTimetableModalProps> = ({
         <tr class="${p.isAllDay ? "all-day-row" : ""}">
           <td class="time-cell">
             <div class="period-label">${p.label}</div>
-            <div class="period-time">${p.timeRange}</div>
+            ${p.isAllDay ? `<div class="allday-tag">Ολοημ.</div>` : ""}
           </td>
       `;
 
       for (const d of days) {
         const cellKey = `${d.index}_${p.index}`;
         const slots = slotsByCell.get(cellKey) || [];
-        const coTeachers = coTeachersByCell.get(cellKey) || [];
         const dayStat = dayScheduleStats.get(d.index);
 
-        tableHtml += `<td class="slot-cell">`;
         if (slots.length > 0) {
+          tableHtml += `<td class="slot-cell">`;
           slots.forEach((s) => {
             const cls = classMap.get(s.classId);
-            const subj = subjectMap.get(s.subjectId);
-            const coTeacherText =
-              coTeachers.length > 0
-                ? `<div class="coteacher">👥 Συνδιδασκαλία: ${coTeachers.map((ct) => `${ct.lastName} (${ct.specialty})`).join(", ")}</div>`
-                : "";
+            const rawName = cls?.name || "Τμήμα";
+            const classDisplayName = rawName.toLowerCase().startsWith("τμημα")
+              ? rawName
+              : `Τμήμα ${rawName}`;
 
             const studentText =
               s.students && s.students.length > 0
-                ? `<div class="students" style="font-size: 8.5pt; color: #6b21a8; margin-top: 3px; font-weight: 500;">👥 Μαθητές: <strong>${s.students.join(", ")}</strong></div>`
+                ? `<div class="students">👥 ${s.students.join(", ")}</div>`
                 : "";
 
             tableHtml += `
-              <div class="card ${s.isSupport ? "support" : ""}">
-                <div class="class-title">Τμήμα: <strong>${cls?.name || "—"}</strong></div>
-                <div class="subject-title">${subj?.title || subj?.code || "—"}</div>
+              <div class="card">
+                <div class="class-title"><strong>${classDisplayName}</strong></div>
                 ${studentText}
-                ${coTeacherText}
               </div>
             `;
           });
+          tableHtml += `</td>`;
         } else if (dayStat && dayStat.gaps.includes(p.index)) {
-          tableHtml += `<div class="gap-card">ΚΕΝΟ</div>`;
-        } else if (dayStat && dayStat.teachingPeriods.length === 0) {
-          tableHtml += `<div class="off-card">—</div>`;
+          tableHtml += `<td class="gap-cell">ΚΕΝΟ</td>`;
+        } else {
+          // Off-hour empty cell: entire cell is gray
+          tableHtml += `<td class="off-cell"></td>`;
         }
-        tableHtml += `</td>`;
       }
       tableHtml += `</tr>`;
     }
@@ -402,154 +395,139 @@ export const TeacherTimetableModal: React.FC<TeacherTimetableModalProps> = ({
       <html>
         <head>
           <meta charset="utf-8" />
-          <title>Ατομικό Πρόγραμμα - ${currentTeacher.lastName} ${currentTeacher.firstName}</title>
+          <title></title>
           <style>
             @page {
               size: A4 landscape;
-              margin: 10mm;
+              margin: 0;
             }
-            body {
+            * {
+              box-sizing: border-box;
+            }
+            html, body {
+              margin: 0;
+              padding: 0;
+              width: 100%;
               font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
               color: #18181b;
-              margin: 0;
-              padding: 10px;
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
             }
+            body {
+              padding: 6mm 8mm;
+            }
+            @media print {
+              html, body {
+                padding: 6mm 8mm;
+                overflow: hidden;
+              }
+            }
             .header {
-              display: flex;
-              justify-content: space-between;
-              align-items: flex-end;
               border-bottom: 2px solid #18181b;
-              padding-bottom: 8px;
-              margin-bottom: 12px;
+              padding-bottom: 4px;
+              margin-bottom: 6px;
+              text-align: center;
             }
             .title {
-              font-size: 20px;
+              font-size: 18px;
               font-weight: 800;
               margin: 0;
-            }
-            .subtitle {
-              font-size: 13px;
-              color: #52525b;
-              margin-top: 3px;
-            }
-            .meta {
-              text-align: right;
-              font-size: 12px;
-              color: #52525b;
+              color: #18181b;
+              letter-spacing: -0.01em;
             }
             .timetable {
               width: 100%;
               border-collapse: collapse;
               table-layout: fixed;
+              page-break-inside: avoid;
+              break-inside: avoid;
             }
             th, td {
-              border: 1px solid #d4d4d8;
+              border: 1px solid #cbd5e1;
               vertical-align: top;
             }
             th {
-              background: #f4f4f5;
-              padding: 6px 4px;
-              font-size: 12px;
+              background: #f1f5f9;
+              padding: 4px 2px;
+              font-size: 11px;
               font-weight: 700;
               text-align: center;
             }
             .time-col {
-              width: 90px;
+              width: 44px;
             }
             .time-cell {
-              background: #fafafa;
-              padding: 6px 4px;
+              background: #f8fafc;
+              padding: 2px;
               text-align: center;
+              vertical-align: middle;
             }
             .period-label {
-              font-size: 11px;
+              font-size: 12px;
               font-weight: 700;
-              color: #27272a;
+              color: #0f172a;
             }
-            .period-time {
-              font-size: 9px;
-              color: #71717a;
-              margin-top: 2px;
+            .allday-tag {
+              font-size: 8px;
+              color: #b45309;
+              font-weight: 600;
+              margin-top: 1px;
             }
             .all-day-row .time-cell {
               background: #fffbeb;
             }
             .slot-cell {
-              padding: 4px;
-              height: 48px;
+              padding: 2px 3px;
+            }
+            tr {
+              page-break-inside: avoid;
+              break-inside: avoid;
             }
             .card {
-              background: #f8fafc;
+              background: #ffffff;
               border: 1px solid #cbd5e1;
-              border-radius: 4px;
-              padding: 4px 6px;
+              border-radius: 3px;
+              padding: 3px 4px;
               margin-bottom: 2px;
-              font-size: 11px;
+              font-size: 10px;
+              line-height: 1.2;
             }
-            .card.support {
-              border-left: 3px solid #8b5cf6;
-              background: #faf5ff;
+            .card:last-child {
+              margin-bottom: 0;
             }
             .class-title {
-              font-size: 11.5px;
+              font-size: 11px;
+              font-weight: 700;
               color: #0f172a;
             }
-            .subject-title {
-              font-size: 10px;
-              color: #475569;
-              margin-top: 1px;
-            }
-            .coteacher {
-              font-size: 9px;
-              color: #7c3aed;
+            .students {
+              font-size: 7.5pt;
+              color: #6b21a8;
               margin-top: 2px;
-              font-weight: 600;
+              font-weight: 500;
+              line-height: 1.15;
             }
-            .gap-card {
-              background: #f4f4f5;
-              border: 1px dashed #d4d4d8;
-              color: #71717a;
-              border-radius: 4px;
-              padding: 4px;
-              text-align: center;
-              font-size: 10px;
+            .gap-cell {
+              background: #fef3c7;
+              color: #b45309;
               font-weight: 700;
-            }
-            .off-card {
-              color: #a1a1aa;
-              text-align: center;
-              font-size: 11px;
-              padding-top: 10px;
-            }
-            .footer {
-              margin-top: 14px;
-              display: flex;
-              justify-content: space-between;
               font-size: 10px;
-              color: #71717a;
+              text-align: center;
+              vertical-align: middle;
+              padding: 4px;
+            }
+            .off-cell {
+              background: #f8fafc;
+              padding: 0;
             }
           </style>
         </head>
         <body>
           <div class="header">
-            <div>
-              <h1 class="title">${schoolName}</h1>
-              <div class="subtitle">Ατομικό Πρόγραμμα • <strong>${currentTeacher.lastName} ${currentTeacher.firstName}</strong> (${formatSpecialtyLabel(currentTeacher.specialty)})</div>
-            </div>
-            <div class="meta">
-              <div>Σχολικό Έτος: ${schoolYear}</div>
-              <div>Ώρες Διδασκαλίας: <strong>${totalTeachingHours}</strong> | Κενά: <strong>${totalGapsCount}</strong></div>
-            </div>
+            <h1 class="title">${heading}</h1>
           </div>
 
           ${tableHtml}
-
-          <div class="footer">
-            <span>Σύστημα metaSchool • Εκτυπώθηκε στις ${new Date().toLocaleDateString("el-GR")}</span>
-            <span>Υπογραφή Εκπαιδευτικού: _______________________</span>
-          </div>
 
           <script>
             window.onload = function() {
@@ -562,60 +540,39 @@ export const TeacherTimetableModal: React.FC<TeacherTimetableModalProps> = ({
     printWindow.document.close();
   };
 
-  // CSV Export Action
-  const handleExportCsv = () => {
-    let csv = "\uFEFF"; // UTF-8 BOM
-    csv += `Ατομικό Πρόγραμμα - ${currentTeacher.lastName} ${currentTeacher.firstName} (${currentTeacher.specialty})\n`;
-    csv += `Ώρα;` + days.map((d) => d.name).join(";") + "\n";
-
-    for (const p of activePeriods) {
-      const row = [`"${p.label} (${p.timeRange})"`];
-      for (const d of days) {
-        const cellKey = `${d.index}_${p.index}`;
-        const slots = slotsByCell.get(cellKey) || [];
-        const coTeachers = coTeachersByCell.get(cellKey) || [];
-        const dayStat = dayScheduleStats.get(d.index);
-
-        if (slots.length > 0) {
-          const text = slots
-            .map((s) => {
-              const cls = classMap.get(s.classId);
-              const subj = subjectMap.get(s.subjectId);
-              const coText =
-                coTeachers.length > 0
-                  ? ` [Συνδ: ${coTeachers.map((ct) => ct.lastName).join(", ")}]`
-                  : "";
-              return `${cls?.name || "—"} - ${subj?.title || subj?.code || "—"}${coText}`;
-            })
-            .join(" / ");
-          row.push(`"${text.replace(/"/g, '""')}"`);
-        } else if (dayStat && dayStat.gaps.includes(p.index)) {
-          row.push('"ΚΕΝΟ"');
-        } else {
-          row.push('""');
-        }
-      }
-      csv += row.join(";") + "\n";
+  // Export Word (.docx) Action
+  const handleExportWord = async () => {
+    if (!currentTeacher) return;
+    try {
+      setIsExportingWord(true);
+      const { exportTeacherTimetableToDocx } = await import("@/lib/docx-export");
+      await exportTeacherTimetableToDocx({
+        teacher: currentTeacher,
+        activePeriods,
+        days,
+        slotsByCell,
+        coTeachersByCell,
+        dayScheduleStats,
+        classMap,
+        subjectMap,
+      });
+      toast.success("Το αρχείο Word (.docx) δημιουργήθηκε επιτυχώς!");
+    } catch (err: any) {
+      console.error("Error exporting Word document:", err);
+      toast.error("Σφάλμα εξαγωγής Word", { description: err.message });
+    } finally {
+      setIsExportingWord(false);
     }
-
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `programma_${currentTeacher.lastName}_${currentTeacher.specialty}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
-    toast.success("Εξήχθη επιτυχώς το αρχείο CSV!");
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent
-        className="max-w-6xl w-[96vw] max-h-[92vh] h-[92vh] p-0 flex flex-col overflow-hidden bg-card text-card-foreground border border-border shadow-2xl rounded-xl z-[120]"
+        className="max-w-none w-screen h-screen p-0 flex flex-col overflow-hidden bg-card text-card-foreground border-0 shadow-none rounded-none z-[120] !translate-x-0 !translate-y-0 !top-0 !left-0"
         showCloseButton={true}
       >
         {/* Header Bar */}
-        <DialogHeader className="px-5 py-3 border-b border-border bg-muted/40 flex flex-row items-center justify-between flex-none gap-4">
+        <DialogHeader className="px-4 py-2 border-b border-border bg-muted/40 flex flex-row items-center justify-between flex-none gap-3">
           <div className="flex items-center gap-3">
             {/* Teacher Swatch Badge */}
             <div
@@ -627,17 +584,72 @@ export const TeacherTimetableModal: React.FC<TeacherTimetableModalProps> = ({
 
             <div>
               <div className="flex items-center gap-2">
-                <DialogTitle className="text-base font-bold text-foreground leading-tight">
-                  Πρόγραμμα: {currentTeacher.lastName} {currentTeacher.firstName}
+                <DialogTitle className="text-base font-bold text-foreground leading-tight flex items-center gap-1.5">
+                  <span>Πρόγραμμα:</span>
+                  <div className="relative inline-flex items-center" ref={teacherDropdownRef}>
+                    <button
+                      type="button"
+                      onClick={() => setIsTeacherDropdownOpen((prev) => !prev)}
+                      className="inline-flex items-center gap-1.5 text-base font-bold text-foreground hover:text-primary transition-colors cursor-pointer py-0.5 px-1 rounded hover:bg-muted/70 focus:outline-none"
+                      title="Κλικ για επιλογή άλλου εκπαιδευτικού"
+                    >
+                      <span>{currentTeacher.lastName} {currentTeacher.firstName}</span>
+                      <ChevronDown
+                        className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${
+                          isTeacherDropdownOpen ? "rotate-180 text-primary" : ""
+                        }`}
+                      />
+                    </button>
+
+                    {isTeacherDropdownOpen && (
+                      <div className="absolute left-0 top-full mt-1.5 w-64 max-h-72 overflow-y-auto bg-popover text-popover-foreground border border-border rounded-lg shadow-2xl z-[150] p-1 font-sans">
+                        <div className="px-2.5 py-1.5 text-[11px] font-semibold text-muted-foreground border-b border-border/50 mb-1">
+                          Επιλογή Εκπαιδευτικού
+                        </div>
+                        {availableTeachers.map((tch) => {
+                          const isSelected = tch.id === currentTeacher.id;
+                          return (
+                            <button
+                              key={tch.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedTeacherId(tch.id);
+                                setIsTeacherDropdownOpen(false);
+                              }}
+                              className={`w-full flex items-center justify-between px-2.5 py-1.5 text-xs rounded-md text-left transition-colors cursor-pointer ${
+                                isSelected
+                                  ? "bg-muted font-bold text-primary"
+                                  : "hover:bg-muted/80 text-foreground"
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 truncate">
+                                <span
+                                  className="px-1 py-0.2 rounded text-[10px] font-mono font-bold shrink-0"
+                                  style={getTeacherTileInlineStyle(tch)}
+                                >
+                                  {getTeacherAbbr(tch)}
+                                </span>
+                                <span className="truncate font-semibold">
+                                  {tch.lastName} {tch.firstName}
+                                </span>
+                                <span className="text-[10px] text-muted-foreground">
+                                  ({tch.specialty})
+                                </span>
+                              </div>
+                              {isSelected && (
+                                <Check className="w-3.5 h-3.5 text-primary shrink-0 ml-1.5" />
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </DialogTitle>
-                <Badge variant="outline" className="text-[10px] font-mono border-border bg-background">
+
+                <Badge variant="outline" className="text-[10px] font-mono border-border bg-background ml-1">
                   {formatSpecialtyLabel(currentTeacher.specialty)}
                 </Badge>
-                {currentTeacher.isSupport && (
-                  <Badge className="bg-purple-100 dark:bg-purple-950/60 text-purple-900 dark:text-purple-300 border-purple-300 dark:border-purple-700 text-[10px]">
-                    Παράλληλη / Ένταξη
-                  </Badge>
-                )}
                 {currentTeacher.isAllDay && (
                   <Badge className="bg-amber-100 dark:bg-amber-950/60 text-amber-900 dark:text-amber-300 border-amber-300 dark:border-amber-700 text-[10px]">
                     Ολοήμερο
@@ -665,77 +677,42 @@ export const TeacherTimetableModal: React.FC<TeacherTimetableModalProps> = ({
 
           {/* Action Toolbar */}
           <div className="flex items-center gap-2 pr-6">
-            {/* Quick Teacher Switcher Dropdown */}
-            <div className="w-56">
-              <Select
-                value={selectedTeacherId}
-                onValueChange={(val) => {
-                  if (val) setSelectedTeacherId(val);
-                }}
-              >
-                <SelectTrigger className="h-7 text-xs bg-background border-border text-foreground">
-                  <SelectValue placeholder="Επιλογή εκπαιδευτικού..." />
-                </SelectTrigger>
-                <SelectContent className="max-h-64 bg-card text-card-foreground border-border z-[130]">
-                  {availableTeachers.map((t) => (
-                    <SelectItem key={t.id} value={t.id} className="text-xs">
-                      <span className="font-semibold">{t.lastName}</span> {t.firstName}{" "}
-                      <span className="text-muted-foreground text-[10px]">({t.specialty})</span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Toggle All Day */}
-            {hasAllDay && allDayPeriods.length > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowAllDay(!showAllDay)}
-                className={`h-7 px-2.5 text-[11px] font-sans ${
-                  showAllDay
-                    ? "bg-amber-50 dark:bg-amber-950/50 text-amber-900 dark:text-amber-200 border-amber-200 dark:border-amber-800 hover:bg-amber-100"
-                    : "bg-background text-foreground hover:bg-muted"
-                }`}
-              >
-                <Clock className="w-3.5 h-3.5 mr-1 text-amber-600 dark:text-amber-400" />
-                {showAllDay ? "Απόκρυψη Ολοημέρου" : "Προβολή Ολοημέρου"}
-              </Button>
-            )}
-
             {/* Print Button */}
             <Button
               variant="outline"
               size="sm"
               onClick={handlePrint}
-              className="h-7 px-2.5 text-[11px] font-sans bg-background border-border text-foreground hover:bg-muted"
+              className="h-7 px-2.5 text-[11px] font-sans bg-background border-border text-foreground hover:bg-muted cursor-pointer"
             >
               <Printer className="w-3.5 h-3.5 mr-1 text-muted-foreground" />
               Εκτύπωση (A4)
             </Button>
 
-            {/* Export CSV */}
+            {/* Export Word (.docx) */}
             <Button
               variant="outline"
               size="sm"
-              onClick={handleExportCsv}
-              className="h-7 px-2.5 text-[11px] font-sans bg-background border-border text-foreground hover:bg-muted"
+              onClick={handleExportWord}
+              disabled={isExportingWord}
+              className="h-7 px-2.5 text-[11px] font-sans bg-background border-border text-foreground hover:bg-muted cursor-pointer"
             >
-              <Download className="w-3.5 h-3.5 mr-1 text-muted-foreground" />
-              CSV
+              <FileText className="w-3.5 h-3.5 mr-1 text-blue-600 dark:text-blue-400" />
+              {isExportingWord ? "Εξαγωγή..." : "Word (.docx)"}
             </Button>
           </div>
         </DialogHeader>
 
-        {/* Content Body: Timetable Grid */}
-        <div className="flex-1 overflow-auto p-4 bg-muted/30" ref={printAreaRef}>
-          <div className="bg-card rounded-lg border border-border shadow-sm overflow-hidden min-w-[700px]">
-            <table className="w-full border-collapse text-left font-sans">
+        {/* Content Body: Timetable Grid with full scroll support */}
+        <div
+          className="flex-1 min-h-0 overflow-y-auto overflow-x-auto p-2 sm:p-3 bg-muted/30"
+          ref={printAreaRef}
+        >
+          <div className="bg-card rounded-lg border border-border shadow-xs min-w-[700px] mb-2">
+            <table className="w-full border-collapse text-left font-sans table-fixed">
               <thead>
                 <tr className="border-b border-border">
                   {/* Left Corner header */}
-                  <th className="w-24 p-2.5 bg-muted/60 border-r border-border text-[11px] font-bold text-foreground text-center">
+                  <th className="w-20 py-2 px-2 bg-muted/60 border-r border-border text-[11px] font-bold text-foreground text-center">
                     ΩΡΑ
                   </th>
                   {/* 5 Day Headers */}
@@ -745,7 +722,7 @@ export const TeacherTimetableModal: React.FC<TeacherTimetableModalProps> = ({
                     return (
                       <th
                         key={day.index}
-                        className={`p-2.5 border-r border-border text-center bg-muted/50 text-foreground last:border-r-0`}
+                        className="py-2 px-2 border-r border-border text-center bg-muted/50 text-foreground last:border-r-0"
                       >
                         <div className="text-xs font-bold tracking-wide uppercase">
                           {day.name}
@@ -768,7 +745,7 @@ export const TeacherTimetableModal: React.FC<TeacherTimetableModalProps> = ({
                   >
                     {/* Period Row Label (Left Axis) */}
                     <td
-                      className={`p-2 border-r border-border text-center select-none ${
+                      className={`p-1.5 border-r border-border text-center select-none w-20 ${
                         period.isAllDay
                           ? "bg-amber-50/60 dark:bg-amber-950/40 text-amber-900 dark:text-amber-300 border-r-amber-200 dark:border-r-amber-800"
                           : "bg-muted/40 text-foreground"
@@ -777,8 +754,13 @@ export const TeacherTimetableModal: React.FC<TeacherTimetableModalProps> = ({
                       <div className="font-bold text-[11px] font-mono leading-tight">
                         {period.label}
                       </div>
+                      {period.isAllDay && (
+                        <span className="text-[9px] px-1 py-0.2 rounded bg-amber-200/60 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200 font-sans font-medium mt-0.5 inline-block">
+                          Ολοημ.
+                        </span>
+                      )}
                       {period.timeRange && (
-                        <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                        <div className="text-[9.5px] text-muted-foreground font-mono mt-0.5">
                           {period.timeRange}
                         </div>
                       )}
@@ -788,122 +770,75 @@ export const TeacherTimetableModal: React.FC<TeacherTimetableModalProps> = ({
                     {days.map((day) => {
                       const cellKey = `${day.index}_${period.index}`;
                       const slots = slotsByCell.get(cellKey) || [];
-                      const coTeachers = coTeachersByCell.get(cellKey) || [];
                       const dayStat = dayScheduleStats.get(day.index);
                       const isGap = dayStat && dayStat.gaps.includes(period.index);
-                      const isOffDay = dayStat && dayStat.teachingPeriods.length === 0;
+                      const isOff = slots.length === 0 && !isGap;
 
                       return (
                         <td
                           key={cellKey}
-                          className="p-1.5 border-r border-border last:border-r-0 align-top h-16 min-h-[64px]"
+                          className={`border-r border-border last:border-r-0 transition-colors ${
+                            isOff
+                              ? "bg-muted/40 dark:bg-muted/40 p-0 align-middle"
+                              : isGap
+                              ? "bg-amber-100/80 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 p-0 align-middle"
+                              : "p-1.5 align-top"
+                          }`}
                         >
-                          {slots.length === 0 ? (
-                            isGap ? (
-                              /* Gap Cell */
-                              <div className="h-full w-full min-h-[48px] rounded border border-dashed border-amber-300 dark:border-amber-700 bg-amber-50/40 dark:bg-amber-950/30 flex flex-col items-center justify-center text-[10px] text-amber-800 dark:text-amber-300 font-sans font-medium select-none p-1">
-                                <Coffee className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 mb-0.5" />
-                                <span>Κενό</span>
-                              </div>
-                            ) : isOffDay ? (
-                              /* Day Off / Free Day */
-                              <div className="h-full w-full min-h-[48px] rounded border border-dashed border-border/60 bg-muted/20 flex items-center justify-center text-[10px] text-muted-foreground font-mono select-none">
-                                —
-                              </div>
-                            ) : (
-                              /* Empty Cell before/after workday */
-                              <div className="h-full w-full min-h-[48px] rounded border border-dashed border-border/50 flex items-center justify-center text-[10px] text-muted-foreground font-mono select-none">
-                                —
-                              </div>
-                            )
+                          {isOff ? (
+                            /* Entire cell is solid gray, no inner card, covers 100% of cell */
+                            <div className="w-full h-full min-h-[46px]" />
+                          ) : isGap ? (
+                            /* Entire cell is gap-colored with coffee icon and text, covering 100% of cell */
+                            <div className="w-full h-full min-h-[46px] flex items-center justify-center gap-1.5 text-[11px] font-sans font-semibold select-none p-1">
+                              <Coffee className="w-3.5 h-3.5 text-amber-700 dark:text-amber-400" />
+                              <span>Κενό</span>
+                            </div>
                           ) : (
-                            <div className="flex flex-col gap-1.5 h-full">
+                            <div className="flex flex-col gap-1 h-full justify-start">
                               {slots.map((slot) => {
                                 const cls = classMap.get(slot.classId);
-                                const subject = subjectMap.get(slot.subjectId);
-                                const subjColor = subject?.color || "#6366f1";
                                 const classColor = cls?.color || "#2563eb";
+                                const rawName = cls?.name || "Τμήμα";
+                                const classDisplayName = rawName.toLowerCase().startsWith("τμημα")
+                                  ? rawName
+                                  : `Τμήμα ${rawName}`;
 
                                 return (
                                   <div
                                     key={slot.id}
-                                    className={`relative flex flex-col justify-between p-2 rounded-md border border-border text-left shadow-2xs transition-all ${
-                                      slot.isSupport
-                                        ? "bg-purple-50/80 dark:bg-purple-950/50 border-purple-300 dark:border-purple-800"
-                                        : "bg-card hover:border-foreground/30"
-                                    }`}
+                                    className="relative flex flex-col gap-0.5 px-2 py-1.5 rounded border border-border text-left shadow-2xs bg-card hover:border-foreground/30 transition-all"
                                     style={{
-                                      borderLeftWidth: "4px",
-                                      borderLeftColor: subjColor,
+                                      borderLeftWidth: "3px",
+                                      borderLeftColor: classColor,
                                     }}
                                   >
-                                    {/* Top Row: Class Badge & Subject */}
-                                    <div className="flex items-start justify-between gap-1.5">
-                                      <div className="flex items-center gap-1.5 min-w-0">
-                                        {/* Class Pill */}
+                                    {/* Class Name Badge & Lock */}
+                                    <div className="flex items-center justify-between gap-1">
+                                      <div className="flex items-center gap-1 min-w-0">
                                         <span
-                                          className="px-1.5 py-0.5 rounded font-bold font-mono text-[10.5px] text-white flex-none shadow-2xs"
+                                          className="px-1.5 py-0.5 rounded font-bold font-mono text-[11px] text-white flex-none shadow-2xs"
                                           style={{ backgroundColor: classColor }}
-                                          title={`Τμήμα ${cls?.name || ""}`}
+                                          title={classDisplayName}
                                         >
-                                          {cls?.name || "Τμήμα"}
-                                        </span>
-                                        <span
-                                          className="font-bold text-xs text-foreground leading-tight truncate"
-                                          title={subject?.title || subject?.code}
-                                        >
-                                          {subject?.title || subject?.code || "Μάθημα"}
+                                          {classDisplayName}
                                         </span>
                                       </div>
 
-                                      {/* Indicator icons */}
-                                      <div className="flex items-center gap-1 flex-none">
-                                        {slot.isLocked && (
-                                          <span title="Κλειδωμένη ώρα">
-                                            <Lock className="w-2.5 h-2.5 text-muted-foreground" />
-                                          </span>
-                                        )}
-                                        {slot.isSupport && (
-                                          <Badge className="h-3.5 px-1 text-[8px] bg-purple-200 dark:bg-purple-900 text-purple-900 dark:text-purple-100 font-mono">
-                                            Παράλληλη
-                                          </Badge>
-                                        )}
-                                      </div>
+                                      {slot.isLocked && (
+                                        <span title="Κλειδωμένη ώρα" className="flex-none">
+                                          <Lock className="w-2.5 h-2.5 text-muted-foreground" />
+                                        </span>
+                                      )}
                                     </div>
 
-                                    {/* Co-teaching Badge (if other teachers share this slot!) */}
-                                    {coTeachers.length > 0 && (
-                                      <div className="mt-1.5 pt-1 border-t border-purple-100 dark:border-purple-900 flex items-center gap-1 text-[10px] text-purple-900 dark:text-purple-200 bg-purple-100/60 dark:bg-purple-900/40 px-1.5 py-0.5 rounded">
-                                        <Users className="w-3 h-3 text-purple-700 dark:text-purple-400 flex-none" />
-                                        <span className="truncate">
-                                          Συνδ:{" "}
-                                          <strong className="font-semibold">
-                                            {coTeachers
-                                              .map(
-                                                (ct) =>
-                                                  `${ct.lastName} ${ct.firstName ? ct.firstName[0] + "." : ""}`
-                                              )
-                                              .join(", ")}
-                                          </strong>
-                                        </span>
-                                      </div>
-                                    )}
-
-                                    {/* Students List Badge for Support Slots */}
+                                    {/* Students List Badge (if any) */}
                                     {slot.students && slot.students.length > 0 && (
-                                      <div className="mt-1.5 pt-1 border-t border-purple-100 dark:border-purple-900 flex items-center gap-1 text-[10px] text-purple-900 dark:text-purple-200 bg-purple-100/70 dark:bg-purple-900/50 px-1.5 py-0.5 rounded font-medium">
-                                        <Users className="w-3 h-3 text-purple-700 dark:text-purple-300 flex-none" />
-                                        <span className="truncate" title={`Μαθητές: ${slot.students.join(", ")}`}>
-                                          Μαθητές: <strong>{slot.students.join(", ")}</strong>
+                                      <div className="pt-0.5 mt-0.5 border-t border-purple-100 dark:border-purple-900 flex items-center gap-1 text-[8.5px] text-purple-900 dark:text-purple-200 bg-purple-100/70 dark:bg-purple-900/50 px-1 py-0.5 rounded font-normal">
+                                        <Users className="w-2.5 h-2.5 text-purple-700 dark:text-purple-300 flex-none" />
+                                        <span className="truncate" title={slot.students.join(", ")}>
+                                          {slot.students.join(", ")}
                                         </span>
-                                      </div>
-                                    )}
-
-                                    {/* Room if available */}
-                                    {cls?.room && coTeachers.length === 0 && (!slot.students || slot.students.length === 0) && (
-                                      <div className="mt-1 text-[9.5px] text-muted-foreground font-mono flex items-center gap-1">
-                                        <Building className="w-3 h-3 text-muted-foreground" />
-                                        <span>Αίθ: {cls.room}</span>
                                       </div>
                                     )}
                                   </div>
@@ -922,7 +857,7 @@ export const TeacherTimetableModal: React.FC<TeacherTimetableModalProps> = ({
         </div>
 
         {/* Footer Statistics & Breakdown */}
-        <div className="px-5 py-2.5 border-t border-border bg-card flex-none flex items-center justify-between text-xs text-muted-foreground">
+        <div className="px-4 py-1.5 border-t border-border bg-card flex-none flex items-center justify-between text-xs text-muted-foreground">
           <div className="flex items-center gap-2 overflow-x-auto max-w-[70%] py-0.5">
             <span className="font-semibold text-foreground text-[11px] flex-none">
               Μαθήματα ({subjectStats.length}):
@@ -949,7 +884,7 @@ export const TeacherTimetableModal: React.FC<TeacherTimetableModalProps> = ({
               variant="secondary"
               size="sm"
               onClick={onClose}
-              className="h-6 px-3 text-[11px] font-sans"
+              className="h-6 px-3 text-[11px] font-sans cursor-pointer"
             >
               Κλείσιμο
             </Button>

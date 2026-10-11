@@ -69,7 +69,7 @@ export async function POST(req: Request) {
           return NextResponse.json(
             {
               success: false,
-              error: `Ο/Η εκπαιδευτικός διδάσκει ήδη την ώρα αυτή σε άλλο τμήμα (${conflict.classId}). Ενεργοποιήστε την επιλογή «Διατμηματικό» εάν πρόκειται για ομαδική συνεδρία.`,
+              error: `Ο/Η εκπαιδευτικός διδάσκει ήδη την ώρα αυτή σε άλλο τμήμα (${conflict.classId}). Ενεργοποιήστε τη δυνατότητα διατμηματικών στις Ρυθμίσεις Προγράμματος εάν πρόκειται για ομαδική συνεδρία.`,
             },
             { status: 400 }
           );
@@ -78,7 +78,30 @@ export async function POST(req: Request) {
     }
 
     const isSupport = Boolean(teacher[0]?.isSupport);
-    const subId = subjectId || (isSupport ? "sub-logo" : "sub-glossa");
+    let subId = subjectId;
+    if (!subId) {
+      const tchSpecialty = (teacher[0]?.specialty || "").trim().toUpperCase();
+      if (tchSpecialty && tchSpecialty !== "ΠΕ70" && tchSpecialty !== "ΠΕ71") {
+        const allSubjects = await db.select().from(schema.subjects);
+        const match = allSubjects.find((s) => {
+          if (s.id === "sub-glossa") return false;
+          if (s.defaultSpecialty && s.defaultSpecialty.trim().toUpperCase() === tchSpecialty) return true;
+          try {
+            const allowed = s.allowedSpecialties ? JSON.parse(s.allowedSpecialties) : [];
+            if (Array.isArray(allowed) && allowed.some((x: string) => x.trim().toUpperCase() === tchSpecialty)) {
+              return true;
+            }
+          } catch {}
+          return false;
+        });
+        if (match) {
+          subId = match.id;
+        }
+      }
+      if (!subId) {
+        subId = isSupport ? "sub-logo" : "sub-glossa";
+      }
+    }
 
     const slotId = `slot-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
     const asgId = `asg-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
@@ -243,7 +266,7 @@ export async function PATCH(req: Request) {
             return NextResponse.json(
               {
                 success: false,
-                error: `Ο/Η εκπαιδευτικός διδάσκει ήδη την ώρα αυτή σε άλλο τμήμα (${conflict.classId}). Ενεργοποιήστε την επιλογή «Διατμηματικό» εάν πρόκειται για ομαδική συνεδρία.`,
+                error: `Ο/Η εκπαιδευτικός διδάσκει ήδη την ώρα αυτή σε άλλο τμήμα (${conflict.classId}). Ενεργοποιήστε τη δυνατότητα διατμηματικών στις Ρυθμίσεις Προγράμματος εάν πρόκειται για ομαδική συνεδρία.`,
               },
               { status: 400 }
             );
@@ -289,7 +312,7 @@ export async function PATCH(req: Request) {
             return NextResponse.json(
               {
                 success: false,
-                validationError: `Ο/Η εκπαιδευτικός διδάσκει ήδη την ώρα αυτή σε άλλο τμήμα (${conflict.classId}). Ενεργοποιήστε την επιλογή «Διατμηματικό» εάν πρόκειται για ομαδική συνεδρία.`,
+                validationError: `Ο/Η εκπαιδευτικός διδάσκει ήδη την ώρα αυτή σε άλλο τμήμα (${conflict.classId}). Ενεργοποιήστε τη δυνατότητα διατμηματικών στις Ρυθμίσεις Προγράμματος εάν πρόκειται για ομαδική συνεδρία.`,
               },
               { status: 400 }
             );

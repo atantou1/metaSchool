@@ -3,6 +3,19 @@ import { db } from "@/db";
 import * as schema from "@/db/schema";
 import { eq } from "drizzle-orm";
 
+export async function GET() {
+  try {
+    const rawTeachers = await db.select().from(schema.teachers);
+    const teachers = rawTeachers.map((t) => ({
+      ...t,
+      constraints: t.constraints ? JSON.parse(t.constraints) : null,
+    }));
+    return NextResponse.json({ success: true, teachers });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -125,6 +138,7 @@ export async function PATCH(req: Request) {
         "maxConsecutiveGaps",
         "maxTotalGapsPerDay",
         "maxTotalGapsPerWeek",
+        "allowSimultaneousSessions",
       ];
 
       let constraintsChanged = false;
