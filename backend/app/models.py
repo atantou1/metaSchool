@@ -11,6 +11,7 @@ class TeacherConstraints(BaseModel):
     maxTotalGapsPerDay: Optional[int] = None
     maxTotalGapsPerWeek: Optional[int] = None
     requireFirstAndLastHour: Optional[bool] = None
+    allowSimultaneousSessions: Optional[bool] = False
 
 class TeacherInput(BaseModel):
     id: str
@@ -25,6 +26,7 @@ class TeacherInput(BaseModel):
     maxWeeklyHours: int = 24
     color: str = "#71717a"
     constraints: Optional[TeacherConstraints] = None
+    allowSimultaneousSessions: Optional[bool] = False
 
 class SubjectInput(BaseModel):
     id: str

@@ -20,7 +20,12 @@ import {
   ContextMenuLabel,
 } from "@/components/ui/context-menu";
 import { getTeacherAbbr, getTeacherStyleClass, getTeacherTileInlineStyle } from "@/lib/teacher-utils";
-import { formatSpecialtyLabel, getSpecialtyByCode, findSpecialty } from "@/lib/specialties";
+import {
+  formatSpecialtyLabel,
+  formatSpecialtyCode,
+  getSpecialtyByCode,
+  findSpecialty,
+} from "@/lib/specialties";
 import {
   ArrowRightLeft,
   UserCheck,
@@ -30,6 +35,9 @@ import {
   Circle,
   Copy,
   ClipboardPaste,
+  MousePointer2,
+  SplitSquareHorizontal,
+  Eraser,
   X,
   CalendarDays,
   Users,
@@ -60,6 +68,10 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
 }) => {
   const [internalShowAllDay, setInternalShowAllDay] = useState(false);
   const showAllDay = controlledShowAllDay !== undefined ? controlledShowAllDay : internalShowAllDay;
+
+  // Active Tool state
+  type ActiveTool = 'pointer' | 'paste' | 'split' | 'eraser';
+  const [activeTool, setActiveTool] = useState<ActiveTool>('pointer');
 
   // Floating tooltip state on left-click
   const [focusedTile, setFocusedTile] = useState<{
@@ -120,6 +132,7 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        setActiveTool('pointer');
         if (swapSourceSlot) {
           setSwapSourceSlot(null);
           toast.info("Η εναλλαγή ακυρώθηκε.");
@@ -216,11 +229,33 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
       return;
     }
 
+    if (activeTool === 'paste' && copiedTeacher) {
+      handleChangeTeacher(slot.id, copiedTeacher.id);
+      return;
+    }
+
+    if (activeTool === 'split') {
+      handleAddSplitSlot(slot.classId, slot.day, slot.period);
+      return;
+    }
+
+    if (activeTool === 'eraser') {
+      handleDeleteSlot(slot.id);
+      return;
+    }
+
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const teacher = teacherMap.get(slot.teacherId);
-    const teacherName = teacher
-      ? `${teacher.lastName} ${teacher.firstName} (${formatSpecialtyLabel(teacher.specialty)})`
-      : "Χωρίς Ανάθεση";
+    let teacherName = "Χωρίς Ανάθεση";
+    if (teacher) {
+      const specCode = formatSpecialtyCode(teacher.specialty) || teacher.specialty;
+      const teacherSlots = data.slots.filter((s) => s.teacherId === teacher.id);
+      const totalWeeklyHours = new Set(teacherSlots.map((s) => `${s.day}_${s.period}`)).size;
+      const hoursText = `${totalWeeklyHours} ${totalWeeklyHours === 1 ? "ώρα" : "ώρες"}`;
+      const specialtyPart = specCode ? `${specCode} - ${hoursText}` : hoursText;
+      const teacherFullName = [teacher.lastName, teacher.firstName].filter(Boolean).join(" ");
+      teacherName = `${teacherFullName} (${specialtyPart})`;
+    }
     const studentInfo =
       slot.students && slot.students.length > 0
         ? ` • 👥 Μαθητές (${slot.students.length}): ${slot.students.join(", ")}`
@@ -245,6 +280,17 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
   const handleEmptyCellClick = (classId: string, day: number, period: number) => {
     if (swapSourceSlot) {
       handleExecuteSwap(undefined, { classId, day, period });
+      return;
+    }
+
+    if (activeTool === 'paste' && copiedTeacher) {
+      handleAssignSlot(classId, day, period, copiedTeacher.id);
+      return;
+    }
+
+    if (activeTool === 'split') {
+      handleAddSplitSlot(classId, day, period);
+      return;
     }
   };
 
@@ -344,6 +390,35 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
 
   // Change teacher
   const handleChangeTeacher = async (slotId: string, newTeacherId: string) => {
+    const targetSlot = data.slots.find((s) => s.id === slotId);
+    if (!targetSlot) return;
+
+    if (newTeacherId && newTeacherId !== "tch-unassigned") {
+      const teacher = teacherMap.get(newTeacherId);
+      const isAllowedSimultaneous = Boolean(
+        teacher?.allowSimultaneousSessions ||
+        teacher?.constraints?.allowSimultaneousSessions
+      );
+
+      // Check if this teacher is already teaching in ANOTHER class at the same (day, period)
+      const conflictingSlot = data.slots.find(
+        (s) =>
+          s.id !== slotId &&
+          s.teacherId === newTeacherId &&
+          s.day === targetSlot.day &&
+          s.period === targetSlot.period &&
+          s.classId !== targetSlot.classId
+      );
+
+      if (conflictingSlot && !isAllowedSimultaneous) {
+        const otherClass = classMap.get(conflictingSlot.classId);
+        toast.error("Σύγκρουση ώρας εκπαιδευτικού", {
+          description: `Ο/Η ${teacher?.lastName || "εκπαιδευτικός"} διδάσκει ήδη την ώρα αυτή στο τμήμα ${otherClass?.name || conflictingSlot.classId}. Για ταυτόχρονη διατμηματική διδασκαλία (ομαδική συνεδρία), ενεργοποιήστε τη ρύθμιση «Διατμηματικό» στον εκπαιδευτικό.`,
+        });
+        return;
+      }
+    }
+
     try {
       const res = await fetch("/api/timetable/slots", {
         method: "PATCH",
@@ -407,6 +482,31 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
     period: number,
     teacherId: string
   ) => {
+    if (teacherId && teacherId !== "tch-unassigned") {
+      const teacher = teacherMap.get(teacherId);
+      const isAllowedSimultaneous = Boolean(
+        teacher?.allowSimultaneousSessions ||
+        teacher?.constraints?.allowSimultaneousSessions
+      );
+
+      // Check if this teacher is already teaching in ANOTHER class at the same (day, period)
+      const conflictingSlot = data.slots.find(
+        (s) =>
+          s.teacherId === teacherId &&
+          s.day === day &&
+          s.period === period &&
+          s.classId !== classId
+      );
+
+      if (conflictingSlot && !isAllowedSimultaneous) {
+        const otherClass = classMap.get(conflictingSlot.classId);
+        toast.error("Σύγκρουση ώρας εκπαιδευτικού", {
+          description: `Ο/Η ${teacher?.lastName || "εκπαιδευτικός"} διδάσκει ήδη την ώρα αυτή στο τμήμα ${otherClass?.name || conflictingSlot.classId}. Για ταυτόχρονη διατμηματική διδασκαλία (ομαδική συνεδρία), ενεργοποιήστε τη ρύθμιση «Διατμηματικό» στον εκπαιδευτικό.`,
+        });
+        return;
+      }
+    }
+
     try {
       const res = await fetch("/api/timetable/slots", {
         method: "POST",
@@ -517,9 +617,9 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
           </ContextMenuLabel>
           <ContextMenuSeparator />
 
-          {/* 0. Επιλογή Μαθητών Submenu (για συμπληρωματικές ειδικότητες / υποστήριξη) */}
-          {isSupportSlot && (() => {
-            const classStudents = cls.students || [];
+          {/* 0. Επιλογή Μαθητών Submenu (για όλες τις ειδικότητες) */}
+          {(() => {
+            const classStudents = [...(cls.students || []), "1 παιδί"];
             const otherSlots = data.slots.filter(
               (s) =>
                 s.id !== slot.id &&
@@ -1212,6 +1312,63 @@ export const MasterMatrix: React.FC<MasterMatrixProps> = ({
           })}
         </tbody>
       </table>
+
+      {/* Quick Tools Toolbar (Fixed Footer Style) */}
+      <div className="fixed bottom-0 left-0 right-0 h-6 bg-zinc-50 dark:bg-zinc-900 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-center gap-6 z-50 px-4">
+        <button
+          title="Επιλογή (Esc)"
+          onClick={() => setActiveTool('pointer')}
+          className={`h-full flex items-center gap-1.5 px-2 transition-colors ${
+            activeTool === 'pointer'
+              ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 font-medium"
+              : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+          }`}
+        >
+          <MousePointer2 className="w-3.5 h-3.5" />
+          <span className="text-[10px]">Επιλογή</span>
+        </button>
+
+        <button
+          title={copiedTeacher ? `Επικόλληση: ${copiedTeacher.name}` : "Επικόλληση (Απαιτείται Αντιγραφή)"}
+          onClick={() => copiedTeacher && setActiveTool('paste')}
+          className={`h-full flex items-center gap-1.5 px-2 transition-colors ${
+            !copiedTeacher ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
+          } ${
+            activeTool === 'paste'
+              ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 font-medium"
+              : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+          }`}
+        >
+          <ClipboardPaste className="w-3.5 h-3.5" />
+          <span className="text-[10px]">Επικόλληση</span>
+        </button>
+
+        <button
+          title="Προσθήκη Κουτιού (Διαίρεση)"
+          onClick={() => setActiveTool('split')}
+          className={`h-full flex items-center gap-1.5 px-2 cursor-pointer transition-colors ${
+            activeTool === 'split'
+              ? "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 font-medium"
+              : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+          }`}
+        >
+          <SplitSquareHorizontal className="w-3.5 h-3.5" />
+          <span className="text-[10px]">Διαίρεση</span>
+        </button>
+
+        <button
+          title="Γόμα (Διαγραφή)"
+          onClick={() => setActiveTool('eraser')}
+          className={`h-full flex items-center gap-1.5 px-2 cursor-pointer transition-colors ${
+            activeTool === 'eraser'
+              ? "bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-400 font-medium"
+              : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+          }`}
+        >
+          <Eraser className="w-3.5 h-3.5" />
+          <span className="text-[10px]">Γόμα</span>
+        </button>
+      </div>
 
       {/* Dedicated Class Timetable Modal */}
       {selectedClassForModal && (

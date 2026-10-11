@@ -142,6 +142,7 @@ interface InlineEditState {
   maxTotalGapsPerWeek: number | "";
   availableDays: number[];
   dayHours: Record<string, DayAvailabilityConfig>;
+  allowSimultaneousSessions: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1790,8 +1791,27 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
         map.set(a.teacherId, (map.get(a.teacherId) || 0) + (a.hours || 0));
       }
     });
+
+    // For teachers without explicit lesson assignments (e.g. support/pull-out teachers),
+    // calculate distinct (day, period) teaching hours directly from timetable slots
+    if (data.slots && data.slots.length > 0) {
+      const teacherSlotTimes = new Map<string, Set<string>>();
+      data.slots.forEach((s) => {
+        if (s.teacherId && s.teacherId !== "tch-unassigned") {
+          const set = teacherSlotTimes.get(s.teacherId) || new Set<string>();
+          set.add(`${s.day}_${s.period}`);
+          teacherSlotTimes.set(s.teacherId, set);
+        }
+      });
+      teacherSlotTimes.forEach((set, teacherId) => {
+        if (!map.has(teacherId) || map.get(teacherId) === 0) {
+          map.set(teacherId, set.size);
+        }
+      });
+    }
+
     return map;
-  }, [data.assignments]);
+  }, [data.assignments, data.slots]);
 
   const filteredTeachers = useMemo(() => {
     return data.teachers.filter((tch) => {
@@ -2147,6 +2167,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
       maxTotalGapsPerWeek: 2,
       availableDays: ALL_DAYS_INDICES,
       dayHours: extractDayHours(null, false, numMorningPeriods, numAllDayPeriods),
+      allowSimultaneousSessions: false,
     });
     setEditingRowId("__new__");
     setSelectedTeacherId(null);
@@ -2183,6 +2204,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
       maxTotalGapsPerWeek: c?.maxTotalGapsPerWeek ?? 2,
       availableDays: daysList,
       dayHours: extractDayHours(c, target.isAllDay ?? false, numMorningPeriods, numAllDayPeriods),
+      allowSimultaneousSessions: Boolean(c?.allowSimultaneousSessions),
     });
     setEditingRowId("__new__");
     setSelectedTeacherId(null);
@@ -2217,6 +2239,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
       maxTotalGapsPerWeek: c?.maxTotalGapsPerWeek ?? 2,
       availableDays: daysList,
       dayHours: extractDayHours(c, tch.isAllDay ?? false, numMorningPeriods, numAllDayPeriods),
+      allowSimultaneousSessions: Boolean(c?.allowSimultaneousSessions),
     });
     setEditingRowId(tch.id);
     setSelectedTeacherId(tch.id);
@@ -2249,6 +2272,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
       maxTotalGapsPerWeek: 2,
       availableDays: ALL_DAYS_INDICES,
       dayHours: extractDayHours(null, false, numMorningPeriods, numAllDayPeriods),
+      allowSimultaneousSessions: false,
     });
     setModifiedBulkFields(new Set());
     setEditingRowId("__bulk__");
@@ -2345,6 +2369,9 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
     if (modifiedBulkFields.has("maxTotalGapsPerWeek")) {
       constraintsData.maxTotalGapsPerWeek = inlineData.maxTotalGapsPerWeek === "" ? null : Number(inlineData.maxTotalGapsPerWeek);
     }
+    if (modifiedBulkFields.has("allowSimultaneousSessions")) {
+      constraintsData.allowSimultaneousSessions = inlineData.allowSimultaneousSessions;
+    }
 
     const updates: Record<string, any> = {
       constraints: constraintsData,
@@ -2408,6 +2435,9 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
     }
     if (modifiedBulkFields.has("isSupport")) {
       list.push({ key: "isSupport", label: "Τύπος Ανάθεσης", value: inlineData.isSupport ? "Συμπληρωματική (Παράλληλη/Τ.Ε.)" : "Βασική" });
+    }
+    if (modifiedBulkFields.has("allowSimultaneousSessions")) {
+      list.push({ key: "allowSimultaneousSessions", label: "Διατμηματικό", value: inlineData.allowSimultaneousSessions ? "Ναι" : "Όχι" });
     }
     if (modifiedBulkFields.has("isActive")) {
       list.push({ key: "isActive", label: "Κατάσταση", value: inlineData.isActive ? "Ενεργός" : "Σε Άδεια/Ανενεργός" });
@@ -2490,6 +2520,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
       maxConsecutiveGaps: inlineData.maxConsecutiveGaps === "" ? null : Number(inlineData.maxConsecutiveGaps),
       maxTotalGapsPerDay: inlineData.maxTotalGapsPerDay === "" ? null : Number(inlineData.maxTotalGapsPerDay),
       maxTotalGapsPerWeek: inlineData.maxTotalGapsPerWeek === "" ? null : Number(inlineData.maxTotalGapsPerWeek),
+      allowSimultaneousSessions: inlineData.allowSimultaneousSessions,
     };
 
     const payload = {
@@ -2854,6 +2885,28 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
             title="Κλικ για αλλαγή τύπου (Βασική / Συμπληρωματική)"
           >
             {inlineData.isSupport ? "Συμπλ." : "Βασική"}
+          </button>
+        </td>
+
+        {/* Cross-Class Simultaneous Sessions Toggle */}
+        <td className="py-2 px-1 text-center">
+          <button
+            type="button"
+            onClick={() => {
+              markBulkField("allowSimultaneousSessions");
+              setInlineData({
+                ...inlineData,
+                allowSimultaneousSessions: !inlineData.allowSimultaneousSessions,
+              });
+            }}
+            className={`px-1.5 py-0.5 rounded text-[10px] font-medium border transition-all ${
+              inlineData.allowSimultaneousSessions
+                ? "bg-purple-100 border-purple-300 text-purple-800 font-bold"
+                : "bg-white border-zinc-200 text-zinc-400 hover:border-zinc-300"
+            } ${isBulkMode && modifiedBulkFields.has("allowSimultaneousSessions") ? "ring-2 ring-indigo-500" : ""}`}
+            title="Κλικ για αλλαγή (Ταυτόχρονη διατμηματική διδασκαλία / ομαδικές συνεδρίες)"
+          >
+            {inlineData.allowSimultaneousSessions ? "Ναι" : "Όχι"}
           </button>
         </td>
 
@@ -3345,7 +3398,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
                 <th colSpan={4} className="py-2 px-3 border-r border-zinc-200 bg-zinc-100/80 text-left">
                   ΒΑΣΙΚΑ ΣΤΟΙΧΕΙΑ
                 </th>
-                <th colSpan={6} className="py-2 px-3 border-r border-zinc-200 bg-zinc-100/80 text-center">
+                <th colSpan={7} className="py-2 px-3 border-r border-zinc-200 bg-zinc-100/80 text-center">
                   ΙΔΙΟΤΗΤΕΣ & ΡΟΛΟΙ
                 </th>
                 <th colSpan={4} className="py-2 px-3 border-r border-zinc-200 bg-zinc-100/80 text-center">
@@ -3370,6 +3423,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
                 <th className="py-2.5 px-2 w-14 text-center" title="Διδάσκει στο Πρωινό Πρόγραμμα">Πρωινό</th>
                 <th className="py-2.5 px-2 w-16 text-center" title="Διδάσκει στο Ολοήμερο Πρόγραμμα">Ολοήμερο</th>
                 <th className="py-2.5 px-2.5 w-24 text-center" title="Τύπος ανάθεσης">Τύπος</th>
+                <th className="py-2.5 px-2 w-20 text-center" title="Επιτρέπεται ταυτόχρονη διατμηματική διδασκαλία / ομαδική συνεδρία σε διαφορετικά τμήματα">Διατμηματικό</th>
                 <th className="py-2.5 px-2.5 w-20 text-center border-r border-zinc-200" title="Κατάσταση">Κατάσταση</th>
 
                 {/* Days & Hours (5) - Compact Days Column */}
@@ -3676,6 +3730,9 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
                     </Select>
                   </th>
 
+                  {/* Empty cell for Simultaneous Sessions column in filter row */}
+                  <th className="py-1 px-0.5 w-20 text-center" />
+
                   {/* 10. Status Filter */}
                   <th className="py-1 px-1 w-20 text-center border-r border-zinc-200">
                     <Select
@@ -3969,6 +4026,17 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
                         <Badge variant="outline" className="text-[10px] font-normal border-emerald-200 bg-emerald-50 text-emerald-700 px-1.5 py-0.5">
                           Βασική
                         </Badge>
+                      )}
+                    </td>
+
+                    {/* Cross-Class Simultaneous Sessions */}
+                    <td className="py-2.5 px-2 text-center">
+                      {tch.constraints?.allowSimultaneousSessions ? (
+                        <Badge variant="outline" className="text-[10px] font-semibold border-purple-300 bg-purple-50 text-purple-700 px-1.5 py-0.5" title="Επιτρέπεται ταυτόχρονη διατμηματική διδασκαλία / ομαδικές συνεδρίες">
+                          Ναι
+                        </Badge>
+                      ) : (
+                        <span className="text-zinc-300 text-xs font-mono">—</span>
                       )}
                     </td>
 

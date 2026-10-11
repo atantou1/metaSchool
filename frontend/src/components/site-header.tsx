@@ -21,9 +21,10 @@ import {
 interface SiteHeaderProps {
   rightActions?: React.ReactNode;
   schoolName?: string;
+  activeScheduleName?: string | null;
 }
 
-export function SiteHeader({ rightActions, schoolName = "1ο Πειραματικό Δημοτικό" }: SiteHeaderProps) {
+export function SiteHeader({ rightActions, schoolName = "1ο Πειραματικό Δημοτικό", activeScheduleName }: SiteHeaderProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
@@ -49,8 +50,23 @@ export function SiteHeader({ rightActions, schoolName = "1ο Πειραματι�
           <div className="h-5 w-5 rounded bg-zinc-900 dark:bg-zinc-100 flex items-center justify-center text-white dark:text-zinc-900 text-[11px] font-bold">
             <CalendarDays className="w-3.5 h-3.5" />
           </div>
-          <span className="text-[11px] font-medium px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 hidden sm:inline-block">
+          <span className="text-[11px] font-medium px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 border border-zinc-200 dark:border-zinc-700 hidden sm:inline-flex items-center">
             {schoolName}
+            {activeScheduleName ? (
+              <>
+                <span className="mx-1.5 text-zinc-400 dark:text-zinc-600">/</span>
+                <span className="font-normal text-zinc-600 dark:text-zinc-400">
+                  {activeScheduleName}
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="mx-1.5 text-zinc-400 dark:text-zinc-600">/</span>
+                <span className="font-normal italic text-zinc-500 dark:text-zinc-500">
+                  Μη αποθηκευμένο (Νέο)
+                </span>
+              </>
+            )}
           </span>
         </div>
 

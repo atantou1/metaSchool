@@ -18,6 +18,7 @@ export interface TeacherConstraints {
   maxTotalGapsPerDay?: number | null;
   maxTotalGapsPerWeek?: number | null;
   requireFirstAndLastHour?: boolean | null;
+  allowSimultaneousSessions?: boolean | null; // Εάν επιτρέπεται ταυτόχρονη διατμηματική διδασκαλία / ομαδική συνεδρία
 }
 
 export interface Teacher {
@@ -35,6 +36,7 @@ export interface Teacher {
   isSupport: boolean;
   color: string;
   constraints?: TeacherConstraints | null;
+  allowSimultaneousSessions?: boolean | null;
 }
 
 export interface SubjectAssignment {

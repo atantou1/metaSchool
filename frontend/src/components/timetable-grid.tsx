@@ -145,8 +145,19 @@ export const TimetableGrid: React.FC<TimetableGridProps> = ({
   const selectedClass = data.classes.find((c) => c.id === selectedClassId);
   const selectedTeacher = data.teachers.find((t) => t.id === selectedTeacherId);
 
-  const currentAssignedHours = filteredSlots.filter((s) => !s.isSupport).length;
-  const currentSupportHours = filteredSlots.filter((s) => s.isSupport).length;
+  const currentAssignedHours = React.useMemo(() => {
+    if (viewMode === "teacher") {
+      return new Set(filteredSlots.filter((s) => !s.isSupport).map((s) => `${s.day}_${s.period}`)).size;
+    }
+    return filteredSlots.filter((s) => !s.isSupport).length;
+  }, [filteredSlots, viewMode]);
+
+  const currentSupportHours = React.useMemo(() => {
+    if (viewMode === "teacher") {
+      return new Set(filteredSlots.filter((s) => s.isSupport).map((s) => `${s.day}_${s.period}`)).size;
+    }
+    return filteredSlots.filter((s) => s.isSupport).length;
+  }, [filteredSlots, viewMode]);
 
   return (
     <div className="space-y-6">

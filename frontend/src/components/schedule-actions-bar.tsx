@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -12,20 +12,31 @@ import {
   saveScheduleAction, 
   getSchedulesAction, 
   loadScheduleToActiveAction,
-  deleteScheduleAction 
+  deleteScheduleAction,
+  updateScheduleAction,
+  clearTimetableAction,
+  checkUnsavedChangesAction
 } from "@/app/actions/schedule-actions";
 
 export function ScheduleActionsBar({ 
   currentSlots,
-  onScheduleLoaded 
+  onScheduleLoaded,
+  onActiveScheduleChange
 }: { 
   currentSlots: any[];
-  onScheduleLoaded?: () => void 
+  onScheduleLoaded?: () => void;
+  onActiveScheduleChange?: (name: string | null) => void;
 }) {
   const [saveModalOpen, setSaveModalOpen] = useState(false);
+  const [newModalOpen, setNewModalOpen] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+
+  const [activeScheduleId, setActiveScheduleId] = useState<string | null>(null);
+  const [activeScheduleName, setActiveScheduleName] = useState<string>("");
+  const [activeScheduleDescription, setActiveScheduleDescription] = useState<string>("");
 
   const [schedules, setSchedules] = useState<any[]>([]);
   const [isLoadingSchedules, setIsLoadingSchedules] = useState(false);
@@ -33,6 +44,21 @@ export function ScheduleActionsBar({
   // Deletion state
   const [scheduleToDelete, setScheduleToDelete] = useState<any | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  React.useEffect(() => {
+    const savedId = localStorage.getItem("activeScheduleId");
+    const savedName = localStorage.getItem("activeScheduleName");
+    if (savedId && savedName) {
+      setActiveScheduleId(savedId);
+      setActiveScheduleName(savedName);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (onActiveScheduleChange) {
+      onActiveScheduleChange(activeScheduleName || null);
+    }
+  }, [activeScheduleName, onActiveScheduleChange]);
 
   // Load schedules for the dropdown
   const loadSchedules = async () => {
@@ -44,7 +70,28 @@ export function ScheduleActionsBar({
     setIsLoadingSchedules(false);
   };
 
-  const handleSave = async () => {
+  const handleUpdateCurrent = async () => {
+    if (!activeScheduleId) {
+      // No active schedule, open save as new modal
+      setName("");
+      setDescription("");
+      setSaveModalOpen(true);
+      return;
+    }
+    
+    setIsSaving(true);
+    const res = await updateScheduleAction(activeScheduleId, activeScheduleName, activeScheduleDescription, currentSlots);
+    setIsSaving(false);
+    
+    if (res.success) {
+      toast.success("Το πρόγραμμα ενημερώθηκε επιτυχώς!");
+      loadSchedules();
+    } else {
+      toast.error("Σφάλμα ενημέρωσης", { description: res.error });
+    }
+  };
+
+  const handleSaveAsNew = async () => {
     if (!name.trim()) {
       toast.error("Παρακαλώ εισάγετε όνομα προγράμματος.");
       return;
@@ -57,6 +104,16 @@ export function ScheduleActionsBar({
     if (res.success) {
       toast.success("Το πρόγραμμα αποθηκεύτηκε επιτυχώς!");
       setSaveModalOpen(false);
+      
+      // Set as active
+      if (res.id) {
+        setActiveScheduleId(res.id);
+        setActiveScheduleName(name);
+        setActiveScheduleDescription(description);
+        localStorage.setItem("activeScheduleId", res.id);
+        localStorage.setItem("activeScheduleName", name);
+      }
+      
       setName("");
       setDescription("");
       loadSchedules();
@@ -65,10 +122,15 @@ export function ScheduleActionsBar({
     }
   };
 
-  const handleLoad = async (id: string, schedName: string) => {
+  const handleLoad = async (id: string, schedName: string, schedDesc: string) => {
     const res = await loadScheduleToActiveAction(id);
     if (res.success) {
       toast.success(`Το πρόγραμμα «${schedName}» φορτώθηκε επιτυχώς!`);
+      setActiveScheduleId(id);
+      setActiveScheduleName(schedName);
+      setActiveScheduleDescription(schedDesc || "");
+      localStorage.setItem("activeScheduleId", id);
+      localStorage.setItem("activeScheduleName", schedName);
       if (onScheduleLoaded) onScheduleLoaded();
     } else {
       toast.error("Σφάλμα φόρτωσης", { description: res.error });
@@ -84,9 +146,47 @@ export function ScheduleActionsBar({
     if (res.success) {
       toast.success(`Το πρόγραμμα «${scheduleToDelete.name}» διαγράφηκε επιτυχώς.`);
       setSchedules((prev) => prev.filter((item) => item.id !== scheduleToDelete.id));
+      if (activeScheduleId === scheduleToDelete.id) {
+        setActiveScheduleId(null);
+        setActiveScheduleName("");
+        setActiveScheduleDescription("");
+        localStorage.removeItem("activeScheduleId");
+        localStorage.removeItem("activeScheduleName");
+      }
       setScheduleToDelete(null);
     } else {
       toast.error("Σφάλμα διαγραφής", { description: res.error });
+    }
+  };
+
+  const handleNewClick = async () => {
+    setIsClearing(true); // temporary loading state for the button
+    const res = await checkUnsavedChangesAction(activeScheduleId);
+    setIsClearing(false);
+    
+    if (res.hasChanges) {
+      setNewModalOpen(true);
+    } else {
+      handleClearBoard();
+    }
+  };
+
+  const handleClearBoard = async () => {
+    setIsClearing(true);
+    const res = await clearTimetableAction();
+    setIsClearing(false);
+    
+    if (res.success) {
+      setNewModalOpen(false);
+      setActiveScheduleId(null);
+      setActiveScheduleName("");
+      setActiveScheduleDescription("");
+      localStorage.removeItem("activeScheduleId");
+      localStorage.removeItem("activeScheduleName");
+      toast.success("Το ταμπλό καθαρίστηκε.");
+      if (onScheduleLoaded) onScheduleLoaded();
+    } else {
+      toast.error("Σφάλμα κατά τον καθαρισμό", { description: res.error });
     }
   };
 
@@ -139,7 +239,7 @@ export function ScheduleActionsBar({
                   >
                     <button
                       type="button"
-                      onClick={() => handleLoad(s.id, s.name)}
+                      onClick={() => handleLoad(s.id, s.name, s.description)}
                       className="flex flex-col items-start text-left flex-1 min-w-0 pr-2 cursor-pointer focus:outline-none"
                     >
                       <span className="font-medium text-zinc-900 dark:text-zinc-100 truncate w-full text-xs">
@@ -176,16 +276,51 @@ export function ScheduleActionsBar({
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {/* Save Schedule Button */}
+        {/* New Schedule Button */}
         <Button
           variant="outline"
           size="sm"
-          onClick={() => setSaveModalOpen(true)}
-          className="h-6 px-2 text-[10px] font-sans border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+          onClick={handleNewClick}
+          disabled={isClearing}
+          className="h-6 px-2 mr-1 text-[10px] font-sans border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+          title="Εκκαθάριση του ταμπλό"
         >
-          <Save className="w-3 h-3 mr-1" />
-          Αποθήκευση
+          {isClearing ? <Loader2 className="w-3 h-3 animate-spin" /> : "Νέο"}
         </Button>
+
+        {/* Save Schedule Split Button */}
+        <div className="flex items-center">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleUpdateCurrent}
+            className="h-6 px-2 text-[10px] font-sans border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-r-none border-r-0"
+            title={activeScheduleName ? `Αποθήκευση αλλαγών στο «${activeScheduleName}»` : "Αποθήκευση νέου προγράμματος"}
+          >
+            {isSaving ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Save className="w-3 h-3 mr-1" />}
+            Αποθήκευση
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+                className="inline-flex shrink-0 items-center justify-center bg-transparent border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 h-6 px-1.5 text-[10px] font-sans border rounded-md rounded-l-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring border-l-0"
+            >
+              <ChevronDown className="w-3 h-3 opacity-70" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48 font-sans text-xs">
+              <div 
+                className="flex items-center px-2 py-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded cursor-pointer"
+                onClick={() => {
+                  setName("");
+                  setDescription("");
+                  setSaveModalOpen(true);
+                }}
+              >
+                <Save className="w-3.5 h-3.5 mr-2 text-zinc-500" />
+                Αποθήκευση ως νέο...
+              </div>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
 
       {/* Save Modal */}
@@ -228,7 +363,7 @@ export function ScheduleActionsBar({
               Ακύρωση
             </Button>
             <Button 
-              onClick={handleSave} 
+              onClick={handleSaveAsNew} 
               disabled={isSaving}
               className="h-8 text-xs bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
             >
@@ -276,6 +411,40 @@ export function ScheduleActionsBar({
             >
               {isDeleting ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5 mr-1.5" />}
               Διαγραφή
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* New Schedule Warning Modal */}
+      <Dialog open={newModalOpen} onOpenChange={setNewModalOpen}>
+        <DialogContent className="sm:max-w-[400px] font-sans text-xs">
+          <DialogHeader>
+            <DialogTitle className="text-base font-semibold flex items-center gap-2">
+              Νέο Πρόγραμμα
+            </DialogTitle>
+            <DialogDescription className="text-xs text-zinc-600 dark:text-zinc-400 pt-1">
+              Έχετε δεδομένα στο ταμπλό. Αν προχωρήσετε, <span className="font-semibold text-rose-600">όλες οι μη αποθηκευμένες αλλαγές θα χαθούν</span> και το ταμπλό θα καθαριστεί.
+              <br /><br />
+              Είστε σίγουροι ότι θέλετε να συνεχίσετε;
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0 mt-3">
+            <Button
+              variant="outline"
+              onClick={() => setNewModalOpen(false)}
+              disabled={isClearing}
+              className="h-8 text-xs"
+            >
+              Ακύρωση
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleClearBoard}
+              disabled={isClearing}
+              className="h-8 text-xs bg-rose-600 hover:bg-rose-700 text-white"
+            >
+              {isClearing ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : "Συνέχεια & Εκκαθάριση"}
             </Button>
           </DialogFooter>
         </DialogContent>

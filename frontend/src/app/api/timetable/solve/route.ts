@@ -30,7 +30,7 @@ export async function POST(req: Request) {
     ]);
 
     const lockedFixedSlots = allSlots
-      .filter((s) => s.isLocked)
+      .filter((s) => s.isLocked && !s.isSupport)
       .map((s) => ({
         assignmentId: s.assignmentId,
         day: s.day,

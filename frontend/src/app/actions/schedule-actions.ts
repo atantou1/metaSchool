@@ -87,3 +87,84 @@ export async function deleteScheduleAction(id: string) {
     return { success: false, error: "Failed to delete schedule" };
   }
 }
+
+export async function updateScheduleAction(id: string, name: string, description: string, slotsData: any) {
+  try {
+    await db.update(schedules)
+      .set({
+        name,
+        description,
+        slotsData: JSON.stringify(slotsData),
+        updatedAt: new Date().toISOString()
+      })
+      .where(eq(schedules.id, id));
+    return { success: true };
+  } catch (error) {
+    console.error("Error updating schedule:", error);
+    return { success: false, error: "Failed to update schedule" };
+  }
+}
+
+export async function clearTimetableAction() {
+  try {
+    await db.delete(timetableSlots);
+    return { success: true };
+  } catch (error) {
+    console.error("Error clearing timetable:", error);
+    return { success: false, error: "Failed to clear timetable" };
+  }
+}
+
+export async function checkUnsavedChangesAction(activeScheduleId: string | null) {
+  try {
+    const currentSlots = await db.select().from(timetableSlots);
+    
+    if (!activeScheduleId) {
+      return { success: true, hasChanges: currentSlots.length > 0 };
+    }
+    
+    const schedule = await db.select().from(schedules).where(eq(schedules.id, activeScheduleId)).get();
+    if (!schedule) {
+      return { success: true, hasChanges: currentSlots.length > 0 };
+    }
+    
+    const savedSlots = JSON.parse(schedule.slotsData);
+    
+    if (currentSlots.length !== savedSlots.length) {
+      return { success: true, hasChanges: true };
+    }
+    
+    const normalizeSlot = (s: any) => ({
+      id: String(s.id),
+      day: Number(s.day),
+      period: Number(s.period),
+      assignmentId: String(s.assignmentId),
+      classId: String(s.classId),
+      subGroupId: String(s.subGroupId),
+      teacherId: String(s.teacherId),
+      subjectId: String(s.subjectId),
+      isSupport: Boolean(s.isSupport),
+      layer: Number(s.layer || 1),
+      isLocked: Boolean(s.isLocked),
+      students: typeof s.students === 'string' ? s.students : (s.students ? JSON.stringify(s.students) : null)
+    });
+
+    const currentNormalized = currentSlots.map(normalizeSlot).sort((a: any, b: any) => a.id.localeCompare(b.id));
+    const savedNormalized = savedSlots.map(normalizeSlot).sort((a: any, b: any) => a.id.localeCompare(b.id));
+
+    const currentStr = JSON.stringify(currentNormalized);
+    const savedStr = JSON.stringify(savedNormalized);
+    
+    if (currentStr !== savedStr) {
+      // For debugging in the console
+      console.log("Unsaved changes detected.");
+      console.log("Current:", currentStr.substring(0, 100) + "...");
+      console.log("Saved:", savedStr.substring(0, 100) + "...");
+    }
+    
+    return { success: true, hasChanges: currentStr !== savedStr };
+  } catch (error) {
+    console.error("Error checking unsaved changes:", error);
+    return { success: false, hasChanges: true }; // Assume changes on error to be safe
+  }
+}

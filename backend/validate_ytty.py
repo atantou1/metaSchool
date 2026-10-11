@@ -21,6 +21,9 @@ def main():
         if len(slots) > 1:
             t_id, d, p = key
             t_name = teachers[t_id]["lastName"] if t_id in teachers else t_id
+            t_obj = teachers.get(t_id)
+            if (t_obj and t_obj.get("isSupport")) or all(s.get("isSupport") for s in slots):
+                continue
             print(f"ERROR: Teacher {t_name} has multiple assignments on Day {d}, Period {p}:")
             for s in slots:
                 print(f"  -> Class: {s['classId']}, Subject: {s['subjectId']}, SubGroup: {s['subGroupId']}")

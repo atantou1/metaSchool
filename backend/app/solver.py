@@ -153,7 +153,6 @@ def solve_support_timetable(req: SolveRequest) -> SolveResponse:
 
     # 5a. Enforce weekly hours
     for t in teachers:
-        # NOTE: Support teachers also follow their weekly hours
         if not t.isActive or not t.isTeaching or t.id == 'tch-unassigned':
             continue
             
@@ -206,6 +205,7 @@ def solve_support_timetable(req: SolveRequest) -> SolveResponse:
 
         num_valid_days = len(valid_avail_days)
 
+        all_teacher_p_acts = []
         for d in range(num_days):
             daily_p_dict = {}
             avail_p_on_day = []
@@ -232,6 +232,7 @@ def solve_support_timetable(req: SolveRequest) -> SolveResponse:
                     model.Add(p_act == 0)
                     daily_p_dict[p] = p_act
                 else:
+                    # Every teacher in solver can teach at most 1 lesson at any period (NO automatic multi-class placement)
                     model.Add(sum(p_vars) <= 1)
                     p_act = model.NewBoolVar(f"pact_{t_id[:4]}_{d}_{p}")
                     model.Add(p_act == sum(p_vars))
@@ -239,6 +240,7 @@ def solve_support_timetable(req: SolveRequest) -> SolveResponse:
                     avail_p_on_day.append(p)
 
             daily_hours = sum(daily_p_dict.values())
+            all_teacher_p_acts.extend(daily_p_dict.values())
             eff_max_h = max_h if not (t.isMorning and t.isAllDay) else max(max_h, len(morning_periods))
 
             w_d = model.NewBoolVar(f"w_{t_id[:4]}_{d}")
@@ -337,6 +339,7 @@ def solve_support_timetable(req: SolveRequest) -> SolveResponse:
                     model.Add(span == end_p - start_p + 1).OnlyEnforceIf(w_d)
                     model.Add(span == 0).OnlyEnforceIf(w_d.Not())
                     model.Add(span - daily_hours <= max_tg_day).OnlyEnforceIf(w_d)
+
 
     # 6. Class schedule & subgroup concurrency constraints
     for c in classes:
@@ -1062,11 +1065,20 @@ def validate_move(req: ValidateMoveRequest) -> ValidateMoveResponse:
             continue
 
         # 1. Teacher collision check
-        if other.teacherId == target_teacher_id:
-            return ValidateMoveResponse(
-                valid=False,
-                clashReason=f"Ο/Η εκπαιδευτικός διδάσκει ήδη την ώρα αυτή στο τμήμα {other.classId}."
+        if other.teacherId == target_teacher_id and target_teacher_id != "tch-unassigned":
+            target_teacher = next((t for t in req.teachers if t.id == target_teacher_id), None)
+            cons = target_teacher.constraints if target_teacher else None
+            allows_simultaneous = bool(
+                getattr(target_teacher, 'allowSimultaneousSessions', False) or
+                (cons and getattr(cons, 'allowSimultaneousSessions', False))
             )
+            is_cross_class = (other.classId != target_class_id)
+
+            if not (allows_simultaneous and is_cross_class):
+                return ValidateMoveResponse(
+                    valid=False,
+                    clashReason=f"Ο/Η εκπαιδευτικός διδάσκει ήδη την ώρα αυτή στο τμήμα {other.classId}."
+                )
 
         # 2. Class collision check
         if other.classId == target_class_id:

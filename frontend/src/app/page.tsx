@@ -46,6 +46,8 @@ export default function Home() {
   const [diagnosticItems, setDiagnosticItems] = useState<ConflictDiagnosticItem[]>([]);
   const [diagnosticConflicts, setDiagnosticConflicts] = useState<string[]>([]);
   const [isDeepDiagnosing, setIsDeepDiagnosing] = useState(false);
+  
+  const [activeScheduleName, setActiveScheduleName] = useState<string | null>(null);
 
   const loadData = async (isInitial = false) => {
     if (isInitial || !data) {
@@ -226,6 +228,7 @@ export default function Home() {
     <div className="h-screen w-full flex flex-col overflow-hidden bg-background text-foreground font-sans text-xs selection:bg-zinc-800 selection:text-white dark:selection:bg-zinc-700">
       <SiteHeader
         schoolName={data.schoolConfig?.schoolName}
+        activeScheduleName={activeScheduleName}
         rightActions={
           <>
             {/* View Mode Toggle: Συμπαγές vs Αναλυτικό - Icons only */}
@@ -260,7 +263,11 @@ export default function Home() {
               </div>
             )}
 
-            <ScheduleActionsBar currentSlots={data.slots || []} onScheduleLoaded={() => loadData(false)} />
+            <ScheduleActionsBar 
+              currentSlots={data.slots || []} 
+              onScheduleLoaded={() => loadData(false)} 
+              onActiveScheduleChange={setActiveScheduleName}
+            />
 
             <Button
               variant="outline"

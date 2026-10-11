@@ -47,6 +47,36 @@ export async function POST(req: Request) {
       .where(eq(schema.teachers.id, actualTeacherId))
       .limit(1);
 
+    if (actualTeacherId !== "tch-unassigned") {
+      let allowsSimultaneous = false;
+      if (teacher[0]?.constraints) {
+        try {
+          const parsed = JSON.parse(teacher[0].constraints);
+          allowsSimultaneous = Boolean(parsed.allowSimultaneousSessions);
+        } catch (e) {}
+      }
+
+      if (!allowsSimultaneous) {
+        const allOtherSlots = await db.select().from(schema.timetableSlots);
+        const conflict = allOtherSlots.find(
+          (s) =>
+            s.teacherId === actualTeacherId &&
+            s.day === day &&
+            s.period === period &&
+            s.classId !== classId
+        );
+        if (conflict) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: `Ο/Η εκπαιδευτικός διδάσκει ήδη την ώρα αυτή σε άλλο τμήμα (${conflict.classId}). Ενεργοποιήστε την επιλογή «Διατμηματικό» εάν πρόκειται για ομαδική συνεδρία.`,
+            },
+            { status: 400 }
+          );
+        }
+      }
+    }
+
     const isSupport = Boolean(teacher[0]?.isSupport);
     const subId = subjectId || (isSupport ? "sub-logo" : "sub-glossa");
 
@@ -183,11 +213,43 @@ export async function PATCH(req: Request) {
 
     // 3. Changing teacher
     if (newTeacherId) {
+      const currentSlot = (await db.select().from(schema.timetableSlots).where(eq(schema.timetableSlots.id, slotId)).limit(1))[0];
       const teacher = await db
         .select()
         .from(schema.teachers)
         .where(eq(schema.teachers.id, newTeacherId))
         .limit(1);
+
+      if (currentSlot && newTeacherId !== "tch-unassigned") {
+        let allowsSimultaneous = false;
+        if (teacher[0]?.constraints) {
+          try {
+            const parsed = JSON.parse(teacher[0].constraints);
+            allowsSimultaneous = Boolean(parsed.allowSimultaneousSessions);
+          } catch (e) {}
+        }
+
+        if (!allowsSimultaneous) {
+          const allOtherSlots = await db.select().from(schema.timetableSlots);
+          const conflict = allOtherSlots.find(
+            (s) =>
+              s.id !== slotId &&
+              s.teacherId === newTeacherId &&
+              s.day === currentSlot.day &&
+              s.period === currentSlot.period &&
+              s.classId !== currentSlot.classId
+          );
+          if (conflict) {
+            return NextResponse.json(
+              {
+                success: false,
+                error: `Ο/Η εκπαιδευτικός διδάσκει ήδη την ώρα αυτή σε άλλο τμήμα (${conflict.classId}). Ενεργοποιήστε την επιλογή «Διατμηματικό» εάν πρόκειται για ομαδική συνεδρία.`,
+              },
+              { status: 400 }
+            );
+          }
+        }
+      }
 
       await db
         .update(schema.timetableSlots)
@@ -202,6 +264,39 @@ export async function PATCH(req: Request) {
 
     // 4. Moving day / period
     if (targetDay !== undefined && targetPeriod !== undefined) {
+      const currentSlot = (await db.select().from(schema.timetableSlots).where(eq(schema.timetableSlots.id, slotId)).limit(1))[0];
+      if (currentSlot && currentSlot.teacherId && currentSlot.teacherId !== "tch-unassigned") {
+        const teacher = (await db.select().from(schema.teachers).where(eq(schema.teachers.id, currentSlot.teacherId)).limit(1))[0];
+        let allowsSimultaneous = false;
+        if (teacher?.constraints) {
+          try {
+            const parsed = JSON.parse(teacher.constraints);
+            allowsSimultaneous = Boolean(parsed.allowSimultaneousSessions);
+          } catch (e) {}
+        }
+
+        if (!allowsSimultaneous) {
+          const allOtherSlots = await db.select().from(schema.timetableSlots);
+          const conflict = allOtherSlots.find(
+            (s) =>
+              s.id !== slotId &&
+              s.teacherId === currentSlot.teacherId &&
+              s.day === targetDay &&
+              s.period === targetPeriod &&
+              s.classId !== currentSlot.classId
+          );
+          if (conflict) {
+            return NextResponse.json(
+              {
+                success: false,
+                validationError: `Ο/Η εκπαιδευτικός διδάσκει ήδη την ώρα αυτή σε άλλο τμήμα (${conflict.classId}). Ενεργοποιήστε την επιλογή «Διατμηματικό» εάν πρόκειται για ομαδική συνεδρία.`,
+              },
+              { status: 400 }
+            );
+          }
+        }
+      }
+
       await db
         .update(schema.timetableSlots)
         .set({

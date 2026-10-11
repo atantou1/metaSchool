@@ -95,6 +95,11 @@ export const TeacherTimetableModal: React.FC<TeacherTimetableModalProps> = ({
     return data.slots.filter((s) => s.teacherId === currentTeacher.id);
   }, [data.slots, currentTeacher]);
 
+  // Total distinct teaching hours (simultaneous slots in different classes count as 1 hour)
+  const totalTeachingHours = useMemo(() => {
+    return new Set(teacherSlots.map((s) => `${s.day}_${s.period}`)).size;
+  }, [teacherSlots]);
+
   // Check if teacher has all-day slots (periods 6..9)
   const hasAllDaySlots = useMemo(() => {
     return teacherSlots.some((s) => s.period >= 6);
@@ -164,7 +169,7 @@ export const TeacherTimetableModal: React.FC<TeacherTimetableModalProps> = ({
 
     for (let day = 0; day < 5; day++) {
       const daySlots = teacherSlots.filter((s) => s.day === day);
-      const periods = daySlots.map((s) => s.period).sort((a, b) => a - b);
+      const periods = Array.from(new Set(daySlots.map((s) => s.period))).sort((a, b) => a - b);
       if (periods.length > 0) {
         const minPeriod = periods[0];
         const maxPeriod = periods[periods.length - 1];
@@ -210,16 +215,18 @@ export const TeacherTimetableModal: React.FC<TeacherTimetableModalProps> = ({
       .filter((c): c is ClassEntity => Boolean(c));
   }, [teacherSlots, classMap]);
 
-  // Subjects taught summary
+  // Subjects taught summary (counts distinct periods per subject)
   const subjectStats = useMemo(() => {
-    const counts = new Map<string, number>();
+    const subjectSlots = new Map<string, Set<string>>();
     for (const slot of teacherSlots) {
-      counts.set(slot.subjectId, (counts.get(slot.subjectId) || 0) + 1);
+      const set = subjectSlots.get(slot.subjectId) || new Set<string>();
+      set.add(`${slot.day}_${slot.period}`);
+      subjectSlots.set(slot.subjectId, set);
     }
     const list: { subject: Subject; hours: number }[] = [];
-    counts.forEach((hours, subjectId) => {
+    subjectSlots.forEach((slotSet, subjectId) => {
       const subj = subjectMap.get(subjectId);
-      if (subj) list.push({ subject: subj, hours });
+      if (subj) list.push({ subject: subj, hours: slotSet.size });
     });
     return list.sort((a, b) => b.hours - a.hours);
   }, [teacherSlots, subjectMap]);
@@ -533,7 +540,7 @@ export const TeacherTimetableModal: React.FC<TeacherTimetableModalProps> = ({
             </div>
             <div class="meta">
               <div>Σχολικό Έτος: ${schoolYear}</div>
-              <div>Ώρες Διδασκαλίας: <strong>${teacherSlots.length}</strong> | Κενά: <strong>${totalGapsCount}</strong></div>
+              <div>Ώρες Διδασκαλίας: <strong>${totalTeachingHours}</strong> | Κενά: <strong>${totalGapsCount}</strong></div>
             </div>
           </div>
 
@@ -642,7 +649,7 @@ export const TeacherTimetableModal: React.FC<TeacherTimetableModalProps> = ({
               <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5 font-sans">
                 <span className="flex items-center gap-1 font-mono text-[11px] text-foreground font-semibold">
                   <Clock className="w-3.5 h-3.5 text-muted-foreground" />
-                  {teacherSlots.length} ώρες διδασκαλίας
+                  {totalTeachingHours} ώρες διδασκαλίας
                 </span>
                 <span className="flex items-center gap-1 font-mono text-[11px] text-muted-foreground">
                   <Coffee className="w-3.5 h-3.5 text-muted-foreground" />
