@@ -36,6 +36,52 @@ export async function initializeDatabase() {
     }
   }
 
+  // Ensure teacher administrative columns exist
+  const teacherColumns = [
+    "afm text",
+    "adt text",
+    "am text",
+    "phone text",
+    "email text",
+    "address text",
+    "father_name text",
+    "mother_name text",
+    "birth_year text",
+    "employment_type text DEFAULT 'permanent'",
+    "signature text",
+  ];
+  for (const col of teacherColumns) {
+    try {
+      await client.execute(`ALTER TABLE teachers ADD COLUMN ${col};`);
+    } catch {
+      // Column may already exist
+    }
+  }
+
+  // Ensure leaves table exists
+  try {
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS leaves (
+        id text PRIMARY KEY NOT NULL,
+        teacher_id text NOT NULL,
+        type text NOT NULL,
+        start_date text NOT NULL,
+        end_date text NOT NULL,
+        days_count integer NOT NULL,
+        protocol_number text,
+        protocol_date text,
+        reason text,
+        status text DEFAULT 'approved' NOT NULL,
+        documents_data text,
+        created_at text NOT NULL,
+        updated_at text NOT NULL,
+        FOREIGN KEY (teacher_id) REFERENCES teachers(id) ON UPDATE no action ON DELETE cascade
+      );
+    `);
+  } catch {
+    // Table already exists
+  }
+
   // Check if school settings exist
   const existingSettings = await db
     .select()
@@ -69,6 +115,122 @@ export async function initializeDatabase() {
     await db.insert(schema.appSettings).values({
       key: "school_config",
       value: JSON.stringify(defaultConfig),
+    });
+  }
+
+  // Seed default school profile if missing
+  const existingSchoolProfile = await db
+    .select()
+    .from(schema.appSettings)
+    .where(eq(schema.appSettings.key, "school_profile"))
+    .limit(1);
+
+  if (existingSchoolProfile.length === 0) {
+    const defaultProfile = {
+      schoolName: "1ο Πειραματικό Δημοτικό Σχολείο",
+      schoolYear: "2026-2027",
+      ministry: "ΥΠΟΥΡΓΕΙΟ ΠΑΙΔΕΙΑΣ, ΘΡΗΣΚΕΥΜΑΤΩΝ ΚΑΙ ΑΘΛΗΤΙΣΜΟΥ",
+      regionalDirectorate: "ΠΕΡΙΦΕΡΕΙΑΚΗ Δ/ΝΣΗ Π.Ε. & Δ.Ε. ΑΤΤΙΚΗΣ",
+      directorate: "ΔΙΕΥΘΥΝΣΗ Π.Ε. ΑΝΑΤΟΛΙΚΗΣ ΑΤΤΙΚΗΣ",
+      postalAddress: "Σχολική Οδός 1, Τ.Κ. 15344, Γέρακας",
+      phone: "210 1234567",
+      email: "mail@1dim-peir-gerak.att.sch.gr",
+      principalName: "Ιωάννης Παπαδόπουλος",
+      principalTitle: "Ο Διευθυντής του Σχολείου",
+      principalSignature: "",
+      schoolStamp: "",
+    };
+
+    await db.insert(schema.appSettings).values({
+      key: "school_profile",
+      value: JSON.stringify(defaultProfile),
+    });
+  }
+
+  // Seed default leave types config if missing
+  const existingLeaveTypes = await db
+    .select()
+    .from(schema.appSettings)
+    .where(eq(schema.appSettings.key, "leave_types_config"))
+    .limit(1);
+
+  if (existingLeaveTypes.length === 0) {
+    const defaultLeaveTypes = [
+      {
+        id: "regular",
+        name: "Κανονική Άδεια",
+        shortName: "ΚΑΝ",
+        color: "#3b82f6",
+        permanentDaysLimit: 10,
+        deputyDaysLimit: 0,
+        description: "Κανονική άδεια (έως 10 ημέρες για μόνιμους εκπαιδευτικούς)",
+        requiresMedicalCertificate: false,
+      },
+      {
+        id: "medical",
+        name: "Αναρρωτική Άδεια",
+        shortName: "ΑΝΑΡ",
+        color: "#ef4444",
+        permanentDaysLimit: 30,
+        deputyDaysLimit: 15,
+        description: "Αναρρωτική άδεια με ιατρική γνωμάτευση",
+        requiresMedicalCertificate: true,
+      },
+      {
+        id: "special",
+        name: "Ειδική Άδεια (Γάμου / Πένθους / Δικαστική / Εκλογική)",
+        shortName: "ΕΙΔ",
+        color: "#8b5cf6",
+        permanentDaysLimit: 5,
+        deputyDaysLimit: 5,
+        description: "Ειδική άδεια για έκτακτα γεγονότα ή εκλογές",
+        requiresMedicalCertificate: false,
+      },
+      {
+        id: "blood",
+        name: "Αιμοδοτική Άδεια",
+        shortName: "ΑΙΜ",
+        color: "#dc2626",
+        permanentDaysLimit: 4,
+        deputyDaysLimit: 4,
+        description: "2 ημέρες ανά αιμοδοσία (έως 4 ανά έτος)",
+        requiresMedicalCertificate: false,
+      },
+      {
+        id: "parental",
+        name: "Γονική Άδεια (Σχολικής Παρακολούθησης)",
+        shortName: "ΓΟΝ",
+        color: "#10b981",
+        permanentDaysLimit: 4,
+        deputyDaysLimit: 4,
+        description: "Παρακολούθηση σχολικής επίδοσης τέκνων (έως 4 ημέρες/έτος)",
+        requiresMedicalCertificate: false,
+      },
+      {
+        id: "educational",
+        name: "Επιμορφωτική / Σεμιναρίου",
+        shortName: "ΕΠΙΜ",
+        color: "#f59e0b",
+        permanentDaysLimit: 10,
+        deputyDaysLimit: 5,
+        description: "Συμμετοχή σε συνέδρια, σεμινάρια ή επιμορφώσεις",
+        requiresMedicalCertificate: false,
+      },
+      {
+        id: "other",
+        name: "Λοιπή / Άλλη Άδεια",
+        shortName: "ΑΛΛ",
+        color: "#6b7280",
+        permanentDaysLimit: 10,
+        deputyDaysLimit: 5,
+        description: "Άλλη υπηρεσιακή άδεια",
+        requiresMedicalCertificate: false,
+      },
+    ];
+
+    await db.insert(schema.appSettings).values({
+      key: "leave_types_config",
+      value: JSON.stringify(defaultLeaveTypes),
     });
   }
 

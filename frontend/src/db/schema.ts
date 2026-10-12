@@ -16,6 +16,17 @@ export const teachers = sqliteTable("teachers", {
   maxWeeklyHours: integer("max_weekly_hours").default(24).notNull(),
   color: text("color").default("#71717a").notNull(),
   constraints: text("constraints"), // JSON: availability, maxHoursPerDay, minHoursPerDay, maxConsecutiveHours, maxConsecutiveGaps, maxTotalGaps
+  afm: text("afm"),
+  adt: text("adt"),
+  am: text("am"),
+  phone: text("phone"),
+  email: text("email"),
+  address: text("address"),
+  fatherName: text("father_name"),
+  motherName: text("mother_name"),
+  birthYear: text("birth_year"),
+  employmentType: text("employment_type").default("permanent"), // "permanent" | "deputy_regular" | "deputy_espa" | "hourly"
+  signature: text("signature"), // Base64 data URL
   createdAt: text("created_at").$defaultFn(() => new Date().toISOString()).notNull(),
   updatedAt: text("updated_at").$defaultFn(() => new Date().toISOString()).notNull(),
 });
@@ -131,6 +142,7 @@ export const subGroupsRelations = relations(subGroups, ({ one, many }) => ({
 export const teachersRelations = relations(teachers, ({ many }) => ({
   assignments: many(lessonAssignments),
   slots: many(timetableSlots),
+  leaves: many(leaves),
 }));
 
 export const subjectsRelations = relations(subjects, ({ many }) => ({
@@ -176,3 +188,27 @@ export const timetableSlotsRelations = relations(timetableSlots, ({ one }) => ({
     references: [subjects.id],
   }),
 }));
+
+export const leaves = sqliteTable("leaves", {
+  id: text("id").primaryKey(),
+  teacherId: text("teacher_id").notNull().references(() => teachers.id, { onDelete: "cascade" }),
+  type: text("type").notNull(), // "regular" | "medical" | "special" | "blood" | "parental" | "educational" | "other"
+  startDate: text("start_date").notNull(), // YYYY-MM-DD
+  endDate: text("end_date").notNull(), // YYYY-MM-DD
+  daysCount: integer("days_count").notNull(),
+  protocolNumber: text("protocol_number"),
+  protocolDate: text("protocol_date"),
+  reason: text("reason"),
+  status: text("status").default("approved").notNull(), // "approved" | "pending" | "rejected"
+  documentsData: text("documents_data"), // JSON
+  createdAt: text("created_at").$defaultFn(() => new Date().toISOString()).notNull(),
+  updatedAt: text("updated_at").$defaultFn(() => new Date().toISOString()).notNull(),
+});
+
+export const leavesRelations = relations(leaves, ({ one }) => ({
+  teacher: one(teachers, {
+    fields: [leaves.teacherId],
+    references: [teachers.id],
+  }),
+}));
+

@@ -34,6 +34,17 @@ export async function POST(req: Request) {
       maxWeeklyHours,
       color,
       constraints,
+      afm,
+      adt,
+      am,
+      phone,
+      email,
+      address,
+      fatherName,
+      motherName,
+      birthYear,
+      employmentType,
+      signature,
     } = body;
 
     const teacherId = id || `tch-${crypto.randomUUID().slice(0, 8)}`;
@@ -63,6 +74,17 @@ export async function POST(req: Request) {
           maxWeeklyHours: maxWeeklyHours ?? 24,
           color: color || "#71717a",
           constraints: constraintsStr,
+          afm: afm !== undefined ? afm : existing[0].afm,
+          adt: adt !== undefined ? adt : existing[0].adt,
+          am: am !== undefined ? am : existing[0].am,
+          phone: phone !== undefined ? phone : existing[0].phone,
+          email: email !== undefined ? email : existing[0].email,
+          address: address !== undefined ? address : existing[0].address,
+          fatherName: fatherName !== undefined ? fatherName : existing[0].fatherName,
+          motherName: motherName !== undefined ? motherName : existing[0].motherName,
+          birthYear: birthYear !== undefined ? birthYear : existing[0].birthYear,
+          employmentType: employmentType || existing[0].employmentType || "permanent",
+          signature: signature !== undefined ? signature : existing[0].signature,
           updatedAt: new Date().toISOString(),
         })
         .where(eq(schema.teachers.id, teacherId));
@@ -82,6 +104,17 @@ export async function POST(req: Request) {
         maxWeeklyHours: maxWeeklyHours ?? 24,
         color: color || "#71717a",
         constraints: constraintsStr,
+        afm: afm || null,
+        adt: adt || null,
+        am: am || null,
+        phone: phone || null,
+        email: email || null,
+        address: address || null,
+        fatherName: fatherName || null,
+        motherName: motherName || null,
+        birthYear: birthYear || null,
+        employmentType: employmentType || "permanent",
+        signature: signature || null,
       });
     }
 

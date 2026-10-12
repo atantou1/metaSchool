@@ -37,6 +37,60 @@ export interface Teacher {
   color: string;
   constraints?: TeacherConstraints | null;
   allowSimultaneousSessions?: boolean | null;
+  afm?: string | null;
+  adt?: string | null;
+  am?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  address?: string | null;
+  fatherName?: string | null;
+  motherName?: string | null;
+  birthYear?: string | null;
+  employmentType?: "permanent" | "deputy_regular" | "deputy_espa" | "hourly";
+  signature?: string | null;
+}
+
+export interface Leave {
+  id: string;
+  teacherId: string;
+  type: string;
+  startDate: string; // YYYY-MM-DD
+  endDate: string; // YYYY-MM-DD
+  daysCount: number;
+  protocolNumber?: string | null;
+  protocolDate?: string | null;
+  reason?: string | null;
+  status: "approved" | "pending" | "rejected";
+  documentsData?: Record<string, any> | null;
+  createdAt: string;
+  updatedAt: string;
+  teacher?: Teacher;
+}
+
+export interface SchoolProfile {
+  schoolName: string;
+  schoolYear: string;
+  ministry: string;
+  regionalDirectorate: string;
+  directorate: string;
+  postalAddress: string;
+  phone: string;
+  email: string;
+  principalName: string;
+  principalTitle: string;
+  principalSignature?: string;
+  schoolStamp?: string;
+}
+
+export interface LeaveTypeConfig {
+  id: string;
+  name: string;
+  shortName: string;
+  color: string;
+  permanentDaysLimit: number;
+  deputyDaysLimit: number;
+  description: string;
+  requiresMedicalCertificate?: boolean;
 }
 
 export interface SubjectAssignment {

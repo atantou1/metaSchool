@@ -101,10 +101,18 @@ export function SiteHeader({ rightActions, schoolName = "1ο Πειραματι�
               <ClipboardList className="w-4 h-4 text-zinc-400 dark:text-zinc-500" />
               Εφημερίες
             </button>
-            <button className="flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors text-left">
-              <Umbrella className="w-4 h-4 text-zinc-400 dark:text-zinc-500" />
+            <Link
+              href="/leaves"
+              onClick={() => setIsMenuOpen(false)}
+              className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                pathname === "/leaves"
+                  ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-50"
+                  : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900 hover:text-zinc-900 dark:hover:text-zinc-100"
+              }`}
+            >
+              <Umbrella className={`w-4 h-4 ${pathname === "/leaves" ? "text-blue-600 dark:text-blue-400" : "text-zinc-400 dark:text-zinc-500"}`} />
               Άδειες
-            </button>
+            </Link>
           </div>
 
           <div className="border-t border-zinc-100 dark:border-zinc-800 p-3 flex flex-col gap-2 flex-none">
