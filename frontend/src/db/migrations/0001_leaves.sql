@@ -10,6 +10,10 @@ ALTER TABLE `teachers` ADD COLUMN `email` text;
 --> statement-breakpoint
 ALTER TABLE `teachers` ADD COLUMN `address` text;
 --> statement-breakpoint
+ALTER TABLE `teachers` ADD COLUMN `city` text;
+--> statement-breakpoint
+ALTER TABLE `teachers` ADD COLUMN `postal_code` text;
+--> statement-breakpoint
 ALTER TABLE `teachers` ADD COLUMN `father_name` text;
 --> statement-breakpoint
 ALTER TABLE `teachers` ADD COLUMN `mother_name` text;

@@ -37,6 +37,8 @@ import {
   Plus,
   Sparkles,
   User,
+  Upload,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -74,9 +76,13 @@ export function LeaveFormModal({
   const [editAm, setEditAm] = useState<string>("");
   const [editPhone, setEditPhone] = useState<string>("");
   const [editAddress, setEditAddress] = useState<string>("");
+  const [editCity, setEditCity] = useState<string>("");
+  const [editPostalCode, setEditPostalCode] = useState<string>("");
   const [editFatherName, setEditFatherName] = useState<string>("");
   const [editMotherName, setEditMotherName] = useState<string>("");
   const [editEmploymentType, setEditEmploymentType] = useState<string>("permanent");
+  const [editSignature, setEditSignature] = useState<string>("");
+  const signatureInputRef = React.useRef<HTMLInputElement>(null);
 
   const [showTeacherDetails, setShowTeacherDetails] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -118,9 +124,12 @@ export function LeaveFormModal({
       setEditAm(currentTeacher.am || "");
       setEditPhone(currentTeacher.phone || "");
       setEditAddress(currentTeacher.address || "");
+      setEditCity(currentTeacher.city || "");
+      setEditPostalCode(currentTeacher.postalCode || "");
       setEditFatherName(currentTeacher.fatherName || "");
       setEditMotherName(currentTeacher.motherName || "");
       setEditEmploymentType(currentTeacher.employmentType || "permanent");
+      setEditSignature(currentTeacher.signature || "");
 
       // Auto-open details if crucial data is missing
       if (!currentTeacher.afm || !currentTeacher.phone) {
@@ -128,6 +137,24 @@ export function LeaveFormModal({
       }
     }
   }, [currentTeacher]);
+
+  const handleSignatureUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast.error("Παρακαλώ επιλέξτε αρχείο εικόνας (PNG, JPG)");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string;
+      setEditSignature(dataUrl);
+      toast.success("Η υπογραφή φορτώθηκε!");
+    };
+    reader.readAsDataURL(file);
+  };
 
   // Auto-calculate days between startDate & endDate
   useEffect(() => {
@@ -205,9 +232,12 @@ export function LeaveFormModal({
           am: editAm.trim() || null,
           phone: editPhone.trim() || null,
           address: editAddress.trim() || null,
+          city: editCity.trim() || null,
+          postalCode: editPostalCode.trim() || null,
           fatherName: editFatherName.trim() || null,
           motherName: editMotherName.trim() || null,
           employmentType: editEmploymentType,
+          signature: editSignature || null,
         },
       };
 
@@ -369,14 +399,88 @@ export function LeaveFormModal({
                     />
                   </div>
 
-                  <div className="col-span-2 md:col-span-3">
-                    <Label className="text-[11px] text-zinc-600 dark:text-zinc-400">Διεύθυνση Κατοικίας</Label>
+                  <div>
+                    <Label className="text-[11px] text-zinc-600 dark:text-zinc-400">Διεύθυνση (Οδός & Αριθμός)</Label>
                     <Input
                       value={editAddress}
                       onChange={(e) => setEditAddress(e.target.value)}
-                      placeholder="Οδός, Αριθμός, Τ.Κ., Πόλη"
+                      placeholder="π.χ. Σωκράτους 12"
                       className="h-7 text-xs mt-0.5"
                     />
+                  </div>
+
+                  <div>
+                    <Label className="text-[11px] text-zinc-600 dark:text-zinc-400">Τ.Κ.</Label>
+                    <Input
+                      value={editPostalCode}
+                      onChange={(e) => setEditPostalCode(e.target.value)}
+                      placeholder="π.χ. 15344"
+                      className="h-7 text-xs mt-0.5"
+                    />
+                  </div>
+
+                  <div>
+                    <Label className="text-[11px] text-zinc-600 dark:text-zinc-400">Πόλη</Label>
+                    <Input
+                      value={editCity}
+                      onChange={(e) => setEditCity(e.target.value)}
+                      placeholder="π.χ. Γέρακας"
+                      className="h-7 text-xs mt-0.5"
+                    />
+                  </div>
+
+                  <div className="col-span-2 md:col-span-3 pt-2 border-t border-zinc-200 dark:border-zinc-800">
+                    <Label className="text-[11px] font-semibold flex items-center gap-1.5 text-zinc-700 dark:text-zinc-300">
+                      <PenTool className="w-3.5 h-3.5 text-blue-600" />
+                      Ψηφιακή Υπογραφή Εκπαιδευτικού (PNG/JPG)
+                    </Label>
+                    <div className="flex items-center justify-between gap-3 mt-1.5 p-2 rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950">
+                      <div className="h-12 w-28 border border-dashed border-zinc-300 dark:border-zinc-700 rounded flex items-center justify-center overflow-hidden">
+                        {editSignature ? (
+                          <img
+                            src={editSignature}
+                            alt="Υπογραφή"
+                            className="max-h-full max-w-full object-contain p-0.5"
+                          />
+                        ) : (
+                          <span className="text-[10px] text-zinc-400 italic">
+                            Χωρίς υπογραφή
+                          </span>
+                        )}
+                      </div>
+
+                      <input
+                        type="file"
+                        ref={signatureInputRef}
+                        onChange={handleSignatureUpload}
+                        accept="image/png,image/jpeg,image/webp"
+                        className="hidden"
+                      />
+
+                      <div className="flex items-center gap-1.5">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => signatureInputRef.current?.click()}
+                          className="h-6 text-[11px] px-2 gap-1"
+                        >
+                          <Upload className="w-3 h-3" />
+                          {editSignature ? "Αλλαγή" : "Μεταφόρτωση"}
+                        </Button>
+                        {editSignature && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setEditSignature("")}
+                            className="h-6 w-6 p-0 text-red-500 hover:text-red-600"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}

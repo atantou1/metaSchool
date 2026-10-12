@@ -21,7 +21,9 @@ export const teachers = sqliteTable("teachers", {
   am: text("am"),
   phone: text("phone"),
   email: text("email"),
-  address: text("address"),
+  address: text("address"), // Οδός και αριθμός
+  city: text("city"), // Πόλη
+  postalCode: text("postal_code"), // Τ.Κ.
   fatherName: text("father_name"),
   motherName: text("mother_name"),
   birthYear: text("birth_year"),

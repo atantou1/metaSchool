@@ -44,6 +44,8 @@ export async function initializeDatabase() {
     "phone text",
     "email text",
     "address text",
+    "city text",
+    "postal_code text",
     "father_name text",
     "mother_name text",
     "birth_year text",

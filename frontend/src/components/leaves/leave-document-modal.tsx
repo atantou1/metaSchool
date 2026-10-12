@@ -14,6 +14,7 @@ import {
   formatGreekDate,
   getLeaveTypeName,
   getEmploymentTypeLabel,
+  formatTeacherAddress,
   exportElementToPdf,
   downloadLeaveApplicationDocx,
   downloadLeaveDecisionDocx,
@@ -425,7 +426,7 @@ export function LeaveDocumentModal({
                   </p>
                   <p className="col-span-2">
                     <span className="font-semibold">Διεύθυνση Κατοικίας: </span>
-                    {teacher.address || "-"}
+                    {formatTeacherAddress(teacher)}
                   </p>
                 </div>
               </div>

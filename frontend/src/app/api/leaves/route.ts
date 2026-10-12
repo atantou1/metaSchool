@@ -39,6 +39,8 @@ export async function GET(req: Request) {
           phone: schema.teachers.phone,
           email: schema.teachers.email,
           address: schema.teachers.address,
+          city: schema.teachers.city,
+          postalCode: schema.teachers.postalCode,
           fatherName: schema.teachers.fatherName,
           motherName: schema.teachers.motherName,
           birthYear: schema.teachers.birthYear,
@@ -106,6 +108,8 @@ export async function POST(req: Request) {
       if (teacherUpdate.phone !== undefined) updateObj.phone = teacherUpdate.phone;
       if (teacherUpdate.email !== undefined) updateObj.email = teacherUpdate.email;
       if (teacherUpdate.address !== undefined) updateObj.address = teacherUpdate.address;
+      if (teacherUpdate.city !== undefined) updateObj.city = teacherUpdate.city;
+      if (teacherUpdate.postalCode !== undefined) updateObj.postalCode = teacherUpdate.postalCode;
       if (teacherUpdate.fatherName !== undefined) updateObj.fatherName = teacherUpdate.fatherName;
       if (teacherUpdate.motherName !== undefined) updateObj.motherName = teacherUpdate.motherName;
       if (teacherUpdate.birthYear !== undefined) updateObj.birthYear = teacherUpdate.birthYear;

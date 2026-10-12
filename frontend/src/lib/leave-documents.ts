@@ -31,6 +31,15 @@ export function getEmploymentTypeLabel(empType?: string | null): string {
   }
 }
 
+export function formatTeacherAddress(t?: Teacher | null): string {
+  if (!t) return "-";
+  const parts: string[] = [];
+  if (t.address) parts.push(t.address);
+  if (t.postalCode) parts.push(`Τ.Κ. ${t.postalCode}`);
+  if (t.city) parts.push(t.city);
+  return parts.length > 0 ? parts.join(", ") : "-";
+}
+
 // Client-side PDF generator from an existing DOM node
 export async function exportElementToPdf(element: HTMLElement, filename: string): Promise<Blob> {
   const canvas = await html2canvas(element, {
@@ -145,7 +154,7 @@ export async function downloadLeaveApplicationDocx(
           new Paragraph({
             children: [
               new TextRun({ text: "Διεύθυνση Κατοικίας: ", bold: true }),
-              new TextRun({ text: teacher.address || "-" }),
+              new TextRun({ text: formatTeacherAddress(teacher) }),
               new TextRun({ text: "   Τηλέφωνο: ", bold: true }),
               new TextRun({ text: teacher.phone || "-" }),
             ],

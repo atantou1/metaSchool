@@ -43,6 +43,8 @@ export interface Teacher {
   phone?: string | null;
   email?: string | null;
   address?: string | null;
+  city?: string | null;
+  postalCode?: string | null;
   fatherName?: string | null;
   motherName?: string | null;
   birthYear?: string | null;
