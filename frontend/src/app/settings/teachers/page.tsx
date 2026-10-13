@@ -77,6 +77,7 @@ export default function SettingsTeachersPage() {
     postalCode: "",
     fatherName: "",
     motherName: "",
+    birthDate: "",
     birthYear: "",
     employmentType: "permanent",
     signature: "",
@@ -139,6 +140,7 @@ export default function SettingsTeachersPage() {
       postalCode: "",
       fatherName: "",
       motherName: "",
+      birthDate: "",
       birthYear: "",
       employmentType: "permanent",
       signature: "",
@@ -163,6 +165,7 @@ export default function SettingsTeachersPage() {
       postalCode: t.postalCode || "",
       fatherName: t.fatherName || "",
       motherName: t.motherName || "",
+      birthDate: t.birthDate || "",
       birthYear: t.birthYear || "",
       employmentType: t.employmentType || "permanent",
       signature: t.signature || "",
@@ -250,16 +253,22 @@ export default function SettingsTeachersPage() {
     }
   };
 
-  const filtered = teachers.filter((t) => {
-    const term = search.toLowerCase();
-    return (
-      t.lastName.toLowerCase().includes(term) ||
-      t.firstName.toLowerCase().includes(term) ||
-      t.specialty.toLowerCase().includes(term) ||
-      (t.afm && t.afm.includes(term)) ||
-      (t.city && t.city.toLowerCase().includes(term))
-    );
-  });
+  const strip = (s?: string | null) =>
+    (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+
+  const filtered = teachers
+    .filter((t) => {
+      const term = strip(search);
+      if (!term) return true;
+      return (
+        strip(t.lastName).includes(term) ||
+        strip(t.firstName).includes(term) ||
+        strip(t.specialty).includes(term) ||
+        (t.afm && t.afm.includes(term)) ||
+        strip(t.city).includes(term)
+      );
+    })
+    .sort((a, b) => a.lastName.localeCompare(b.lastName, "el"));
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -544,11 +553,17 @@ export default function SettingsTeachersPage() {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label className="text-xs">Έτος Γέννησης</Label>
+                <Label className="text-xs">Ημερομηνία Γέννησης</Label>
                 <Input
-                  value={formData.birthYear}
-                  onChange={(e) => setFormData({ ...formData, birthYear: e.target.value })}
-                  placeholder="π.χ. 1982"
+                  type="date"
+                  value={formData.birthDate}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      birthDate: e.target.value,
+                      birthYear: e.target.value ? e.target.value.split("-")[0] : "",
+                    })
+                  }
                   className="h-8 text-xs mt-1"
                 />
               </div>

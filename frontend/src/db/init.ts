@@ -65,6 +65,7 @@ export async function initializeDatabase(force = false) {
     "postal_code text",
     "father_name text",
     "mother_name text",
+    "birth_date text",
     "birth_year text",
     "employment_type text DEFAULT 'permanent'",
     "signature text",

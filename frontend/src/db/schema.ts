@@ -26,6 +26,7 @@ export const teachers = sqliteTable("teachers", {
   postalCode: text("postal_code"), // Τ.Κ.
   fatherName: text("father_name"),
   motherName: text("mother_name"),
+  birthDate: text("birth_date"),
   birthYear: text("birth_year"),
   employmentType: text("employment_type").default("permanent"), // "permanent" | "deputy_regular" | "deputy_espa" | "hourly"
   signature: text("signature"), // Base64 data URL

@@ -42,16 +42,18 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       data: {
-        teachers: allTeachers.map((t) => ({
-          ...t,
-          isSupport: Boolean(t.isSupport),
-          isTeaching: Boolean(t.isTeaching),
-          isOnCall: Boolean(t.isOnCall),
-          isMorning: Boolean(t.isMorning),
-          isAllDay: Boolean(t.isAllDay),
-          isActive: Boolean(t.isActive),
-          constraints: t.constraints ? JSON.parse(t.constraints) : null,
-        })),
+        teachers: allTeachers
+          .map((t) => ({
+            ...t,
+            isSupport: Boolean(t.isSupport),
+            isTeaching: Boolean(t.isTeaching),
+            isOnCall: Boolean(t.isOnCall),
+            isMorning: Boolean(t.isMorning),
+            isAllDay: Boolean(t.isAllDay),
+            isActive: Boolean(t.isActive),
+            constraints: t.constraints ? JSON.parse(t.constraints) : null,
+          }))
+          .sort((a, b) => a.lastName.localeCompare(b.lastName, "el")),
         subjects: allSubjects.map((s) => ({
           ...s,
           allowedSpecialties: s.allowedSpecialties

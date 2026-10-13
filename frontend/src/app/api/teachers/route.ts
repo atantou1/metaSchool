@@ -6,10 +6,12 @@ import { eq } from "drizzle-orm";
 export async function GET() {
   try {
     const rawTeachers = await db.select().from(schema.teachers);
-    const teachers = rawTeachers.map((t) => ({
-      ...t,
-      constraints: t.constraints ? JSON.parse(t.constraints) : null,
-    }));
+    const teachers = rawTeachers
+      .map((t) => ({
+        ...t,
+        constraints: t.constraints ? JSON.parse(t.constraints) : null,
+      }))
+      .sort((a, b) => a.lastName.localeCompare(b.lastName, "el"));
     return NextResponse.json({ success: true, teachers });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
@@ -44,6 +46,7 @@ export async function POST(req: Request) {
       postalCode,
       fatherName,
       motherName,
+      birthDate,
       birthYear,
       employmentType,
       signature,
@@ -86,7 +89,8 @@ export async function POST(req: Request) {
           postalCode: postalCode !== undefined ? postalCode : existing[0].postalCode,
           fatherName: fatherName !== undefined ? fatherName : existing[0].fatherName,
           motherName: motherName !== undefined ? motherName : existing[0].motherName,
-          birthYear: birthYear !== undefined ? birthYear : existing[0].birthYear,
+          birthDate: birthDate !== undefined ? birthDate : existing[0].birthDate,
+          birthYear: birthYear !== undefined ? birthYear : (birthDate ? birthDate.split("-")[0] : existing[0].birthYear),
           employmentType: employmentType || existing[0].employmentType || "permanent",
           signature: signature !== undefined ? signature : existing[0].signature,
           updatedAt: new Date().toISOString(),
@@ -118,7 +122,8 @@ export async function POST(req: Request) {
         postalCode: postalCode || null,
         fatherName: fatherName || null,
         motherName: motherName || null,
-        birthYear: birthYear || null,
+        birthDate: birthDate || null,
+        birthYear: birthYear || (birthDate ? birthDate.split("-")[0] : null),
         employmentType: employmentType || "permanent",
         signature: signature || null,
       });

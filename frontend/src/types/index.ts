@@ -47,6 +47,7 @@ export interface Teacher {
   postalCode?: string | null;
   fatherName?: string | null;
   motherName?: string | null;
+  birthDate?: string | null;
   birthYear?: string | null;
   employmentType?: "permanent" | "deputy_regular" | "deputy_espa" | "hourly";
   signature?: string | null;

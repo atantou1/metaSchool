@@ -43,6 +43,7 @@ export async function GET(req: Request) {
           postalCode: schema.teachers.postalCode,
           fatherName: schema.teachers.fatherName,
           motherName: schema.teachers.motherName,
+          birthDate: schema.teachers.birthDate,
           birthYear: schema.teachers.birthYear,
           employmentType: schema.teachers.employmentType,
           signature: schema.teachers.signature,
@@ -112,7 +113,13 @@ export async function POST(req: Request) {
       if (teacherUpdate.postalCode !== undefined) updateObj.postalCode = teacherUpdate.postalCode;
       if (teacherUpdate.fatherName !== undefined) updateObj.fatherName = teacherUpdate.fatherName;
       if (teacherUpdate.motherName !== undefined) updateObj.motherName = teacherUpdate.motherName;
-      if (teacherUpdate.birthYear !== undefined) updateObj.birthYear = teacherUpdate.birthYear;
+      if (teacherUpdate.birthDate !== undefined) {
+        updateObj.birthDate = teacherUpdate.birthDate;
+        if (teacherUpdate.birthDate) {
+          updateObj.birthYear = teacherUpdate.birthDate.split("-")[0];
+        }
+      }
+      if (teacherUpdate.birthYear !== undefined && teacherUpdate.birthDate === undefined) updateObj.birthYear = teacherUpdate.birthYear;
       if (teacherUpdate.employmentType !== undefined) updateObj.employmentType = teacherUpdate.employmentType;
       if (teacherUpdate.signature !== undefined) updateObj.signature = teacherUpdate.signature;
 

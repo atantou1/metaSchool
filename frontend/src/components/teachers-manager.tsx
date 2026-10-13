@@ -1817,13 +1817,15 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
 
   const filteredTeachers = useMemo(() => {
     return data.teachers.filter((tch) => {
-      // 1. Search Query
+      // 1. Search Query (Accent-neutral)
       if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase().trim();
-        const fullName = `${tch.lastName} ${tch.firstName}`.toLowerCase();
-        const sName = (tch.shortName || "").toLowerCase();
-        const spec = (tch.specialty || "").toLowerCase();
-        const specName = (findSpecialty(tch.specialty)?.name || "").toLowerCase();
+        const clean = (s?: string | null) =>
+          (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+        const query = clean(searchQuery);
+        const fullName = clean(`${tch.lastName} ${tch.firstName}`);
+        const sName = clean(tch.shortName);
+        const spec = clean(tch.specialty);
+        const specName = clean(findSpecialty(tch.specialty)?.name);
         if (!fullName.includes(query) && !sName.includes(query) && !spec.includes(query) && !specName.includes(query)) {
           return false;
         }
@@ -1917,7 +1919,7 @@ export const TeachersManager: React.FC<TeachersManagerProps> = ({
       }
 
       return true;
-    });
+    }).sort((a, b) => a.lastName.localeCompare(b.lastName, "el"));
   }, [
     data.teachers,
     searchQuery,
