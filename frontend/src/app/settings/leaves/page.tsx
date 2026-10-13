@@ -124,7 +124,7 @@ export default function SettingsLeavesPage() {
           </Button>
         </CardHeader>
         <CardContent className="p-4 pt-2">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
             <div className="p-2.5 rounded bg-muted/40">
               <span className="text-[11px] text-muted-foreground block">Σφραγίδα:</span>
               <span className="font-medium">
@@ -135,6 +135,12 @@ export default function SettingsLeavesPage() {
               <span className="text-[11px] text-muted-foreground block">Υπογραφή Δ/ντή:</span>
               <span className="font-medium">
                 {schoolProfile?.principalSignature ? "✓ Καταχωρημένη" : "Χωρίς εικόνα"}
+              </span>
+            </div>
+            <div className="p-2.5 rounded bg-muted/40">
+              <span className="text-[11px] text-muted-foreground block">Λογότυπο Αναπλ.:</span>
+              <span className="font-medium">
+                {schoolProfile?.deputyLogo ? "✓ Καταχωρημένο" : "Χωρίς εικόνα"}
               </span>
             </div>
             <div className="p-2.5 rounded bg-muted/40">

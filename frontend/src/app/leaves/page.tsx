@@ -402,7 +402,13 @@ export default function LeavesPage() {
                 <span className="text-xs text-zinc-500 whitespace-nowrap">Είδος:</span>
                 <Select value={selectedTypeFilter} onValueChange={(val) => val && setSelectedTypeFilter(val)}>
                   <SelectTrigger className="h-8 text-xs w-48">
-                    <SelectValue placeholder="Όλα τα είδη" />
+                    <SelectValue placeholder="Όλα τα είδη">
+                      {(val) => {
+                        if (!val || val === "all") return "Όλα τα είδη αδειών";
+                        const found = leaveTypes.find((lt) => lt.id === val);
+                        return found ? found.name : val;
+                      }}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Όλα τα είδη αδειών</SelectItem>

@@ -1,6 +1,6 @@
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
-import { Document, Paragraph, TextRun, Table, TableRow, TableCell, AlignmentType, WidthType, BorderStyle, Packer } from "docx";
+import { Document, Paragraph, TextRun, Table, TableRow, TableCell, AlignmentType, WidthType, BorderStyle, Packer, ImageRun } from "docx";
 import { Leave, Teacher, SchoolProfile, LeaveTypeConfig } from "@/types";
 
 // Helper to format Greek date (e.g., 12/10/2026)
@@ -29,6 +29,11 @@ export function getEmploymentTypeLabel(empType?: string | null): string {
     default:
       return "Μόνιμος Εκπαιδευτικός";
   }
+}
+
+export function isDeputyTeacher(teacher?: Teacher | null): boolean {
+  if (!teacher || !teacher.employmentType) return false;
+  return teacher.employmentType.startsWith("deputy") || teacher.employmentType === "hourly";
 }
 
 export function formatTeacherAddress(t?: Teacher | null): string {
@@ -209,6 +214,28 @@ export async function downloadLeaveApplicationDocx(
               new TextRun({ text: `${teacher.firstName} ${teacher.lastName}`, size: 22 }),
             ],
           }),
+          ...(isDeputyTeacher(teacher) && school.deputyLogo
+            ? [
+                new Paragraph({
+                  alignment: AlignmentType.CENTER,
+                  spacing: { before: 700 },
+                  children: [
+                    new ImageRun({
+                      type: school.deputyLogo.includes("image/jpeg") || school.deputyLogo.includes("image/jpg")
+                        ? "jpg"
+                        : "png",
+                      data: Buffer.from(
+                        school.deputyLogo.includes(",")
+                          ? school.deputyLogo.split(",")[1]
+                          : school.deputyLogo,
+                        "base64"
+                      ),
+                      transformation: { width: 450, height: 60 },
+                    }),
+                  ],
+                }),
+              ]
+            : []),
         ],
       },
     ],
@@ -368,6 +395,28 @@ export async function downloadLeaveDecisionDocx(
               new TextRun({ text: school.principalName || "Ονοματεπώνυμο Διευθυντή", bold: true, size: 22 }),
             ],
           }),
+          ...(isDeputyTeacher(teacher) && school.deputyLogo
+            ? [
+                new Paragraph({
+                  alignment: AlignmentType.CENTER,
+                  spacing: { before: 700 },
+                  children: [
+                    new ImageRun({
+                      type: school.deputyLogo.includes("image/jpeg") || school.deputyLogo.includes("image/jpg")
+                        ? "jpg"
+                        : "png",
+                      data: Buffer.from(
+                        school.deputyLogo.includes(",")
+                          ? school.deputyLogo.split(",")[1]
+                          : school.deputyLogo,
+                        "base64"
+                      ),
+                      transformation: { width: 450, height: 60 },
+                    }),
+                  ],
+                }),
+              ]
+            : []),
         ],
       },
     ],

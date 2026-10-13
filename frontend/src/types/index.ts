@@ -83,6 +83,7 @@ export interface SchoolProfile {
   principalTitle: string;
   principalSignature?: string;
   schoolStamp?: string;
+  deputyLogo?: string;
 }
 
 export interface LeaveTypeConfig {

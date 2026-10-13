@@ -477,7 +477,22 @@ export default function SettingsTeachersPage() {
                   onValueChange={(val) => val && setFormData({ ...formData, employmentType: val })}
                 >
                   <SelectTrigger className="h-8 text-xs mt-1">
-                    <SelectValue />
+                    <SelectValue>
+                      {(val) => {
+                        switch (val) {
+                          case "permanent":
+                            return "Μόνιμος Εκπαιδευτικός";
+                          case "deputy_regular":
+                            return "Αναπληρωτής Τακτικού Προϋπολογισμού";
+                          case "deputy_espa":
+                            return "Αναπληρωτής ΕΣΠΑ";
+                          case "hourly":
+                            return "Ωρομίσθιος Εκπαιδευτικός";
+                          default:
+                            return val || "Μόνιμος Εκπαιδευτικός";
+                        }
+                      }}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="permanent">Μόνιμος Εκπαιδευτικός</SelectItem>

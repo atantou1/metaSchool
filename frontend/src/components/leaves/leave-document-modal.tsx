@@ -14,6 +14,7 @@ import {
   formatGreekDate,
   getLeaveTypeName,
   getEmploymentTypeLabel,
+  isDeputyTeacher,
   formatTeacherAddress,
   exportElementToPdf,
   downloadLeaveApplicationDocx,
@@ -70,6 +71,7 @@ export function LeaveDocumentModal({
 
   const leaveName = getLeaveTypeName(leave.type, leaveTypes);
   const empLabel = getEmploymentTypeLabel(teacher.employmentType);
+  const isDeputy = isDeputyTeacher(teacher);
 
   // Export currently active document as PDF
   const handleExportCurrentPdf = async () => {
@@ -187,6 +189,11 @@ export function LeaveDocumentModal({
               <Badge variant="outline" className="ml-2 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800">
                 {leaveName} • {leave.daysCount} ημ.
               </Badge>
+              {isDeputy && (
+                <Badge variant="secondary" className="text-[10px] bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                  {school.deputyLogo ? "✓ Με λογότυπο αναπληρωτών" : "Αναπληρωτής"}
+                </Badge>
+              )}
             </DialogTitle>
             <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
               Εκπαιδευτικός: <strong>{teacher.lastName} {teacher.firstName}</strong> ({teacher.specialty}) • {formatGreekDate(leave.startDate)} έως {formatGreekDate(leave.endDate)}
@@ -221,13 +228,14 @@ export function LeaveDocumentModal({
         {/* Scrollable Document Preview Area */}
         <div className="flex-1 overflow-y-auto p-6 flex justify-center bg-zinc-200/60 dark:bg-zinc-950">
           {/* Printable A4 Paper simulation */}
-          <div className="bg-white text-zinc-900 w-[210mm] min-h-[297mm] p-[16mm] shadow-xl border border-zinc-300 rounded-sm font-serif text-[13px] leading-[1.6]">
+          <div className="bg-white text-zinc-900 w-[210mm] min-h-[297mm] p-[16mm] shadow-xl border border-zinc-300 rounded-sm font-serif text-[13px] leading-[1.6] flex flex-col justify-between">
             
             {/* ── 1. ΑΠΟΦΑΣΗ ΧΟΡΗΓΗΣΗΣ ΑΔΕΙΑΣ ── */}
             <div
               ref={decisionRef}
-              className={`${activeTab === "decision" ? "block" : "hidden"} space-y-4`}
+              className={`${activeTab === "decision" ? "flex flex-col min-h-[265mm] justify-between" : "hidden"}`}
             >
+              <div className="space-y-4">
               {/* Official Header */}
               <div className="flex justify-between items-start border-b border-zinc-300 pb-3">
                 <div className="space-y-0.5 text-xs text-zinc-800">
@@ -350,13 +358,26 @@ export function LeaveDocumentModal({
                   <p className="font-bold underline">{school.principalName || "Ονοματεπώνυμο Διευθυντή"}</p>
                 </div>
               </div>
+              </div>
+
+              {/* Deputy Footer Banner if deputy teacher and logo exists */}
+              {isDeputy && school.deputyLogo && (
+                <div className="pt-6 mt-8 border-t border-zinc-300 flex flex-col items-center justify-center">
+                  <img
+                    src={school.deputyLogo}
+                    alt="Λογότυπο Αναπληρωτών (ΕΣΠΑ / ΠΔΕ)"
+                    className="max-h-16 max-w-full object-contain"
+                  />
+                </div>
+              )}
             </div>
 
             {/* ── 2. ΑΙΤΗΣΗ ΕΚΠΑΙΔΕΥΤΙΚΟΥ ── */}
             <div
               ref={applicationRef}
-              className={`${activeTab === "application" ? "block" : "hidden"} space-y-4`}
+              className={`${activeTab === "application" ? "flex flex-col min-h-[265mm] justify-between" : "hidden"}`}
             >
+              <div className="space-y-4">
               {/* Top destination header */}
               <div className="flex justify-between items-start border-b border-zinc-200 pb-3">
                 <div className="text-xs">
@@ -481,6 +502,18 @@ export function LeaveDocumentModal({
                   <p className="font-bold underline">{teacher.firstName} {teacher.lastName}</p>
                 </div>
               </div>
+              </div>
+
+              {/* Deputy Footer Banner if deputy teacher and logo exists */}
+              {isDeputy && school.deputyLogo && (
+                <div className="pt-6 mt-8 border-t border-zinc-300 flex flex-col items-center justify-center">
+                  <img
+                    src={school.deputyLogo}
+                    alt="Λογότυπο Αναπληρωτών (ΕΣΠΑ / ΠΔΕ)"
+                    className="max-h-16 max-w-full object-contain"
+                  />
+                </div>
+              )}
             </div>
 
           </div>

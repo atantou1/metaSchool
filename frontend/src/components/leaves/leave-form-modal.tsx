@@ -285,7 +285,12 @@ export function LeaveFormModal({
               onValueChange={(val) => val && setSelectedTeacherId(val)}
             >
               <SelectTrigger className="w-full text-xs">
-                <SelectValue placeholder="Επιλέξτε εκπαιδευτικό..." />
+                <SelectValue placeholder="Επιλέξτε εκπαιδευτικό...">
+                  {(val) => {
+                    const t = teachers.find((tc) => tc.id === val);
+                    return t ? `${t.lastName} ${t.firstName} (${t.specialty})` : (val || "Επιλέξτε εκπαιδευτικό...");
+                  }}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent className="max-h-56">
                 {teachers.map((t) => (
@@ -338,7 +343,22 @@ export function LeaveFormModal({
                       onValueChange={(val) => val && setEditEmploymentType(val)}
                     >
                       <SelectTrigger className="h-7 text-xs mt-0.5">
-                        <SelectValue />
+                        <SelectValue>
+                          {(val) => {
+                            switch (val) {
+                              case "permanent":
+                                return "Μόνιμος";
+                              case "deputy_regular":
+                                return "Αναπληρωτής Τακτικού";
+                              case "deputy_espa":
+                                return "Αναπληρωτής ΕΣΠΑ";
+                              case "hourly":
+                                return "Ωρομίσθιος";
+                              default:
+                                return val || "Μόνιμος";
+                            }
+                          }}
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="permanent">Μόνιμος</SelectItem>
@@ -506,7 +526,16 @@ export function LeaveFormModal({
 
             <Select value={leaveType} onValueChange={(val) => val && setLeaveType(val)}>
               <SelectTrigger className="w-full text-xs">
-                <SelectValue />
+                <SelectValue>
+                  {(val) => {
+                    const found = leaveTypes.find((lt) => lt.id === val);
+                    if (!found) return val;
+                    const limit = editEmploymentType.startsWith("deputy")
+                      ? found.deputyDaysLimit
+                      : found.permanentDaysLimit;
+                    return `${found.name} (${limit} ημ.)`;
+                  }}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {leaveTypes.map((lt) => (

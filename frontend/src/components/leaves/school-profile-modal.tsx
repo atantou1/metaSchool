@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -43,23 +43,31 @@ export function SchoolProfileModal({
         principalTitle: "Ο Διευθυντής του Σχολείου",
         principalSignature: "",
         schoolStamp: "",
+        deputyLogo: "",
       }
     );
   });
 
+  useEffect(() => {
+    if (initialProfile) {
+      setProfile(initialProfile);
+    }
+  }, [initialProfile, isOpen]);
+
   const [isSaving, setIsSaving] = useState(false);
   const stampInputRef = useRef<HTMLInputElement>(null);
   const signatureInputRef = useRef<HTMLInputElement>(null);
+  const deputyLogoInputRef = useRef<HTMLInputElement>(null);
 
   const handleImageUpload = (
     e: React.ChangeEvent<HTMLInputElement>,
-    field: "schoolStamp" | "principalSignature"
+    field: "schoolStamp" | "principalSignature" | "deputyLogo"
   ) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     if (!file.type.startsWith("image/")) {
-      toast.error("Παρακαλώ επιλέξτε αρχείο εικόνας (PNG, JPG, SVG)");
+      toast.error("Παρακαλώ επιλέξτε αρχείο εικόνας (PNG, JPG, SVG, WebP)");
       return;
     }
 
@@ -206,10 +214,10 @@ export function SchoolProfileModal({
               Ψηφιακή Σφραγίδα & Υπογραφή (Προαιρετικό - για αυτόματη εμφάνιση στα PDF)
             </h4>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {/* Stamp box */}
               <div className="p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 flex flex-col items-center justify-between gap-2">
-                <span className="font-medium text-xs">Στρογγυλή Σφραγίδα Σχολείου (PNG)</span>
+                <span className="font-medium text-xs text-center">Στρογγυλή Σφραγίδα Σχολείου</span>
                 <div className="h-24 w-24 border border-dashed border-zinc-300 dark:border-zinc-700 rounded-lg flex items-center justify-center relative overflow-hidden bg-white dark:bg-zinc-950">
                   {profile.schoolStamp ? (
                     <img
@@ -259,8 +267,8 @@ export function SchoolProfileModal({
 
               {/* Signature box */}
               <div className="p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 flex flex-col items-center justify-between gap-2">
-                <span className="font-medium text-xs">Υπογραφή Διευθυντή (PNG)</span>
-                <div className="h-24 w-36 border border-dashed border-zinc-300 dark:border-zinc-700 rounded-lg flex items-center justify-center relative overflow-hidden bg-white dark:bg-zinc-950">
+                <span className="font-medium text-xs text-center">Υπογραφή Διευθυντή</span>
+                <div className="h-24 w-32 border border-dashed border-zinc-300 dark:border-zinc-700 rounded-lg flex items-center justify-center relative overflow-hidden bg-white dark:bg-zinc-950">
                   {profile.principalSignature ? (
                     <img
                       src={profile.principalSignature}
@@ -306,7 +314,60 @@ export function SchoolProfileModal({
                   )}
                 </div>
               </div>
+
+              {/* Deputy Logo banner box */}
+              <div className="p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 flex flex-col items-center justify-between gap-2">
+                <span className="font-medium text-xs text-center">Λογότυπο Αναπληρωτών (ΕΣΠΑ / ΠΔΕ)</span>
+                <div className="h-24 w-full border border-dashed border-zinc-300 dark:border-zinc-700 rounded-lg flex items-center justify-center relative overflow-hidden bg-white dark:bg-zinc-950 p-1">
+                  {profile.deputyLogo ? (
+                    <img
+                      src={profile.deputyLogo}
+                      alt="Λογότυπο Αναπληρωτών"
+                      className="max-h-full max-w-full object-contain"
+                    />
+                  ) : (
+                    <span className="text-[10px] text-zinc-400 text-center px-2 leading-tight">
+                      Χωρίς λογότυπο
+                    </span>
+                  )}
+                </div>
+
+                <input
+                  type="file"
+                  ref={deputyLogoInputRef}
+                  onChange={(e) => handleImageUpload(e, "deputyLogo")}
+                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                  className="hidden"
+                />
+
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => deputyLogoInputRef.current?.click()}
+                    className="h-7 text-xs gap-1"
+                  >
+                    <Upload className="w-3 h-3" />
+                    Επιλογή
+                  </Button>
+                  {profile.deputyLogo && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setProfile({ ...profile, deputyLogo: "" })}
+                      className="h-7 text-xs text-red-500 hover:text-red-600"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </Button>
+                  )}
+                </div>
+              </div>
             </div>
+            <p className="text-[11px] text-zinc-500 dark:text-zinc-400 italic">
+              * Το λογότυπο των αναπληρωτών (π.χ. ΕΣΠΑ, Πρόγραμμα Δημοσίων Επενδύσεων) τοποθετείται αυτόματα στο κάτω μέρος (υποσέλιδο) των εγγράφων όταν ο εκπαιδευτικός είναι αναπληρωτής.
+            </p>
           </div>
         </div>
 

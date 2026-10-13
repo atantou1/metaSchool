@@ -159,6 +159,7 @@ export async function initializeDatabase(force = false) {
       principalTitle: "Ο Διευθυντής του Σχολείου",
       principalSignature: "",
       schoolStamp: "",
+      deputyLogo: "",
     };
 
     await db.insert(schema.appSettings).values({
