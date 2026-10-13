@@ -9,8 +9,25 @@ import {
   generateFullSchoolAssignments,
 } from "./seed-demo-matrix";
 
-export async function initializeDatabase() {
-  console.log("Checking database schema...");
+let isDbInitialized = false;
+let dbInitPromise: Promise<void> | null = null;
+
+export async function initializeDatabase(force = false) {
+  if (force) {
+    isDbInitialized = false;
+    dbInitPromise = null;
+  }
+
+  if (isDbInitialized) {
+    return;
+  }
+
+  if (dbInitPromise) {
+    return dbInitPromise;
+  }
+
+  dbInitPromise = (async () => {
+    console.log("Checking database schema...");
 
   // Read and execute initial migration SQL
   const migrationsDir = path.join(process.cwd(), "src/db/migrations");
@@ -491,5 +508,14 @@ export async function initializeDatabase() {
     }
   }
 
-  console.log("Database initialized successfully!");
+    console.log("Database initialized successfully!");
+    isDbInitialized = true;
+  })();
+
+  try {
+    await dbInitPromise;
+  } catch (err) {
+    dbInitPromise = null;
+    throw err;
+  }
 }

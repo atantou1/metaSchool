@@ -16,7 +16,7 @@ export async function POST() {
     await db.delete(schema.rules);
 
     // Re-initialize with seed data
-    await initializeDatabase();
+    await initializeDatabase(true);
 
     return NextResponse.json({ success: true, message: "Δεδομένα επαναφέρθηκαν επιτυχώς!" });
   } catch (error: any) {

@@ -49,23 +49,40 @@ export default function Home() {
   
   const [activeScheduleName, setActiveScheduleName] = useState<string | null>(null);
 
-  const loadData = async (isInitial = false) => {
+  const loadData = async (isInitial = false, retriesLeft = 2) => {
     if (isInitial || !data) {
       setIsLoading(true);
     }
     setLoadError(null);
     try {
-      const res = await fetch("/api/timetable");
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+      const res = await fetch("/api/timetable", {
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
       const json = await res.json();
       if (json.success) {
         setData(json.data);
       } else {
         const msg = json.error || "Αποτυχία ανάγνωσης δεδομένων";
+        if (isInitial && retriesLeft > 0) {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          return loadData(true, retriesLeft - 1);
+        }
         setLoadError(msg);
         toast.error("Σφάλμα φόρτωσης δεδομένων", { description: msg });
       }
     } catch (e: any) {
-      const msg = e.message || "Σφάλμα σύνδεσης";
+      if (isInitial && retriesLeft > 0) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        return loadData(true, retriesLeft - 1);
+      }
+      const msg = e.name === "AbortError"
+        ? "Η φόρτωση καθυστέρησε κατά την εκκίνηση του διακομιστή"
+        : e.message || "Σφάλμα σύνδεσης";
       setLoadError(msg);
       toast.error("Σφάλμα σύνδεσης με τη βάση", { description: msg });
     } finally {
