@@ -27,6 +27,7 @@ import {
   Info,
   ToggleLeft,
   ToggleRight,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { ConditionalRuleBuilder } from "@/components/conditional-rule-builder";
@@ -40,6 +41,7 @@ interface RulesManagerProps {
   onRefresh: () => void;
   activeTab?: string;
   onTabChange?: (tab: any) => void;
+  onClose?: () => void;
 }
 
 const ENFORCEMENT_LABELS: Record<string, { label: string; className: string }> = {
@@ -59,6 +61,7 @@ export const RulesManager: React.FC<RulesManagerProps> = ({
   onRefresh,
   activeTab = "rules",
   onTabChange,
+  onClose,
 }) => {
   const [isBuilderOpen, setIsBuilderOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<ConditionalRule | null>(null);
@@ -196,14 +199,32 @@ export const RulesManager: React.FC<RulesManagerProps> = ({
           </div>
         </div>
 
-        <Button
-          onClick={handleOpenCreate}
-          size="sm"
-          className="h-8 px-3 text-xs bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-semibold cursor-pointer shadow-sm gap-1.5"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          Νέος Κανόνας
-        </Button>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button
+            onClick={handleOpenCreate}
+            size="sm"
+            className="h-8 px-3 text-xs bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-semibold cursor-pointer shadow-sm gap-1.5"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Νέος Κανόνας
+          </Button>
+
+          {onClose && (
+            <>
+              <div className="h-5 w-px bg-zinc-200 dark:bg-zinc-700 mx-0.5" />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onClose}
+                className="h-8 w-8 p-0 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-800 rounded-lg cursor-pointer"
+                title="Κλείσιμο (Esc)"
+                aria-label="Κλείσιμο"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Main content */}

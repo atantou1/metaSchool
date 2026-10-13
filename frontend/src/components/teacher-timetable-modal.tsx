@@ -28,6 +28,7 @@ import {
   Coffee,
   ChevronDown,
   Check,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -569,7 +570,7 @@ export const TeacherTimetableModal: React.FC<TeacherTimetableModalProps> = ({
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent
         className="max-w-none w-screen h-screen p-0 flex flex-col overflow-hidden bg-card text-card-foreground border-0 shadow-none rounded-none z-[120] !translate-x-0 !translate-y-0 !top-0 !left-0"
-        showCloseButton={true}
+        showCloseButton={false}
       >
         {/* Header Bar */}
         <DialogHeader className="px-4 py-2 border-b border-border bg-muted/40 flex flex-row items-center justify-between flex-none gap-3">
@@ -676,7 +677,7 @@ export const TeacherTimetableModal: React.FC<TeacherTimetableModalProps> = ({
           </div>
 
           {/* Action Toolbar */}
-          <div className="flex items-center gap-2 pr-6">
+          <div className="flex items-center gap-2">
             {/* Print Button */}
             <Button
               variant="outline"
@@ -698,6 +699,20 @@ export const TeacherTimetableModal: React.FC<TeacherTimetableModalProps> = ({
             >
               <FileText className="w-3.5 h-3.5 mr-1 text-blue-600 dark:text-blue-400" />
               {isExportingWord ? "Εξαγωγή..." : "Word (.docx)"}
+            </Button>
+
+            <div className="h-4 w-px bg-border mx-0.5" />
+
+            {/* Close Button */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onClose}
+              className="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer rounded-md"
+              title="Κλείσιμο (Esc)"
+              aria-label="Κλείσιμο"
+            >
+              <X className="w-4 h-4" />
             </Button>
           </div>
         </DialogHeader>

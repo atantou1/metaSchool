@@ -362,6 +362,7 @@ export default function Home() {
       >
         <SheetContent
           side="right"
+          showCloseButton={false}
           className="!w-screen sm:!w-screen !max-w-none inset-0 rounded-none overflow-hidden p-0 flex flex-col bg-zinc-100/60 dark:bg-zinc-950/80 border-none"
         >
           {activeSheet === "classes" && (
@@ -370,6 +371,7 @@ export default function Home() {
               onRefresh={loadData}
               activeTab={activeSheet}
               onTabChange={setActiveSheet}
+              onClose={() => setActiveSheet(null)}
             />
           )}
           {activeSheet === "teachers" && (
@@ -378,6 +380,7 @@ export default function Home() {
               onRefresh={loadData}
               activeTab={activeSheet}
               onTabChange={setActiveSheet}
+              onClose={() => setActiveSheet(null)}
             />
           )}
           {activeSheet === "subjects" && (
@@ -386,6 +389,7 @@ export default function Home() {
               onRefresh={loadData}
               activeTab={activeSheet}
               onTabChange={setActiveSheet}
+              onClose={() => setActiveSheet(null)}
             />
           )}
           {activeSheet === "rules" && (
@@ -394,6 +398,7 @@ export default function Home() {
               onRefresh={loadData}
               activeTab={activeSheet}
               onTabChange={setActiveSheet}
+              onClose={() => setActiveSheet(null)}
             />
           )}
         </SheetContent>

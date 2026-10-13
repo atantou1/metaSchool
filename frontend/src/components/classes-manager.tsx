@@ -60,6 +60,7 @@ interface ClassesManagerProps {
   onRefresh: () => void;
   activeTab?: "teachers" | "classes" | "subjects" | "rules";
   onTabChange?: (tab: "teachers" | "classes" | "subjects" | "rules") => void;
+  onClose?: () => void;
 }
 
 export const SUPPORT_SPECIALTIES_LIST = getSupportSpecialties("primary")
@@ -525,6 +526,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
   onRefresh,
   activeTab = "classes",
   onTabChange,
+  onClose,
 }) => {
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
 
@@ -1250,7 +1252,7 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
         </div>
 
         {/* Right: Actions */}
-        <div className="flex items-center gap-2 shrink-0 pr-10">
+        <div className="flex items-center gap-2 shrink-0">
           {editingRowId && inlineData ? (
             /* Active Inline Editing Controls */
             <div className="flex items-center gap-2 bg-emerald-50/90 border border-emerald-300 px-3 py-1 rounded-lg animate-in fade-in">
@@ -1345,6 +1347,22 @@ export const ClassesManager: React.FC<ClassesManagerProps> = ({
                 <span>+ Νέο Τμήμα</span>
               </Button>
             </div>
+          )}
+
+          {onClose && (
+            <>
+              <div className="h-5 w-px bg-zinc-200 dark:bg-zinc-700 mx-0.5" />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onClose}
+                className="h-8 w-8 p-0 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-800 rounded-lg cursor-pointer"
+                title="Κλείσιμο (Esc)"
+                aria-label="Κλείσιμο"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </>
           )}
         </div>
       </div>

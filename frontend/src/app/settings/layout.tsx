@@ -33,13 +33,13 @@ export default function SettingsLayout({
             <CalendarClock className="h-4 w-4" />
             Πρόγραμμα
           </Link>
-          <Link
-            href="/settings/duties"
-            className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-all hover:bg-muted hover:text-primary"
+          <div
+            className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground/40 cursor-not-allowed select-none"
+            title="Μη διαθέσιμο"
           >
             <BriefcaseMedical className="h-4 w-4" />
-            Εφημερίες
-          </Link>
+            <span>Εφημερίες</span>
+          </div>
           <Link
             href="/settings/leaves"
             className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-all hover:bg-muted hover:text-primary"
