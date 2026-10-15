@@ -72,11 +72,15 @@ export interface Leave {
 
 export interface SchoolProfile {
   schoolName: string;
+  schoolNameGenitive?: string; // π.χ. "του ΕΙΔΙΚΟΥ ΠΕΙΡΑΜΑΤΙΚΟΥ Δ.Σ. ΣΕΡΡΩΝ"
   schoolYear: string;
   ministry: string;
   regionalDirectorate: string;
   directorate: string;
-  postalAddress: string;
+  address?: string; // Οδός & Αριθμός
+  postalCode?: string; // Τ.Κ.
+  city?: string; // Πόλη / Έδρα Σχολείου
+  postalAddress: string; // Combined (fallback)
   phone: string;
   email: string;
   principalName: string;
@@ -84,6 +88,13 @@ export interface SchoolProfile {
   principalSignature?: string;
   schoolStamp?: string;
   deputyLogo?: string;
+  schoolLogo?: string;
+}
+
+export interface LeaveDecisionTemplate {
+  legalBasis: string[]; // List of "Έχοντας υπόψη" statements
+  decisionText: string; // The "ΑΠΟΦΑΣΙΖΟΥΜΕ" text with placeholders
+  notifications?: string[]; // e.g. ["1. Π.Μ.Υ.", "2. Ενδιαφερόμενο/η", "3. Αρχείο Δημ. Σχολείου"]
 }
 
 export interface LeaveTypeConfig {
@@ -95,6 +106,8 @@ export interface LeaveTypeConfig {
   deputyDaysLimit: number;
   description: string;
   requiresMedicalCertificate?: boolean;
+  permanentTemplate?: LeaveDecisionTemplate;
+  deputyTemplate?: LeaveDecisionTemplate;
 }
 
 export interface SubjectAssignment {

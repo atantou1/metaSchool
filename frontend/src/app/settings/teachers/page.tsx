@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/select";
 import { Teacher } from "@/types";
 import { getEmploymentTypeLabel, formatTeacherAddress } from "@/lib/leave-documents";
+import { SignaturePadModal } from "@/components/leaves/signature-pad-modal";
 import {
   Users,
   Search,
@@ -61,6 +62,7 @@ export default function SettingsTeachersPage() {
   const [isDeleting, setIsDeleting] = useState(false);
 
   const signatureInputRef = React.useRef<HTMLInputElement>(null);
+  const [isSignaturePadOpen, setIsSignaturePadOpen] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -672,11 +674,22 @@ export default function SettingsTeachersPage() {
                     type="button"
                     variant="outline"
                     size="sm"
+                    onClick={() => setIsSignaturePadOpen(true)}
+                    className="h-7 text-xs gap-1 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-950/40"
+                    title="Σχεδίαση υπογραφής με το ποντίκι ή την αφή"
+                  >
+                    <PenTool className="w-3 h-3" />
+                    Σχεδίαση
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
                     onClick={() => signatureInputRef.current?.click()}
                     className="h-7 text-xs gap-1"
                   >
                     <Upload className="w-3 h-3" />
-                    {formData.signature ? "Αλλαγή" : "Μεταφόρτωση"}
+                    {formData.signature ? "Αρχείο" : "Μεταφόρτωση"}
                   </Button>
                   {formData.signature && (
                     <Button
@@ -748,6 +761,14 @@ export default function SettingsTeachersPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Signature Pad Modal */}
+      <SignaturePadModal
+        isOpen={isSignaturePadOpen}
+        onClose={() => setIsSignaturePadOpen(false)}
+        onSave={(dataUrl) => setFormData({ ...formData, signature: dataUrl })}
+        title={`Υπογραφή: ${formData.lastName || ""} ${formData.firstName || ""}`}
+      />
     </div>
   );
 }

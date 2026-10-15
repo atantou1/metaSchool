@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { SchoolProfile, LeaveTypeConfig } from "@/types";
 import { SchoolProfileModal } from "@/components/leaves/school-profile-modal";
+import { LeaveTemplateModal } from "@/components/leaves/leave-template-modal";
 import {
   Umbrella,
   Building,
@@ -17,6 +18,7 @@ import {
   CheckCircle2,
   Info,
   Calendar,
+  FileText,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -26,6 +28,8 @@ export default function SettingsLeavesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
+  const [selectedLeaveTypeIndex, setSelectedLeaveTypeIndex] = useState<number | null>(null);
 
   const loadConfig = async () => {
     setIsLoading(true);
@@ -80,6 +84,29 @@ export default function SettingsLeavesPage() {
     }
   };
 
+  const handleOpenTemplateModal = (index: number) => {
+    setSelectedLeaveTypeIndex(index);
+    setIsTemplateModalOpen(true);
+  };
+
+  const handleSaveTemplate = async (updatedLt: LeaveTypeConfig) => {
+    if (selectedLeaveTypeIndex === null) return;
+    const nextList = [...leaveTypes];
+    nextList[selectedLeaveTypeIndex] = updatedLt;
+    setLeaveTypes(nextList);
+
+    try {
+      await fetch("/api/leaves/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leaveTypes: nextList }),
+      });
+      toast.success(`Το πρότυπο για «${updatedLt.name}» αποθηκεύτηκε!`);
+    } catch {
+      toast.error("Σφάλμα αποθήκευσης προτύπου");
+    }
+  };
+
   return (
     <div className="space-y-6 max-w-4xl">
       <div className="flex items-center justify-between">
@@ -110,7 +137,7 @@ export default function SettingsLeavesPage() {
               Στοιχεία Σχολείου, Σφραγίδα & Υπογραφή
             </CardTitle>
             <p className="text-xs text-muted-foreground">
-              {schoolProfile?.schoolName || "1ο Πειραματικό Δημοτικό"} • Διευθυντής: {schoolProfile?.principalName || "Ορισμός..."}
+              {schoolProfile?.schoolName || "1ο Πειραματικό Δημοτικό"} • {schoolProfile?.city ? `${schoolProfile.city} • ` : ""}Διευθυντής: {schoolProfile?.principalName || "Ορισμός..."}
             </p>
           </div>
 
@@ -124,7 +151,13 @@ export default function SettingsLeavesPage() {
           </Button>
         </CardHeader>
         <CardContent className="p-4 pt-2">
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+          <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 text-xs">
+            <div className="p-2.5 rounded bg-muted/40">
+              <span className="text-[11px] text-muted-foreground block">Λογότυπο Σχολείου:</span>
+              <span className="font-medium">
+                {schoolProfile?.schoolLogo ? "✓ Καταχωρημένο" : "Χωρίς εικόνα"}
+              </span>
+            </div>
             <div className="p-2.5 rounded bg-muted/40">
               <span className="text-[11px] text-muted-foreground block">Σφραγίδα:</span>
               <span className="font-medium">
@@ -191,6 +224,7 @@ export default function SettingsLeavesPage() {
                   <th className="py-2.5 px-3 text-center w-36">Όριο Μονίμων (ημ.)</th>
                   <th className="py-2.5 px-3 text-center w-36">Όριο Αναπληρωτών (ημ.)</th>
                   <th className="py-2.5 px-3">Περιγραφή</th>
+                  <th className="py-2.5 px-3 text-center w-36">Πρότυπο Απόφασης</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -234,6 +268,17 @@ export default function SettingsLeavesPage() {
                         className="h-7 text-xs"
                       />
                     </td>
+                    <td className="py-2.5 px-3 text-center">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleOpenTemplateModal(idx)}
+                        className="h-7 text-xs gap-1.5 hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-400 font-medium"
+                      >
+                        <FileText className="w-3.5 h-3.5 text-blue-600" />
+                        Διαμόρφωση
+                      </Button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -248,6 +293,17 @@ export default function SettingsLeavesPage() {
         onClose={() => setIsProfileModalOpen(false)}
         initialProfile={schoolProfile}
         onSaved={(updated) => setSchoolProfile(updated)}
+      />
+
+      {/* Leave Decision Template Modal */}
+      <LeaveTemplateModal
+        isOpen={isTemplateModalOpen}
+        onClose={() => {
+          setIsTemplateModalOpen(false);
+          setSelectedLeaveTypeIndex(null);
+        }}
+        leaveType={selectedLeaveTypeIndex !== null ? leaveTypes[selectedLeaveTypeIndex] : null}
+        onSave={handleSaveTemplate}
       />
     </div>
   );
