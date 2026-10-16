@@ -165,6 +165,14 @@ export default function LeavesPage() {
   const handleOpenDocuments = (leave: Leave) => {
     setSelectedDocLeave(leave);
     setIsDocModalOpen(true);
+    fetch("/api/leaves/config")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.schoolProfile) {
+          setSchoolProfile(data.schoolProfile);
+        }
+      })
+      .catch(() => {});
   };
 
   // Handle delete leave

@@ -190,6 +190,7 @@ export async function initializeDatabase(force = false) {
         deputyDaysLimit: 0,
         description: "Κανονική άδεια (έως 10 ημέρες για μόνιμους εκπαιδευτικούς)",
         requiresMedicalCertificate: false,
+        protocolPrefix: "Φ.12/",
       },
       {
         id: "medical",

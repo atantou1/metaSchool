@@ -63,8 +63,13 @@ export function LeaveTemplateModal({
   const [deputyDecisionText, setDeputyDecisionText] = useState<string>("");
   const [deputyNotifications, setDeputyNotifications] = useState<string[]>([]);
 
+  // Protocol prefix state (e.g. "Φ.12/")
+  const [protocolPrefix, setProtocolPrefix] = useState<string>("");
+
   useEffect(() => {
     if (!leaveType) return;
+
+    setProtocolPrefix(leaveType.protocolPrefix ?? (leaveType.id === "regular" ? "Φ.12/" : ""));
 
     // Load Permanent
     const defaultPerm = getDefaultTemplateForLeaveType(leaveType.id, false);
@@ -201,6 +206,7 @@ export function LeaveTemplateModal({
 
     const updated: LeaveTypeConfig = {
       ...leaveType,
+      protocolPrefix: protocolPrefix.trim(),
       permanentTemplate: permTemplate,
       deputyTemplate: deputyTemplate,
     };
@@ -259,6 +265,26 @@ export function LeaveTemplateModal({
 
         {/* Scrollable Content Body */}
         <div className="flex-1 overflow-y-auto p-5 space-y-6 bg-muted/20">
+          {/* Protocol prefix setting */}
+          <div className="p-3 rounded-lg border border-border bg-card flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+            <div className="space-y-0.5">
+              <Label className="text-xs font-semibold text-foreground">
+                Πρόθεμα Αρ. Πρωτοκόλλου / Φάκελος
+              </Label>
+              <p className="text-[11px] text-muted-foreground">
+                Συμπληρώνεται αυτόματα πριν από τον αριθμό πρωτοκόλλου στην απόφαση (π.χ. <code className="bg-muted px-1.5 py-0.5 rounded text-[11px] font-mono font-bold text-blue-600 dark:text-blue-400">Φ.12/</code>).
+              </p>
+            </div>
+            <div className="w-full sm:w-36 shrink-0">
+              <Input
+                value={protocolPrefix}
+                onChange={(e) => setProtocolPrefix(e.target.value)}
+                placeholder="π.χ. Φ.12/"
+                className="h-8 text-xs font-mono font-semibold"
+              />
+            </div>
+          </div>
+
           {/* Tab Indicator Banner */}
           <div className="p-2.5 rounded-lg border border-blue-200 dark:border-blue-900 bg-blue-50/70 dark:bg-blue-950/30 flex items-center justify-between">
             <div className="flex items-center gap-2 text-xs text-blue-900 dark:text-blue-200">

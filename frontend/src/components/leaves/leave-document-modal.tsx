@@ -22,9 +22,14 @@ import {
   getLeavePhrases,
   getLeaveAdjective,
   getLeaveSubject,
+  getLeaveDecisionSubject,
   exportElementToPdf,
   downloadLeaveApplicationDocx,
   downloadLeaveDecisionDocx,
+  formatLeaveProtocolNumber,
+  toGreekUpper,
+  getCleanSchoolAddress,
+  getSchoolTkCity,
   LEAVE_DOCUMENT_PRINT_CSS,
 } from "@/lib/leave-documents";
 import { GREEK_EMBLEM_BASE64 } from "@/lib/emblem-asset";
@@ -50,6 +55,21 @@ import {
 import { SignaturePadModal } from "@/components/leaves/signature-pad-modal";
 import { toast } from "sonner";
 
+function renderFormattedMarkdown(text: string): React.ReactNode {
+  if (!text) return null;
+  const parts = text.split(/(\*\*.*?\*\*)/g);
+  return parts.map((part, index) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return (
+        <strong key={index} className="font-bold text-zinc-950">
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+    return <span key={index}>{part}</span>;
+  });
+}
+
 interface LeaveDocumentModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -67,10 +87,11 @@ export function LeaveDocumentModal({
   schoolProfile,
   leaveTypes,
 }: LeaveDocumentModalProps) {
-  const [activeTab, setActiveTab] = useState<"application" | "decision">("decision");
+  const [activeTab, setActiveTab] = useState<"application" | "decision">("application");
   const [isExporting, setIsExporting] = useState(false);
   const [isSignaturePadOpen, setIsSignaturePadOpen] = useState(false);
   const [currentSignature, setCurrentSignature] = useState<string>(teacher?.signature || "");
+  const [liveSchoolProfile, setLiveSchoolProfile] = useState<SchoolProfile | null>(schoolProfile);
 
   // In-line decision template editing state
   const [isEditingDecision, setIsEditingDecision] = useState(false);
@@ -85,36 +106,82 @@ export function LeaveDocumentModal({
   const applicationRef = useRef<HTMLDivElement>(null);
   const decisionRef = useRef<HTMLDivElement>(null);
 
-  const school: SchoolProfile = schoolProfile || {
-    schoolName: "1ο Πειραματικό Δημοτικό Σχολείο",
+  const rawSchool: SchoolProfile = liveSchoolProfile || schoolProfile || {
+    schoolName: "Ειδικό Πειραματικό Δημοτικό Σχολείο Σερρών",
     schoolYear: "2026-2027",
     ministry: "ΥΠΟΥΡΓΕΙΟ ΠΑΙΔΕΙΑΣ, ΘΡΗΣΚΕΥΜΑΤΩΝ ΚΑΙ ΑΘΛΗΤΙΣΜΟΥ",
-    regionalDirectorate: "ΠΕΡΙΦΕΡΕΙΑΚΗ Δ/ΝΣΗ Π.Ε. & Δ.Ε. ΑΤΤΙΚΗΣ",
-    directorate: "ΔΙΕΥΘΥΝΣΗ Π.Ε. ΑΝΑΤΟΛΙΚΗΣ ΑΤΤΙΚΗΣ",
-    postalAddress: "Σχολική Οδός 1, Τ.Κ. 15344",
-    phone: "210 1234567",
-    email: "mail@sch.gr",
-    principalName: "Ιωάννης Παπαδόπουλος",
-    principalTitle: "Ο Διευθυντής του Σχολείου",
+    regionalDirectorate: "ΠΕΡΙΦ/ΚΗ Δ/ΝΣΗ Α/ΘΜΙΑΣ  ΕΚΠ/ΣΗΣ Κ. ΜΑΚΕΔΟΝΙΑΣ",
+    directorate: "Δ/ΝΣΗ Α/ΘΜΙΑΣ  ΕΚΠ/ΣΗΣ Ν. ΣΕΡΡΩΝ",
+    postalAddress: "3ο χλμ. Σερρών-Δράμας, Τ.Κ. 62100",
+    phone: "",
+    email: "",
+    principalName: "",
+    principalTitle: "Ο Δ/ντής  του  σχολείου",
+  };
+
+  const normalizedSchoolName =
+    rawSchool.schoolName?.includes("Ειδικό Πειραματικό Σχολείο") && !rawSchool.schoolName.includes("Δημοτικό")
+      ? rawSchool.schoolName.replace("Ειδικό Πειραματικό Σχολείο", "Ειδικό Πειραματικό Δημοτικό Σχολείο")
+      : (rawSchool.schoolName || "Σχολείο");
+
+  const school: SchoolProfile = {
+    ...rawSchool,
+    schoolName: normalizedSchoolName,
   };
 
   const isDeputy = isDeputyTeacher(teacher);
 
   // Initialize or reset decision content from effective template
-  const resetToTemplateDecisionContent = () => {
+  const resetToTemplateDecisionContent = (customSchool?: SchoolProfile) => {
     if (!leave || !teacher) return;
+    const effSchool = customSchool || school;
     const foundLeaveType = leaveTypes.find((lt) => lt.id === leave.type);
     const effectiveTemplate = getEffectiveTemplate(foundLeaveType, isDeputy);
     const resolved = resolveDecisionTemplate(effectiveTemplate, {
       leave,
       teacher,
-      school,
+      school: effSchool,
       leaveTypes,
     });
-    setDecisionLegalBasis(resolved.legalBasis);
-    setDecisionText(resolved.decisionText);
-    setDecisionNotifications(resolved.notifications);
+    setDecisionLegalBasis(
+      resolved.legalBasis.map((l) =>
+        l.replace(/Ειδικό Πειραματικό Σχολείο Σερρών/g, "Ειδικό Πειραματικό Δημοτικό Σχολείο Σερρών")
+      )
+    );
+    setDecisionText(
+      resolved.decisionText.replace(
+        /Ειδικό Πειραματικό Σχολείο Σερρών/g,
+        "Ειδικό Πειραματικό Δημοτικό Σχολείο Σερρών"
+      )
+    );
+    setDecisionNotifications(
+      resolved.notifications.map((n) =>
+        n.replace(/Ειδικό Πειραματικό Σχολείο Σερρών/g, "Ειδικό Πειραματικό Δημοτικό Σχολείο Σερρών")
+      )
+    );
   };
+
+  // When modal opens, fetch fresh school profile from backend and ensure application tab is active
+  useEffect(() => {
+    if (isOpen) {
+      setActiveTab("application");
+      setIsEditingDecision(false);
+
+      fetch("/api/leaves/config")
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && data.schoolProfile) {
+            const fresh = { ...data.schoolProfile };
+            if (fresh.schoolName?.includes("Ειδικό Πειραματικό Σχολείο") && !fresh.schoolName.includes("Δημοτικό")) {
+              fresh.schoolName = fresh.schoolName.replace("Ειδικό Πειραματικό Σχολείο", "Ειδικό Πειραματικό Δημοτικό Σχολείο");
+            }
+            setLiveSchoolProfile(fresh);
+            resetToTemplateDecisionContent(fresh);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     resetToTemplateDecisionContent();
@@ -129,6 +196,7 @@ export function LeaveDocumentModal({
     leave?.protocolDate,
     leave?.reason,
     isDeputy,
+    school.schoolName,
   ]);
 
   if (!leave || !teacher) return null;
@@ -142,6 +210,10 @@ export function LeaveDocumentModal({
   const leaveAccusative = leavePhrases.accusative;
   const daysInfo = formatDaysInWords(leave.daysCount);
   const applicantLabel = getApplicantGenderLabel(teacher.firstName);
+  const formattedProtocol = formatLeaveProtocolNumber(leave.protocolNumber, leave.type, leaveTypes);
+  const cleanSchoolAddress = getCleanSchoolAddress(school.address, school.postalAddress);
+  const schoolTkCity = getSchoolTkCity(school);
+  const decisionSubject = getLeaveDecisionSubject(leave.type, leaveTypes);
 
   // Export currently active document as PDF
   const handleExportCurrentPdf = async () => {
@@ -214,9 +286,16 @@ export function LeaveDocumentModal({
         toast.success("Η Αίτηση κατέβηκε σε Word (.docx)");
       } else {
         await downloadLeaveDecisionDocx(leave, teacher, school, leaveTypes, {
-          legalBasis: decisionLegalBasis,
-          decisionText,
-          notifications: decisionNotifications,
+          legalBasis: decisionLegalBasis.map((l) =>
+            l.replace(/Ειδικό Πειραματικό Σχολείο Σερρών/g, "Ειδικό Πειραματικό Δημοτικό Σχολείο Σερρών")
+          ),
+          decisionText: decisionText.replace(
+            /Ειδικό Πειραματικό Σχολείο Σερρών/g,
+            "Ειδικό Πειραματικό Δημοτικό Σχολείο Σερρών"
+          ),
+          notifications: decisionNotifications.map((n) =>
+            n.replace(/Ειδικό Πειραματικό Σχολείο Σερρών/g, "Ειδικό Πειραματικό Δημοτικό Σχολείο Σερρών")
+          ),
         });
         toast.success("Η Απόφαση κατέβηκε σε Word (.docx)");
       }
@@ -323,16 +402,6 @@ export function LeaveDocumentModal({
 
             <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800 p-1 rounded-lg border border-zinc-200 dark:border-zinc-700">
               <button
-                onClick={() => setActiveTab("decision")}
-                className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
-                  activeTab === "decision"
-                    ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-xs"
-                    : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200"
-                }`}
-              >
-                1. Απόφαση Διευθυντή
-              </button>
-              <button
                 onClick={() => setActiveTab("application")}
                 className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
                   activeTab === "application"
@@ -340,7 +409,17 @@ export function LeaveDocumentModal({
                     : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200"
                 }`}
               >
-                2. Αίτηση Εκπαιδευτικού
+                1. Αίτηση Εκπαιδευτικού
+              </button>
+              <button
+                onClick={() => setActiveTab("decision")}
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                  activeTab === "decision"
+                    ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-xs"
+                    : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200"
+                }`}
+              >
+                2. Απόφαση Διευθυντή
               </button>
             </div>
           </div>
@@ -358,54 +437,89 @@ export function LeaveDocumentModal({
               style={{ fontFamily: "'Calibri', 'Candara', 'Segoe UI', Arial, sans-serif" }}
             >
               <div className="space-y-3">
-                {/* Official Header - 2 Columns identical to official Word document */}
-                <div className="grid grid-cols-[1.35fr_1fr] gap-6 items-start pb-2">
-                  {/* Left Column: Emblem, Greek Republic, Ministry, School, Contact, Subject */}
-                  <div className="space-y-0.5 text-[11.5px] text-zinc-900 leading-tight">
-                    <img
-                      src={school.schoolLogo || `data:image/png;base64,${GREEK_EMBLEM_BASE64}`}
-                      alt="Λογότυπο Σχολείου"
-                      className="h-12 w-auto object-contain mb-1"
-                    />
-                    <p className="font-bold text-[12.5px] tracking-wide">ΕΛΛΗΝΙΚΗ ΔΗΜΟΚΡΑΤΙΑ</p>
-                    <p className="font-semibold text-[11.5px]">{school.ministry || "ΥΠΟΥΡΓΕΙΟ ΠΑΙΔΕΙΑΣ, ΘΡΗΣΚΕΥΜΑΤΩΝ ΚΑΙ ΑΘΛΗΤΙΣΜΟΥ"}</p>
-                    <p className="text-[11px] font-bold">--------</p>
-                    {school.regionalDirectorate && <p className="text-[11.5px]">{school.regionalDirectorate}</p>}
-                    {school.directorate && <p className="text-[11.5px]">{school.directorate}</p>}
-                    <p className="font-bold text-[12.5px] text-zinc-950 pt-0.5 leading-snug">{school.schoolName}</p>
-                    <p className="text-[11px] text-zinc-800 pt-0.5">
-                      Πληροφορίες&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: {school.principalName || "-"}
-                    </p>
-                    <p className="text-[11px] text-zinc-800">
-                      Διεύθυνση&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: {school.postalAddress || "-"} &nbsp;&nbsp; Τηλέφωνο : {school.phone || "-"}
-                    </p>
-                    <p className="text-[11px] text-zinc-800">
-                      e-mail&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: {school.email || "-"}
-                    </p>
+                {/* Official Header - 3-row structure aligning Left & Right columns precisely */}
+                <div className="space-y-0 pb-2">
+                  {/* Row 0: Logo, Greek Republic, Ministry, Separator / Right empty */}
+                  <div className="grid grid-cols-[1.35fr_1fr] gap-6 items-start">
+                    <div className="text-center space-y-0.5">
+                      <img
+                        src={school.schoolLogo || `data:image/png;base64,${GREEK_EMBLEM_BASE64}`}
+                        alt="Λογότυπο Σχολείου"
+                        className="h-12 w-12 object-contain mx-auto mb-1"
+                      />
+                      <p className="font-bold text-[10pt] uppercase tracking-wide">
+                        ΕΛΛΗΝΙΚΗ ΔΗΜΟΚΡΑΤΙΑ
+                      </p>
+                      <p className="font-bold text-[10pt] uppercase">
+                        {toGreekUpper(school.ministry || "ΥΠΟΥΡΓΕΙΟ ΠΑΙΔΕΙΑΣ, ΘΡΗΣΚΕΥΜΑΤΩΝ ΚΑΙ ΑΘΛΗΤΙΣΜΟΥ")}
+                      </p>
+                      <p className="font-bold text-[10pt]">--------</p>
+                    </div>
+                    <div>{/* Blank cell to balance Row 0 */}</div>
+                  </div>
 
-                    {/* Subject placed directly in left column, vertically below contact info */}
-                    <div className="pt-6 text-[12.5px] text-zinc-950 font-bold">
-                      Θέμα : <span className="font-bold">{leaveSubject}</span>
+                  {/* Row 1: Regional Directorate, Directorate, School Name / Right: Date & Protocol */}
+                  <div className="grid grid-cols-[1.35fr_1fr] gap-6 items-start">
+                    <div className="text-center space-y-0.5">
+                      {school.regionalDirectorate && (
+                        <p className="font-bold text-[10pt] uppercase">
+                          {toGreekUpper(school.regionalDirectorate)}
+                        </p>
+                      )}
+                      {school.directorate && (
+                        <p className="font-bold text-[10pt] uppercase">
+                          {toGreekUpper(school.directorate)}
+                        </p>
+                      )}
+                      <p className="font-bold text-[10pt] uppercase pt-0.5">
+                        {toGreekUpper(school.schoolName)}
+                      </p>
+                      {/* 2 empty lines under school name */}
+                      <div className="h-7" aria-hidden="true"></div>
+                    </div>
+
+                    {/* Right Column: Date & Protocol starting at the same line as Regional Directorate */}
+                    <div className="text-right space-y-1">
+                      <p className="text-[10pt] font-bold text-zinc-900">
+                        {school.city || "Σέρρες"}, {formatGreekDate(leave.protocolDate || leave.startDate)}
+                      </p>
+                      <p className="text-[10pt] font-bold text-zinc-900">
+                        Αρ. Πρωτ. {formattedProtocol}
+                      </p>
                     </div>
                   </div>
 
-                  {/* Right Column: Date, Protocol, Centered Decision Title */}
-                  <div className="flex flex-col h-full justify-between text-right text-xs">
-                    <div className="space-y-1">
-                      <p className="text-[12px] text-zinc-900">
-                        {school.city || "Σέρρες"}, <strong>{formatGreekDate(leave.protocolDate || leave.startDate)}</strong>
+                  {/* Row 2: Contact Info / Right: Decision Title aligned with Information */}
+                  <div className="grid grid-cols-[1.35fr_1fr] gap-6 items-start">
+                    <div className="space-y-0.5 text-[10pt] font-bold text-zinc-900 leading-snug">
+                      <p>
+                        <span className="inline-block w-[110px]">Πληροφορίες</span>: {school.principalName || "-"}
                       </p>
-                      <p className="text-[12px] font-semibold text-zinc-900">
-                        Αρ. Πρωτ. <span className="font-bold">{leave.protocolNumber || "____"}</span>
+                      <p>
+                        <span className="inline-block w-[110px]">Διεύθυνση</span>: {cleanSchoolAddress}
+                      </p>
+                      <p>
+                        <span className="inline-block w-[110px]">Τ.Κ.-Πόλη</span>: {schoolTkCity}
+                      </p>
+                      <p>
+                        <span className="inline-block w-[110px]">Τηλέφωνο</span>: {school.phone || "-"}
+                      </p>
+                      <p>
+                        <span className="inline-block w-[110px]">e-mail</span>: {school.email || "-"}
                       </p>
                     </div>
 
-                    {/* Title centered within right column opposite the Subject */}
-                    <div className="text-center pt-16 pb-1">
-                      <h2 className="text-[16px] font-bold tracking-[0.3em] uppercase">
-                        Α&nbsp;&nbsp;&nbsp;Π&nbsp;&nbsp;&nbsp;Ο&nbsp;&nbsp;&nbsp;Φ&nbsp;&nbsp;&nbsp;Α&nbsp;&nbsp;&nbsp;Σ&nbsp;&nbsp;&nbsp;Η
+                    {/* Right: Decision Title aligned horizontally with Information ("Πληροφορίες") */}
+                    <div className="text-center w-full pt-0.5 pb-1">
+                      <h2 className="text-[11pt] font-bold uppercase text-zinc-950">
+                        ΑΠΟΦΑΣΗ
                       </h2>
                     </div>
+                  </div>
+
+                  {/* Subject placed below contact info & decision title - Full width */}
+                  <div className="pt-4 text-[10pt] text-zinc-950 font-bold">
+                    ΘΕΜΑ: <span className="font-bold">{decisionSubject}</span>
                   </div>
                 </div>
 
@@ -420,7 +534,7 @@ export function LeaveDocumentModal({
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={resetToTemplateDecisionContent}
+                        onClick={() => resetToTemplateDecisionContent()}
                         className="h-6 text-[11px] text-amber-800 gap-1 hover:bg-amber-100"
                       >
                         <RotateCcw className="w-3 h-3" />
@@ -469,7 +583,7 @@ export function LeaveDocumentModal({
 
                     <div className="space-y-1.5 pt-1">
                       <Label className="text-[11px] font-semibold text-zinc-700">
-                        Κείμενο «ΑΠΟΦΑΣΙΖΟΥΜΕ»:
+                        Κείμενο «Αποφασίζουμε»:
                       </Label>
                       <Textarea
                         value={decisionText}
@@ -495,7 +609,7 @@ export function LeaveDocumentModal({
                       return (
                         <div key={idx} className="flex items-start text-justify">
                           <span className="font-normal shrink-0 mr-1.5">{idx + 1}.</span>
-                          <span className="flex-1 text-justify">{clean}</span>
+                          <span className="flex-1 text-justify">{renderFormattedMarkdown(clean)}</span>
                         </div>
                       );
                     })}
@@ -503,14 +617,19 @@ export function LeaveDocumentModal({
                 </div>
 
                 {/* Decision Action Statement */}
-                <div className="pt-4 pb-2 text-center">
-                  <h3 className="font-bold tracking-[0.25em] uppercase text-[14px]">
-                    Α&nbsp;&nbsp;π&nbsp;&nbsp;ο&nbsp;&nbsp;φ&nbsp;&nbsp;α&nbsp;&nbsp;σ&nbsp;&nbsp;ί&nbsp;&nbsp;ζ&nbsp;&nbsp;ο&nbsp;&nbsp;υ&nbsp;&nbsp;μ&nbsp;ε
+                <div className="pt-3 pb-1 text-center">
+                  <h3 className="font-bold tracking-[0.06em] text-[13.5px] text-zinc-950">
+                    Α&nbsp;π&nbsp;ο&nbsp;φ&nbsp;α&nbsp;σ&nbsp;ί&nbsp;ζ&nbsp;ο&nbsp;υ&nbsp;μ&nbsp;ε
                   </h3>
                 </div>
 
                 <div className="text-[12.5px] leading-relaxed text-justify pt-1 text-zinc-950">
-                  {decisionText}
+                  {renderFormattedMarkdown(
+                    decisionText.replace(
+                      /Ειδικό Πειραματικό Σχολείο Σερρών/g,
+                      "Ειδικό Πειραματικό Δημοτικό Σχολείο Σερρών"
+                    )
+                  )}
                 </div>
 
                 {/* Notification & Signatures - 2 Columns */}
@@ -521,7 +640,7 @@ export function LeaveDocumentModal({
                     {decisionNotifications.map((notif, idx) => {
                       const clean = notif.replace(/^\d+[\.\)]\s*/, "");
                       return (
-                        <p key={idx} className="text-zinc-900">{idx + 1}. {clean}</p>
+                        <p key={idx} className="text-zinc-900">{idx + 1}. {renderFormattedMarkdown(clean)}</p>
                       );
                     })}
                   </div>
@@ -538,7 +657,7 @@ export function LeaveDocumentModal({
                         <img
                           src={school.schoolStamp}
                           alt="Σφραγίδα Σχολείου"
-                          className="max-h-24 max-w-24 object-contain opacity-90 absolute left-4 pointer-events-none"
+                          className="max-h-24 max-w-24 object-contain opacity-90 absolute left-4 inset-y-0 my-auto pointer-events-none"
                         />
                       )}
                       {school.principalSignature && (
@@ -742,7 +861,7 @@ export function LeaveDocumentModal({
               className="text-xs gap-1.5"
             >
               <FileText className="w-3.5 h-3.5 text-blue-600" />
-              Εξαγωγή Word (.docx)
+              Word ({activeTab === "application" ? "1. Αίτηση" : "2. Απόφαση"})
             </Button>
           </div>
 
@@ -755,7 +874,7 @@ export function LeaveDocumentModal({
               className="text-xs gap-1.5"
             >
               <Download className="w-3.5 h-3.5" />
-              PDF ({activeTab === "decision" ? "Απόφαση" : "Αίτηση"})
+              PDF ({activeTab === "application" ? "1. Αίτηση" : "2. Απόφαση"})
             </Button>
 
             <Button
@@ -766,7 +885,7 @@ export function LeaveDocumentModal({
               className="text-xs gap-1.5 bg-blue-600 hover:bg-blue-700 text-white shadow-xs font-semibold"
             >
               <Layers className="w-4 h-4" />
-              {isExporting ? "Δημιουργία..." : "Έκδοση & των 2 PDF (Αίτηση + Απόφαση)"}
+              {isExporting ? "Δημιουργία..." : "Έκδοση & των 2 PDF (1. Αίτηση + 2. Απόφαση)"}
             </Button>
           </div>
         </DialogFooter>

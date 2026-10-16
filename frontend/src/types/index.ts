@@ -108,6 +108,7 @@ export interface LeaveTypeConfig {
   requiresMedicalCertificate?: boolean;
   permanentTemplate?: LeaveDecisionTemplate;
   deputyTemplate?: LeaveDecisionTemplate;
+  protocolPrefix?: string;
 }
 
 export interface SubjectAssignment {

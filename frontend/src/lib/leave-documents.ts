@@ -1,6 +1,6 @@
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
-import { Document, Paragraph, TextRun, Table, TableRow, TableCell, AlignmentType, WidthType, BorderStyle, Packer, ImageRun } from "docx";
+import { Document, Paragraph, TextRun, Table, TableRow, TableCell, AlignmentType, WidthType, BorderStyle, Packer, ImageRun, TabStopType, Footer } from "docx";
 import { Leave, Teacher, SchoolProfile, LeaveTypeConfig } from "@/types";
 import { GREEK_EMBLEM_BASE64 } from "@/lib/emblem-asset";
 import { getEffectiveTemplate, resolveDecisionTemplate } from "@/lib/leave-templates";
@@ -13,9 +13,98 @@ export function formatGreekDate(dateStr?: string | null): string {
   return `${day}/${month}/${year}`;
 }
 
+/**
+ * Format the protocol number with appropriate file prefix (e.g. "Φ.12/" for regular leaves).
+ */
+export function formatLeaveProtocolNumber(
+  rawProtocol?: string | null,
+  leaveType?: string,
+  leaveTypes?: LeaveTypeConfig[]
+): string {
+  const cfg = leaveTypes?.find((lt) => lt.id === leaveType);
+  // Default prefix for regular leave is "Φ.12/", or cfg?.protocolPrefix if configured
+  let prefix = cfg?.protocolPrefix;
+  if (!prefix && leaveType === "regular") {
+    prefix = "Φ.12/";
+  }
+
+  const trimmed = (rawProtocol || "").trim();
+  if (!trimmed) {
+    return prefix ? `${prefix}____` : "____";
+  }
+
+  if (prefix) {
+    const cleanPrefix = prefix.trim();
+    if (trimmed.startsWith(cleanPrefix) || (cleanPrefix.startsWith("Φ.") && trimmed.startsWith("Φ."))) {
+      return trimmed;
+    }
+    return `${cleanPrefix}${trimmed}`;
+  }
+
+  return trimmed;
+}
+
+/**
+ * Convert Greek string to uppercase and strip diacritics / tonoi (e.g. "Ελληνική Δημοκρατία" -> "ΕΛΛΗΝΙΚΗ ΔΗΜΟΚΡΑΤΙΑ").
+ */
+export function toGreekUpper(str?: string | null): string {
+  if (!str) return "";
+  return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+}
+
+/**
+ * Remove postal code or city suffixes from school address to avoid duplication with Τ.Κ.-Πόλη line.
+ */
+export function getCleanSchoolAddress(address?: string | null, postalAddress?: string | null): string {
+  const raw = address || postalAddress || "-";
+  return raw
+    .replace(/,?\s*Τ\.?Κ\.?.*$/i, "")
+    .replace(/,?\s*\d{5}.*$/, "")
+    .trim() || "-";
+}
+
+/**
+ * Combine postal code and city into "Τ.Κ.-Πόλη" string (e.g. "62100 Σέρρες").
+ */
+export function getSchoolTkCity(school: SchoolProfile): string {
+  let combined = [school.postalCode, school.city].filter(Boolean).join(" ");
+  if (!combined) {
+    const match = (school.postalAddress || school.address || "").match(/(\d{5})\s*,?\s*([^,]+)/);
+    if (match) {
+      combined = `${match[1]} ${match[2].trim()}`;
+    } else {
+      combined = `${school.city || "Σέρρες"}`;
+    }
+  }
+  return combined || "62100 Σέρρες";
+}
+
 export function getLeaveTypeName(typeId: string, leaveTypes: LeaveTypeConfig[]): string {
   const found = leaveTypes.find((t) => t.id === typeId);
   return found ? found.name : typeId;
+}
+
+/**
+ * Convert markdown bold tags (**text**) into an array of TextRun objects for Word.
+ */
+export function createFormattedTextRuns(text: string, defaultSize = 21): TextRun[] {
+  if (!text) return [];
+  const parts = text.split(/(\*\*.*?\*\*)/g);
+  return parts
+    .filter((part) => part.length > 0)
+    .map((part) => {
+      if (part.startsWith("**") && part.endsWith("**")) {
+        return new TextRun({
+          text: part.slice(2, -2),
+          bold: true,
+          size: defaultSize,
+        });
+      }
+      return new TextRun({
+        text: part,
+        size: defaultSize,
+      });
+    });
 }
 
 export function getEmploymentTypeLabel(empType?: string | null): string {
@@ -249,6 +338,14 @@ export function getLeaveSubject(leaveType: string, leaveTypes: LeaveTypeConfig[]
   return getLeavePhrases(leaveType, leaveTypes).subject;
 }
 
+export function getLeaveDecisionSubject(leaveType: string, leaveTypes: LeaveTypeConfig[]): string {
+  if (leaveType === "regular") {
+    return "«Χορήγηση κανονικής άδειας σε εκπαιδευτικό.»";
+  }
+  const phrases = getLeavePhrases(leaveType, leaveTypes);
+  return `«${phrases.subject} σε εκπαιδευτικό.»`;
+}
+
 export function getLeaveAdjective(leaveType: string, leaveTypes: LeaveTypeConfig[]): string {
   const acc = getLeavePhrases(leaveType, leaveTypes).accusative;
   return acc.replace(/\s*άδεια.*$/, "").trim() || "άδεια";
@@ -380,6 +477,13 @@ export const LEAVE_DOCUMENT_PRINT_CSS = `
   .relative { position: relative; }
   .absolute { position: absolute; }
   .left-2 { left: 0.5rem; }
+  .left-4 { left: 1rem; }
+  .left-6 { left: 1.5rem; }
+  .left-8 { left: 2rem; }
+  .top-0 { top: 0; }
+  .bottom-0 { bottom: 0; }
+  .top-1\/2 { top: 50%; }
+  .-translate-y-1\/2 { transform: translateY(-50%); }
   .z-10 { z-index: 10; }
   .opacity-90 { opacity: 0.9; }
   .pointer-events-none { pointer-events: none; }
@@ -400,6 +504,7 @@ export const LEAVE_DOCUMENT_PRINT_CSS = `
   .pt-14 { padding-top: 3.5rem; }
   .pt-16 { padding-top: 4rem; }
   .pt-20 { padding-top: 5rem; }
+  .pb-0\\.5 { padding-bottom: 0.125rem; }
   .pb-1 { padding-bottom: 0.25rem; }
   .pb-2 { padding-bottom: 0.5rem; }
   .pb-3 { padding-bottom: 0.75rem; }
@@ -409,6 +514,8 @@ export const LEAVE_DOCUMENT_PRINT_CSS = `
   .py-4 { padding-top: 1rem; padding-bottom: 1rem; }
   .w-full { width: 100%; }
   .w-64 { width: 16rem; }
+  .w-12 { width: 3rem; }
+  .h-12 { height: 3rem; }
   .h-20 { height: 5rem; }
   .h-24 { height: 6rem; }
   .h-6 { height: 1.5rem; }
@@ -441,6 +548,15 @@ export const LEAVE_DOCUMENT_PRINT_CSS = `
   .text-\\[14px\\] { font-size: 14px; }
   .text-\\[15px\\] { font-size: 15px; }
   .text-\\[16px\\] { font-size: 16px; }
+  .text-\\[10pt\\] { font-size: 10pt; }
+  .text-\\[10\\.5pt\\] { font-size: 10.5pt; }
+  .text-\\[11pt\\] { font-size: 11pt; }
+  .text-\\[14pt\\] { font-size: 14pt; }
+  .h-7 { height: 1.75rem; }
+  .inline-block { display: inline-block; }
+  .w-\\[110px\\] { width: 110px; }
+  .mb-1 { margin-bottom: 0.25rem; }
+  .leading-snug { line-height: 1.375; }
   .leading-tight { line-height: 1.25; }
   .leading-relaxed { line-height: 1.625; }
   .tracking-wide { letter-spacing: 0.025em; }
@@ -806,6 +922,62 @@ export async function downloadLeaveApplicationDocx(
   URL.revokeObjectURL(url);
 }
 
+/**
+ * Composite school stamp and principal signature into a single image where
+ * the signature naturally touches/overlaps the right side of the round stamp.
+ */
+export async function createCompositeStampAndSignature(
+  stampBase64: string,
+  sigBase64: string
+): Promise<{ base64: string; width: number; height: number }> {
+  return new Promise((resolve) => {
+    if (typeof window === "undefined" || typeof Image === "undefined") {
+      resolve({ base64: stampBase64, width: 75, height: 75 });
+      return;
+    }
+
+    const stampImg = new window.Image();
+    const sigImg = new window.Image();
+
+    let loaded = 0;
+    const onLoad = () => {
+      loaded++;
+      if (loaded === 2) {
+        // Stamp target: 150x150, Signature target: 240x100
+        // Canvas: 330x150
+        // Signature placed at x = 95, y = 25 (overlaps right part of stamp naturally)
+        const canvas = document.createElement("canvas");
+        canvas.width = 330;
+        canvas.height = 150;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          // 1. Draw stamp on left
+          ctx.drawImage(stampImg, 0, 0, 150, 150);
+          // 2. Draw signature slightly overlapping on the right
+          ctx.drawImage(sigImg, 95, 25, 235, 100);
+          const dataUrl = canvas.toDataURL("image/png");
+          resolve({
+            base64: dataUrl.split(",")[1],
+            width: 145,
+            height: 62,
+          });
+        } else {
+          resolve({ base64: stampBase64, width: 75, height: 75 });
+        }
+      }
+    };
+
+    stampImg.onload = onLoad;
+    sigImg.onload = onLoad;
+    stampImg.onerror = () => resolve({ base64: sigBase64, width: 120, height: 50 });
+    sigImg.onerror = () => resolve({ base64: stampBase64, width: 75, height: 75 });
+
+    stampImg.src = stampBase64.includes(",") ? stampBase64 : `data:image/png;base64,${stampBase64}`;
+    sigImg.src = sigBase64.includes(",") ? sigBase64 : `data:image/png;base64,${sigBase64}`;
+  });
+}
+
 // Generate Word (.docx) for Leave Decision (Απόφαση)
 export async function downloadLeaveDecisionDocx(
   leave: Leave,
@@ -818,6 +990,16 @@ export async function downloadLeaveDecisionDocx(
     notifications: string[];
   }
 ) {
+  const normalizedSchoolName =
+    school.schoolName?.includes("Ειδικό Πειραματικό Σχολείο") && !school.schoolName.includes("Δημοτικό")
+      ? school.schoolName.replace("Ειδικό Πειραματικό Σχολείο", "Ειδικό Πειραματικό Δημοτικό Σχολείο")
+      : school.schoolName;
+
+  const normalizedSchool: SchoolProfile = {
+    ...school,
+    schoolName: normalizedSchoolName,
+  };
+
   const isDeputy = isDeputyTeacher(teacher);
   const leavePhrases = getLeavePhrases(leave.type, leaveTypes);
   const foundLeaveType = leaveTypes.find((lt) => lt.id === leave.type);
@@ -825,10 +1007,19 @@ export async function downloadLeaveDecisionDocx(
   // Determine content (either custom edits from modal or resolved from effective template)
   const resolvedContent = customDecisionContent || resolveDecisionTemplate(
     getEffectiveTemplate(foundLeaveType, isDeputy),
-    { leave, teacher, school, leaveTypes }
+    { leave, teacher, school: normalizedSchool, leaveTypes }
   );
 
-  const { legalBasis, decisionText, notifications } = resolvedContent;
+  const legalBasis = resolvedContent.legalBasis.map((l) =>
+    l.replace(/Ειδικό Πειραματικό Σχολείο Σερρών/g, "Ειδικό Πειραματικό Δημοτικό Σχολείο Σερρών")
+  );
+  const decisionText = resolvedContent.decisionText.replace(
+    /Ειδικό Πειραματικό Σχολείο Σερρών/g,
+    "Ειδικό Πειραματικό Δημοτικό Σχολείο Σερρών"
+  );
+  const notifications = resolvedContent.notifications.map((n) =>
+    n.replace(/Ειδικό Πειραματικό Σχολείο Σερρών/g, "Ειδικό Πειραματικό Δημοτικό Σχολείο Σερρών")
+  );
 
   const borderless = {
     top: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" },
@@ -849,106 +1040,32 @@ export async function downloadLeaveDecisionDocx(
   const headerLogoRun = new ImageRun({
     type: isJpeg ? "jpg" : "png",
     data: Buffer.from(headerLogoData, "base64"),
-    transformation: { width: 38, height: 44 },
+    transformation: { width: 42, height: 42 },
   });
 
-  const leftHeaderChildren: Paragraph[] = [
+  const cleanSchoolAddress = getCleanSchoolAddress(school.address, school.postalAddress);
+  const schoolTkCity = getSchoolTkCity(school);
+
+  // Row 0: Logo, Greek Republic, Ministry, Separator (Right side blank)
+  const row0LeftChildren: Paragraph[] = [
     new Paragraph({
-      spacing: { after: 40 },
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 30 },
       children: [headerLogoRun],
     }),
     new Paragraph({
+      alignment: AlignmentType.CENTER,
       spacing: { after: 20 },
       children: [
-        new TextRun({ text: "ΕΛΛΗΝΙΚΗ ΔΗΜΟΚΡΑΤΙΑ", bold: true, size: 22 }),
+        new TextRun({ text: "ΕΛΛΗΝΙΚΗ ΔΗΜΟΚΡΑΤΙΑ", bold: true, size: 20 }),
       ],
     }),
     new Paragraph({
-      spacing: { after: 20 },
-      children: [
-        new TextRun({
-          text: school.ministry || "ΥΠΟΥΡΓΕΙΟ ΠΑΙΔΕΙΑΣ, ΘΡΗΣΚΕΥΜΑΤΩΝ ΚΑΙ ΑΘΛΗΤΙΣΜΟΥ",
-          bold: true,
-          size: 20,
-        }),
-      ],
-    }),
-    new Paragraph({
-      spacing: { after: 20 },
-      children: [
-        new TextRun({ text: "--------", bold: true, size: 18 }),
-      ],
-    }),
-    ...(school.regionalDirectorate ? [
-      new Paragraph({
-        spacing: { after: 20 },
-        children: [
-          new TextRun({ text: school.regionalDirectorate, size: 19 }),
-        ],
-      })
-    ] : []),
-    ...(school.directorate ? [
-      new Paragraph({
-        spacing: { after: 20 },
-        children: [
-          new TextRun({ text: school.directorate, size: 19 }),
-        ],
-      })
-    ] : []),
-    new Paragraph({
-      spacing: { before: 40, after: 30 },
-      children: [
-        new TextRun({ text: school.schoolName || "", bold: true, size: 21 }),
-      ],
-    }),
-    new Paragraph({
-      spacing: { after: 20 },
-      children: [
-        new TextRun({ text: `Πληροφορίες         : ${school.principalName || "-"}`, size: 19 }),
-      ],
-    }),
-    new Paragraph({
+      alignment: AlignmentType.CENTER,
       spacing: { after: 20 },
       children: [
         new TextRun({
-          text: `Διεύθυνση              : ${school.postalAddress || "-"}   Τηλέφωνο : ${school.phone || "-"}`,
-          size: 19,
-        }),
-      ],
-    }),
-    new Paragraph({
-      spacing: { after: 180 },
-      children: [
-        new TextRun({ text: `e-mail                      : ${school.email || "-"}`, size: 19 }),
-      ],
-    }),
-    new Paragraph({
-      spacing: { before: 200, after: 40 },
-      children: [
-        new TextRun({ text: "Θέμα : ", bold: true, size: 22 }),
-        new TextRun({ text: leavePhrases.subject, bold: true, size: 22 }),
-      ],
-    }),
-  ];
-
-  // Header Table - Right Column (Protocol, Date, Centered Decision Title)
-  const rightHeaderChildren: Paragraph[] = [
-    new Paragraph({
-      alignment: AlignmentType.RIGHT,
-      spacing: { after: 40 },
-      children: [
-        new TextRun({
-          text: `${school.city || "Σέρρες"}, ${formatGreekDate(leave.protocolDate || leave.startDate)}`,
-          size: 20,
-        }),
-      ],
-    }),
-    new Paragraph({
-      alignment: AlignmentType.RIGHT,
-      spacing: { after: 500 },
-      children: [
-        new TextRun({
-          text: `Αρ. Πρωτ. ${leave.protocolNumber || "____"}`,
+          text: toGreekUpper(school.ministry || "ΥΠΟΥΡΓΕΙΟ ΠΑΙΔΕΙΑΣ, ΘΡΗΣΚΕΥΜΑΤΩΝ ΚΑΙ ΑΘΛΗΤΙΣΜΟΥ"),
           bold: true,
           size: 20,
         }),
@@ -956,12 +1073,136 @@ export async function downloadLeaveDecisionDocx(
     }),
     new Paragraph({
       alignment: AlignmentType.CENTER,
-      spacing: { before: 900, after: 40 },
+      spacing: { after: 20 },
+      children: [
+        new TextRun({ text: "--------", bold: true, size: 20 }),
+      ],
+    }),
+  ];
+
+  // Row 1: Regional Directorate, Directorate, School Name
+  const row1LeftChildren: Paragraph[] = [
+    ...(school.regionalDirectorate ? [
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 15 },
+        children: [
+          new TextRun({ text: toGreekUpper(school.regionalDirectorate), bold: true, size: 20 }),
+        ],
+      })
+    ] : []),
+    ...(school.directorate ? [
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 15 },
+        children: [
+          new TextRun({ text: toGreekUpper(school.directorate), bold: true, size: 20 }),
+        ],
+      })
+    ] : []),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 15 },
+      children: [
+        new TextRun({ text: toGreekUpper(school.schoolName || ""), bold: true, size: 20 }),
+      ],
+    }),
+  ];
+
+  const formattedProtocol = formatLeaveProtocolNumber(leave.protocolNumber, leave.type, leaveTypes);
+
+  // Row 1: Right Column (Date, Protocol - starts aligned with Regional Directorate)
+  const row1RightChildren: Paragraph[] = [
+    new Paragraph({
+      alignment: AlignmentType.RIGHT,
+      spacing: { after: 30 },
       children: [
         new TextRun({
-          text: "Α   Π   Ο   Φ   Α   Σ   Η",
+          text: `${school.city || "Σέρρες"}, ${formatGreekDate(leave.protocolDate || leave.startDate)}`,
           bold: true,
-          size: 26,
+          size: 20,
+        }),
+      ],
+    }),
+    new Paragraph({
+      alignment: AlignmentType.RIGHT,
+      spacing: { after: 30 },
+      children: [
+        new TextRun({
+          text: `Αρ. Πρωτ. ${formattedProtocol}`,
+          bold: true,
+          size: 20,
+        }),
+      ],
+    }),
+  ];
+
+  const decisionSubject = getLeaveDecisionSubject(leave.type, leaveTypes);
+
+  // Row 2: Left Column (Information, Address, TK-City, Phone, Email, Subject)
+  // Using native Word TabStop to guarantee 100% exact colon alignment across all lines
+  const contactTabStop = [{ type: TabStopType.LEFT, position: 1800 }];
+
+  const row2LeftChildren: Paragraph[] = [
+    new Paragraph({ children: [] }),
+    new Paragraph({
+      spacing: { after: 15 },
+      tabStops: contactTabStop,
+      children: [
+        new TextRun({ text: "Πληροφορίες", bold: true, size: 20 }),
+        new TextRun({ text: "\t: ", bold: true, size: 20 }),
+        new TextRun({ text: school.principalName || "-", bold: true, size: 20 }),
+      ],
+    }),
+    new Paragraph({
+      spacing: { after: 15 },
+      tabStops: contactTabStop,
+      children: [
+        new TextRun({ text: "Διεύθυνση", bold: true, size: 20 }),
+        new TextRun({ text: "\t: ", bold: true, size: 20 }),
+        new TextRun({ text: cleanSchoolAddress, bold: true, size: 20 }),
+      ],
+    }),
+    new Paragraph({
+      spacing: { after: 15 },
+      tabStops: contactTabStop,
+      children: [
+        new TextRun({ text: "Τ.Κ.-Πόλη", bold: true, size: 20 }),
+        new TextRun({ text: "\t: ", bold: true, size: 20 }),
+        new TextRun({ text: schoolTkCity, bold: true, size: 20 }),
+      ],
+    }),
+    new Paragraph({
+      spacing: { after: 15 },
+      tabStops: contactTabStop,
+      children: [
+        new TextRun({ text: "Τηλέφωνο", bold: true, size: 20 }),
+        new TextRun({ text: "\t: ", bold: true, size: 20 }),
+        new TextRun({ text: school.phone || "-", bold: true, size: 20 }),
+      ],
+    }),
+    new Paragraph({
+      spacing: { after: 30 },
+      tabStops: contactTabStop,
+      children: [
+        new TextRun({ text: "e-mail", bold: true, size: 20 }),
+        new TextRun({ text: "\t: ", bold: true, size: 20 }),
+        new TextRun({ text: school.email || "-", bold: true, size: 20 }),
+      ],
+    }),
+  ];
+
+  // Row 2: Right Column ("ΑΠΟΦΑΣΗ" aligned horizontally with "Πληροφορίες")
+  const row2RightChildren: Paragraph[] = [
+    new Paragraph({ children: [] }),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 30 },
+      children: [
+        new TextRun({
+          text: "ΑΠΟΦΑΣΗ",
+          bold: true,
+          size: 22,
         }),
       ],
     }),
@@ -976,16 +1217,47 @@ export async function downloadLeaveDecisionDocx(
     },
     rows: [
       new TableRow({
+        cantSplit: true,
         children: [
           new TableCell({
-            width: { size: 58, type: WidthType.PERCENTAGE },
+            width: { size: 55, type: WidthType.PERCENTAGE },
             borders: borderless,
-            children: leftHeaderChildren,
+            children: row0LeftChildren,
           }),
           new TableCell({
-            width: { size: 42, type: WidthType.PERCENTAGE },
+            width: { size: 45, type: WidthType.PERCENTAGE },
             borders: borderless,
-            children: rightHeaderChildren,
+            children: [new Paragraph({ children: [] })],
+          }),
+        ],
+      }),
+      new TableRow({
+        cantSplit: true,
+        children: [
+          new TableCell({
+            width: { size: 55, type: WidthType.PERCENTAGE },
+            borders: borderless,
+            children: row1LeftChildren,
+          }),
+          new TableCell({
+            width: { size: 45, type: WidthType.PERCENTAGE },
+            borders: borderless,
+            children: row1RightChildren,
+          }),
+        ],
+      }),
+      new TableRow({
+        cantSplit: true,
+        children: [
+          new TableCell({
+            width: { size: 55, type: WidthType.PERCENTAGE },
+            borders: borderless,
+            children: row2LeftChildren,
+          }),
+          new TableCell({
+            width: { size: 45, type: WidthType.PERCENTAGE },
+            borders: borderless,
+            children: row2RightChildren,
           }),
         ],
       }),
@@ -1002,6 +1274,89 @@ export async function downloadLeaveDecisionDocx(
     }
   }
 
+  // Prepare Stamp and Signature for Word export
+  const stampData = school.schoolStamp
+    ? (school.schoolStamp.includes(",") ? school.schoolStamp.split(",")[1] : school.schoolStamp)
+    : null;
+  const isStampJpeg = school.schoolStamp
+    ? (school.schoolStamp.includes("image/jpeg") || school.schoolStamp.includes("image/jpg"))
+    : false;
+
+  const sigData = school.principalSignature
+    ? (school.principalSignature.includes(",") ? school.principalSignature.split(",")[1] : school.principalSignature)
+    : null;
+  const isSigJpeg = school.principalSignature
+    ? (school.principalSignature.includes("image/jpeg") || school.principalSignature.includes("image/jpg"))
+    : false;
+
+  const stampRun = stampData
+    ? new ImageRun({
+        type: isStampJpeg ? "jpg" : "png",
+        data: Buffer.from(stampData, "base64"),
+        transformation: { width: 70, height: 70 },
+      })
+    : null;
+
+  const sigRun = sigData
+    ? new ImageRun({
+        type: isSigJpeg ? "jpg" : "png",
+        data: Buffer.from(sigData, "base64"),
+        transformation: { width: 120, height: 50 },
+      })
+    : null;
+
+  let signatureParagraphs: Paragraph[] = [];
+  if (stampData && sigData) {
+    try {
+      const composite = await createCompositeStampAndSignature(stampData, sigData);
+      signatureParagraphs = [
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { before: 30, after: 30 },
+          children: [
+            new ImageRun({
+              type: "png",
+              data: Buffer.from(composite.base64, "base64"),
+              transformation: { width: composite.width, height: composite.height },
+            }),
+          ],
+        }),
+      ];
+    } catch {
+      signatureParagraphs = [
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { before: 40, after: 40 },
+          children: [stampRun!, sigRun!],
+        }),
+      ];
+    }
+  } else if (stampRun) {
+    signatureParagraphs = [
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 40, after: 40 },
+        children: [stampRun],
+      }),
+    ];
+  } else if (sigRun) {
+    signatureParagraphs = [
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 40, after: 40 },
+        children: [sigRun],
+      }),
+    ];
+  } else {
+    signatureParagraphs = [
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 200, after: 30 },
+        children: [new TextRun({ text: "", size: 21 })],
+      }),
+    ];
+  }
+
   // Footer Table (Left: Notifications, Right: Principal Signature)
   const footerTable = new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
@@ -1012,13 +1367,14 @@ export async function downloadLeaveDecisionDocx(
     },
     rows: [
       new TableRow({
+        cantSplit: true,
         children: [
           new TableCell({
             width: { size: 48, type: WidthType.PERCENTAGE },
             borders: borderless,
             children: [
               new Paragraph({
-                spacing: { after: 60 },
+                spacing: { after: 30 },
                 children: [
                   new TextRun({ text: "ΚΟΙΝΟΠΟΙΗΣΗ", bold: true, size: 21 }),
                 ],
@@ -1027,10 +1383,8 @@ export async function downloadLeaveDecisionDocx(
                 const hasNum = /^\d+[\.\)]/.test(notif.trim());
                 const textToRender = hasNum ? notif.trim() : `${idx + 1}. ${notif.trim()}`;
                 return new Paragraph({
-                  spacing: { after: 40 },
-                  children: [
-                    new TextRun({ text: textToRender, size: 20 }),
-                  ],
+                  spacing: { after: 18 },
+                  children: createFormattedTextRuns(textToRender, 20),
                 });
               }),
             ],
@@ -1041,7 +1395,7 @@ export async function downloadLeaveDecisionDocx(
             children: [
               new Paragraph({
                 alignment: AlignmentType.CENTER,
-                spacing: { after: 40 },
+                spacing: { after: 20 },
                 children: [
                   new TextRun({
                     text: school.principalTitle || "Ο Δ/ντής  του  σχολείου",
@@ -1050,32 +1404,7 @@ export async function downloadLeaveDecisionDocx(
                   }),
                 ],
               }),
-              ...(school.principalSignature ? [
-                new Paragraph({
-                  alignment: AlignmentType.CENTER,
-                  spacing: { before: 100, after: 100 },
-                  children: [
-                    new ImageRun({
-                      type: school.principalSignature.includes("image/jpeg") || school.principalSignature.includes("image/jpg") ? "jpg" : "png",
-                      data: Buffer.from(
-                        school.principalSignature.includes(",")
-                          ? school.principalSignature.split(",")[1]
-                          : school.principalSignature,
-                        "base64"
-                      ),
-                      transformation: { width: 140, height: 55 },
-                    }),
-                  ],
-                })
-              ] : [
-                new Paragraph({
-                  alignment: AlignmentType.CENTER,
-                  spacing: { before: 700, after: 100 },
-                  children: [
-                    new TextRun({ text: "", size: 21 }),
-                  ],
-                }),
-              ]),
+              ...signatureParagraphs,
               new Paragraph({
                 alignment: AlignmentType.CENTER,
                 children: [
@@ -1093,6 +1422,34 @@ export async function downloadLeaveDecisionDocx(
     ],
   });
 
+  // Deputy ESPA Banner (configured as a fixed page footer, pinned to the very bottom)
+  const deputyLogoData = school.deputyLogo
+    ? (school.deputyLogo.includes(",") ? school.deputyLogo.split(",")[1] : school.deputyLogo)
+    : null;
+  const isDeputyLogoJpeg = school.deputyLogo
+    ? (school.deputyLogo.includes("image/jpeg") || school.deputyLogo.includes("image/jpg"))
+    : false;
+
+  const docFooters = isDeputy && school.deputyLogo && deputyLogoData
+    ? {
+        default: new Footer({
+          children: [
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { before: 0, after: 0 },
+              children: [
+                new ImageRun({
+                  type: isDeputyLogoJpeg ? "jpg" : "png",
+                  data: Buffer.from(deputyLogoData, "base64"),
+                  transformation: { width: 440, height: 48 },
+                }),
+              ],
+            }),
+          ],
+        }),
+      }
+    : undefined;
+
   const doc = new Document({
     styles: {
       default: {
@@ -1108,22 +1465,38 @@ export async function downloadLeaveDecisionDocx(
       {
         properties: {
           page: {
-            margin: { top: 1440, bottom: 1440, left: 1800, right: 1800 },
+            margin: { top: 800, bottom: 950, left: 1300, right: 1300, footer: 400 },
           },
         },
+        ...(docFooters ? { footers: docFooters } : {}),
         children: [
           // 1. Header Table (2 columns)
           headerTable,
 
+          // Empty line before ΘΕΜΑ
+          new Paragraph({ children: [] }),
+
+          // Full-Width Subject (ΘΕΜΑ) - not constrained by header columns
+          new Paragraph({
+            spacing: { before: 0, after: 60 },
+            children: [
+              new TextRun({ text: "ΘΕΜΑ: ", bold: true, size: 20 }),
+              new TextRun({ text: decisionSubject, bold: true, size: 20 }),
+            ],
+          }),
+
+          // Empty line before "Ο Διευθυντής..."
+          new Paragraph({ children: [] }),
+
           // 2. Preamble
           new Paragraph({
-            spacing: { before: 240, after: 60 },
+            spacing: { before: 0, after: 40 },
             children: [
               new TextRun({ text: principalIntro, bold: true, size: 22 }),
             ],
           }),
           new Paragraph({
-            spacing: { after: 80 },
+            spacing: { after: 40 },
             children: [
               new TextRun({ text: "Έχοντας υπόψη :", bold: true, size: 21 }),
             ],
@@ -1136,58 +1509,44 @@ export async function downloadLeaveDecisionDocx(
             return new Paragraph({
               alignment: AlignmentType.BOTH,
               indent: { left: 420, hanging: 420 },
-              spacing: { after: 70, line: 260 },
-              children: [new TextRun({ text: textToRender, size: 21 })],
+              spacing: { after: 40, line: 240 },
+              children: createFormattedTextRuns(textToRender, 21),
             });
           }),
 
-          // 4. ΑΠΟΦΑΣΙΖΟΥΜΕ
+          // Empty line before "Αποφασίζουμε"
+          new Paragraph({ children: [] }),
+
+          // 4. ΑΠΟΦΑΣΙΖΟΥΜΕ (only first letter capital, balanced spacing)
           new Paragraph({
             alignment: AlignmentType.CENTER,
-            spacing: { before: 240, after: 180 },
+            spacing: { before: 0, after: 60 },
             children: [
-              new TextRun({ text: "Α  π  ο  φ  α  σ  ί  ζ  ο  υ  μ ε", bold: true, size: 24 }),
+              new TextRun({ text: "Α π ο φ α σ ί ζ ο υ μ ε", bold: true, size: 22 }),
             ],
           }),
+
+          // Empty line before "Χορηγούμε..." (Decision Text)
+          new Paragraph({ children: [] }),
 
           // 5. Decision Text
           new Paragraph({
             alignment: AlignmentType.BOTH,
-            spacing: { after: 360, line: 280 },
-            children: [
-              new TextRun({
-                text: decisionText,
-                size: 21,
-              }),
-            ],
+            spacing: { before: 0, after: 120, line: 250 },
+            children: createFormattedTextRuns(decisionText, 21),
           }),
+
+          // Empty line before Signatures and Notifications Table
+          new Paragraph({ children: [] }),
 
           // 6. Footer Table (Left: Notifications, Right: Principal Signature)
           footerTable,
 
-          // 7. Deputy ESPA Banner (if applicable)
-          ...(isDeputy && school.deputyLogo
-            ? [
-                new Paragraph({
-                  alignment: AlignmentType.CENTER,
-                  spacing: { before: 600 },
-                  children: [
-                    new ImageRun({
-                      type: school.deputyLogo.includes("image/jpeg") || school.deputyLogo.includes("image/jpg")
-                        ? "jpg"
-                        : "png",
-                      data: Buffer.from(
-                        school.deputyLogo.includes(",")
-                          ? school.deputyLogo.split(",")[1]
-                          : school.deputyLogo,
-                        "base64"
-                      ),
-                      transformation: { width: 450, height: 60 },
-                    }),
-                  ],
-                }),
-              ]
-            : []),
+          // 7. Trailing minimal paragraph to absorb Word's table spacing
+          new Paragraph({
+            spacing: { before: 0, after: 0, line: 1 },
+            children: [new TextRun({ text: "", size: 1 })],
+          }),
         ],
       },
     ],
