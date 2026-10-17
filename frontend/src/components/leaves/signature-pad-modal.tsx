@@ -36,30 +36,48 @@ export function SignaturePadModal({
   useEffect(() => {
     if (!isOpen) return;
 
-    // Small delay to ensure Dialog animation finished and dimensions are set
-    const timer = setTimeout(() => {
+    const setupCanvas = () => {
       const canvas = canvasRef.current;
       if (!canvas) return;
 
       const rect = canvas.getBoundingClientRect();
-      const dpr = window.devicePixelRatio || 1;
+      if (rect.width === 0 || rect.height === 0) return;
 
-      canvas.width = rect.width * dpr;
-      canvas.height = rect.height * dpr;
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.round(rect.width * dpr);
+      canvas.height = Math.round(rect.height * dpr);
 
       const ctx = canvas.getContext("2d");
       if (ctx) {
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.scale(dpr, dpr);
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
         ctx.lineWidth = 2.5;
         ctx.strokeStyle = strokeColor;
-        ctx.clearRect(0, 0, rect.width, rect.height);
       }
       setHasDrawn(false);
-    }, 60);
+    };
 
-    return () => clearTimeout(timer);
+    // Ensure Dialog animation has finished
+    const timer = setTimeout(setupCanvas, 100);
+
+    // Also observe canvas resize
+    const ro = new ResizeObserver(() => {
+      if (!hasDrawn) {
+        setupCanvas();
+      }
+    });
+
+    if (canvasRef.current) {
+      ro.observe(canvasRef.current);
+    }
+
+    return () => {
+      clearTimeout(timer);
+      ro.disconnect();
+    };
   }, [isOpen]);
 
   // Update stroke color if changed
@@ -72,38 +90,26 @@ export function SignaturePadModal({
     }
   }, [strokeColor]);
 
-  // Coordinates helper
-  const getCoordinates = (
-    e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>
-  ) => {
+  // Coordinates helper using PointerEvent
+  const getCoordinates = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
-
     const rect = canvas.getBoundingClientRect();
-    if ("touches" in e) {
-      const touch = e.touches[0];
-      return {
-        x: touch.clientX - rect.left,
-        y: touch.clientY - rect.top,
-      };
-    }
     return {
       x: e.clientX - rect.left,
       y: e.clientY - rect.top,
     };
   };
 
-  const startDrawing = (
-    e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>
-  ) => {
-    if ("touches" in e) {
-      // Prevent scrolling when touching canvas
-      e.stopPropagation();
-    }
+  const startDrawing = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {}
 
     const { x, y } = getCoordinates(e);
     ctx.beginPath();
@@ -112,14 +118,8 @@ export function SignaturePadModal({
     setHasDrawn(true);
   };
 
-  const draw = (
-    e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>
-  ) => {
+  const draw = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!isDrawing) return;
-    if ("touches" in e) {
-      e.stopPropagation();
-    }
-
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
@@ -130,7 +130,12 @@ export function SignaturePadModal({
     ctx.stroke();
   };
 
-  const stopDrawing = () => {
+  const stopDrawing = (e?: React.PointerEvent<HTMLCanvasElement>) => {
+    if (e) {
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch {}
+    }
     setIsDrawing(false);
   };
 
@@ -140,8 +145,14 @@ export function SignaturePadModal({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const rect = canvas.getBoundingClientRect();
-    ctx.clearRect(0, 0, rect.width, rect.height);
+    const dpr = window.devicePixelRatio || 1;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.scale(dpr, dpr);
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = strokeColor;
     setHasDrawn(false);
   };
 
@@ -229,7 +240,10 @@ export function SignaturePadModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-lg p-0 overflow-hidden bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 shadow-2xl">
+      <DialogContent
+        overlayClassName="z-[190]"
+        className="z-[200] max-w-lg p-0 overflow-hidden bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 shadow-2xl"
+      >
         <DialogHeader className="p-4 border-b border-zinc-100 dark:border-zinc-800">
           <DialogTitle className="text-base font-semibold flex items-center gap-2">
             <PenTool className="w-4 h-4 text-blue-600 dark:text-blue-400" />
@@ -282,17 +296,14 @@ export function SignaturePadModal({
           </div>
 
           {/* Interactive Canvas container */}
-          <div className="relative border-2 border-dashed border-zinc-300 dark:border-zinc-700 rounded-xl bg-zinc-50/50 dark:bg-zinc-900/50 overflow-hidden select-none touch-none h-56 flex items-center justify-center">
+          <div className="relative border-2 border-dashed border-zinc-300 dark:border-zinc-700 rounded-xl bg-white dark:bg-zinc-900 overflow-hidden select-none touch-none h-60 flex items-center justify-center">
             <canvas
               ref={canvasRef}
-              onMouseDown={startDrawing}
-              onMouseMove={draw}
-              onMouseUp={stopDrawing}
-              onMouseLeave={stopDrawing}
-              onTouchStart={startDrawing}
-              onTouchMove={draw}
-              onTouchEnd={stopDrawing}
-              className="w-full h-full cursor-crosshair block"
+              onPointerDown={startDrawing}
+              onPointerMove={draw}
+              onPointerUp={stopDrawing}
+              onPointerCancel={stopDrawing}
+              className="w-full h-full cursor-crosshair block touch-none"
               style={{ touchAction: "none" }}
             />
 

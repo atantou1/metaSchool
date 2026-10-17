@@ -19,6 +19,8 @@ import {
   Info,
   Calendar,
   FileText,
+  Plus,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -105,6 +107,30 @@ export default function SettingsLeavesPage() {
     } catch {
       toast.error("Σφάλμα αποθήκευσης προτύπου");
     }
+  };
+
+  const handleAddLeaveType = () => {
+    const newId = `leave_${Date.now()}`;
+    const newType: LeaveTypeConfig = {
+      id: newId,
+      name: "Νέο Είδος Άδειας",
+      shortName: "ΑΔ",
+      color: "#8b5cf6",
+      permanentDaysLimit: 5,
+      deputyDaysLimit: 5,
+      description: "Περιγραφή άδειας",
+      requiresMedicalCertificate: false,
+    };
+    setLeaveTypes([...leaveTypes, newType]);
+  };
+
+  const handleDeleteLeaveType = (index: number) => {
+    const lt = leaveTypes[index];
+    if (lt.id === "regular") {
+      toast.error("Η Κανονική Άδεια δεν μπορεί να διαγραφεί.");
+      return;
+    }
+    setLeaveTypes(leaveTypes.filter((_, i) => i !== index));
   };
 
   return (
@@ -204,15 +230,27 @@ export default function SettingsLeavesPage() {
             </p>
           </div>
 
-          <Button
-            size="sm"
-            onClick={handleSaveLeaveTypes}
-            disabled={isSaving}
-            className="text-xs gap-1.5 bg-blue-600 hover:bg-blue-700 font-semibold"
-          >
-            <Save className="w-3.5 h-3.5" />
-            {isSaving ? "Αποθήκευση..." : "Αποθήκευση Ορίων"}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleAddLeaveType}
+              className="text-xs gap-1.5 hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-400"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Προσθήκη Είδους Άδειας
+            </Button>
+
+            <Button
+              size="sm"
+              onClick={handleSaveLeaveTypes}
+              disabled={isSaving}
+              className="text-xs gap-1.5 bg-blue-600 hover:bg-blue-700 font-semibold"
+            >
+              <Save className="w-3.5 h-3.5" />
+              {isSaving ? "Αποθήκευση..." : "Αποθήκευση Ορίων"}
+            </Button>
+          </div>
         </CardHeader>
 
         <CardContent className="p-4 pt-2">
@@ -225,6 +263,7 @@ export default function SettingsLeavesPage() {
                   <th className="py-2.5 px-3 text-center w-36">Όριο Αναπληρωτών (ημ.)</th>
                   <th className="py-2.5 px-3">Περιγραφή</th>
                   <th className="py-2.5 px-3 text-center w-36">Πρότυπο Απόφασης</th>
+                  <th className="py-2.5 px-2 text-center w-12"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -278,6 +317,19 @@ export default function SettingsLeavesPage() {
                         <FileText className="w-3.5 h-3.5 text-blue-600" />
                         Διαμόρφωση
                       </Button>
+                    </td>
+                    <td className="py-2.5 px-2 text-center">
+                      {lt.id !== "regular" && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDeleteLeaveType(idx)}
+                          className="h-7 w-7 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/40"
+                          title="Διαγραφή είδους άδειας"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      )}
                     </td>
                   </tr>
                 ))}

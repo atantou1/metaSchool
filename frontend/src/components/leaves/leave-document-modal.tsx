@@ -351,8 +351,9 @@ export function LeaveDocumentModal({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[92vh] flex flex-col p-0 overflow-hidden bg-zinc-100 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
+    <>
+      <Dialog open={isOpen} onOpenChange={onClose}>
+        <DialogContent className="max-w-4xl max-h-[92vh] flex flex-col p-0 overflow-hidden bg-zinc-100 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
         {/* Header */}
         <DialogHeader className="p-4 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 flex flex-row items-center justify-between">
           <div>
@@ -603,7 +604,7 @@ export function LeaveDocumentModal({
                       : (school.principalTitle ? `${school.principalTitle} του ${school.schoolName || "Σχολείου"}` : `Ο   Διευθυντής του ${school.schoolName || "Σχολείου"}`)}
                   </p>
                   <p className="font-bold text-[12px] pt-1">Έχοντας υπόψη :</p>
-                  <div className="space-y-1.5 pt-0.5 text-zinc-900 leading-relaxed text-justify">
+                  <div className="space-y-1 pt-0.5 text-zinc-900 leading-snug text-justify">
                     {decisionLegalBasis.map((item, idx) => {
                       const clean = item.replace(/^\d+[\.\)]\s*/, "");
                       return (
@@ -681,7 +682,7 @@ export function LeaveDocumentModal({
 
               {/* Deputy Footer Banner only if deputy ESPA teacher and logo exists */}
               {isEspa && school.deputyLogo && (
-                <div className="pt-6 mt-auto border-t border-zinc-300 flex flex-col items-center justify-center">
+                <div className="pt-6 mt-auto flex flex-col items-center justify-center">
                   <img
                     src={school.deputyLogo}
                     alt="Λογότυπο Αναπληρωτών (ΕΣΠΑ)"
@@ -827,7 +828,7 @@ export function LeaveDocumentModal({
 
               {/* Υποσέλιδο Λογότυπο (Μόνο για αναπληρωτές ΕΣΠΑ) */}
               {isEspa && school.deputyLogo ? (
-                <div className="pt-6 pb-2 border-t border-zinc-200 flex flex-col items-center justify-center mt-auto">
+                <div className="pt-6 pb-2 flex flex-col items-center justify-center mt-auto">
                   <img
                     src={school.deputyLogo}
                     alt="Λογότυπο ΕΣΠΑ"
@@ -890,14 +891,15 @@ export function LeaveDocumentModal({
           </div>
         </DialogFooter>
       </DialogContent>
-
-      <SignaturePadModal
-        isOpen={isSignaturePadOpen}
-        onClose={() => setIsSignaturePadOpen(false)}
-        onSave={handleSaveSignature}
-        title="Υπογραφή Αίτησης Εκπαιδευτικού"
-        description={`Υπογραφή για τον/την εκπαιδευτικό ${teacher?.lastName} ${teacher?.firstName}.`}
-      />
     </Dialog>
+
+    <SignaturePadModal
+      isOpen={isSignaturePadOpen}
+      onClose={() => setIsSignaturePadOpen(false)}
+      onSave={handleSaveSignature}
+      title="Υπογραφή Αίτησης Εκπαιδευτικού"
+      description={`Υπογραφή για τον/την εκπαιδευτικό ${teacher?.lastName} ${teacher?.firstName}.`}
+    />
+  </>
   );
 }

@@ -220,7 +220,7 @@ export const DEFAULT_DEPUTY_REGULAR_TEMPLATE: LeaveDecisionTemplate = {
     `Την Πράξη με τίτλο: «Υποστήριξη φοίτησης μαθητών/τριών με αναπηρία ή ειδικές εκπαιδευτικές ανάγκες, σχολικό έτος 2026-2027», με κωδικό ΟΠΣ: 6063312, του Τομεακού Προγράμματος «Ανθρώπινο Δυναμικό και Κοινωνική Συνοχή», του ΕΣΠΑ 2021-2027»`,
     `Τη με ημερ. {{protocol_date}} αίτηση {{teacher_genitive_title}} **{{teacher_genitive_full_name}}**, εκπ/κού κλάδου {{specialty}} {{deputy_genitive_phrase}}.`,
   ],
-  decisionText: `**Χ ο ρ η γ ο ύ μ ε** {{teacher_prep}} **κ. {{teacher_accusative_full_name}}**{{teacher_father_phrase}}, εκπ/κό κλάδου {{specialty}} {{deputy_accusative_phrase}}, {{serving_phrase}} {{school_name}}, κανονική άδεια {{days_phrase}} με αποδοχές {{date_phrase}} για οικογενειακούς λόγους.`,
+  decisionText: `**Χ ο ρ η γ ο ύ μ ε** {{teacher_prep}} **κ. {{teacher_accusative_full_name}}**{{teacher_father_phrase}}, εκπ/κό κλάδου {{specialty}} {{deputy_accusative_phrase}}, {{serving_phrase}} {{school_name}}, κανονική άδεια {{days_phrase}} με αποδοχές {{date_phrase}}{{reason_phrase}}.`,
   notifications: [
     "1. Π.Μ.Υ.",
     "2. {{interested_party}}",
@@ -354,15 +354,30 @@ export function resolveDecisionTemplate(
 
   const isRegularLeave = leave.type === "regular";
 
-  // For regular leave, always append ", για οικογενειακούς λόγους"
-  const reasonPhrase = isRegularLeave
-    ? ", για οικογενειακούς λόγους"
-    : leave.reason && leave.reason.trim().length > 0
-    ? ` για ${leave.reason.trim()}`
-    : "";
+  // Build clean reason and reason phrase dynamically
+  let rawReason = (leave.reason || "").trim();
+  if (!rawReason && isRegularLeave) {
+    rawReason = "για οικογενειακούς λόγους";
+  }
 
-  const reasonBasis = leave.reason && leave.reason.trim().length > 0
-    ? `Τους αναφερόμενους λόγους και τα συνυποβαλλόμενα δικαιολογητικά: «${leave.reason.trim()}».`
+  // Strip trailing period(s)
+  rawReason = rawReason.replace(/\.+$/, "").trim();
+
+  let reasonPhrase = "";
+  let reasonOnly = rawReason;
+
+  if (rawReason.length > 0) {
+    if (/^(για|λόγω|λογω)\s+/i.test(rawReason)) {
+      reasonPhrase = `, ${rawReason}`;
+      reasonOnly = rawReason.replace(/^(για|λόγω|λογω)\s+/i, "").trim();
+    } else {
+      reasonPhrase = `, για ${rawReason}`;
+      reasonOnly = rawReason;
+    }
+  }
+
+  const reasonBasis = rawReason.length > 0
+    ? `Τους αναφερόμενους λόγους και τα συνυποβαλλόμενα δικαιολογητικά: «${rawReason}».`
     : `Τα συνυποβαλλόμενα δικαιολογητικά στοιχεία.`;
 
   const daysPhrase =
@@ -410,7 +425,7 @@ export function resolveDecisionTemplate(
     "{{date_phrase}}": datePhrase,
     "{{start_date}}": startDateFormatted,
     "{{end_date}}": endDateFormatted,
-    "{{reason}}": isRegularLeave ? "οικογενειακούς λόγους" : (leave.reason || ""),
+    "{{reason}}": reasonOnly,
     "{{reason_phrase}}": reasonPhrase,
     "{{reason_basis}}": reasonBasis,
     "{{protocol_number}}": formatLeaveProtocolNumber(leave.protocolNumber, leave.type, ctx.leaveTypes),
@@ -425,6 +440,9 @@ export function resolveDecisionTemplate(
     }
     // Universal safeguard: normalize school name
     out = out.replace(/Ειδικό Πειραματικό Σχολείο Σερρών/g, "Ειδικό Πειραματικό Δημοτικό Σχολείο Σερρών");
+    // Normalize punctuation e.g. ", ," -> "," and clean spaces before comma
+    out = out.replace(/\s+,/g, ",");
+    out = out.replace(/,\s*,/g, ",");
     // Normalize consecutive spaces while preserving single spaces in "Χ ο ρ η γ ο ύ μ ε"
     out = out.replace(/ {2,}/g, " ");
     return out;
@@ -464,13 +482,9 @@ export function resolveDecisionTemplate(
     );
   }
 
-  // For regular leave: always ensure ", για οικογενειακούς λόγους." at the end
-  if (isRegularLeave && !resolvedDecisionText.includes("οικογενειακούς λόγους")) {
-    if (resolvedDecisionText.trim().endsWith(".")) {
-      resolvedDecisionText = resolvedDecisionText.trim().replace(/\.\s*$/, ", για οικογενειακούς λόγους.");
-    } else {
-      resolvedDecisionText = `${resolvedDecisionText.trim()}, για οικογενειακούς λόγους.`;
-    }
+  // Ensure decision ends cleanly with a period
+  if (!resolvedDecisionText.trim().endsWith(".")) {
+    resolvedDecisionText = `${resolvedDecisionText.trim()}.`;
   }
 
   const resolvedNotifications = (template.notifications || [

@@ -104,7 +104,7 @@ export function LeaveFormModal({
       setDaysCount(initialLeave.daysCount);
       setProtocolNumber(initialLeave.protocolNumber || "");
       setProtocolDate(initialLeave.protocolDate || "");
-      setReason(initialLeave.reason || "");
+      setReason(initialLeave.reason || (initialLeave.type === "regular" ? "για οικογενειακούς λόγους" : ""));
     } else {
       const todayStr = new Date().toISOString().split("T")[0];
       setSelectedTeacherId(teachers.length > 0 ? teachers[0].id : "");
@@ -114,7 +114,7 @@ export function LeaveFormModal({
       setDaysCount(1);
       setProtocolNumber("");
       setProtocolDate(todayStr);
-      setReason("");
+      setReason("για οικογενειακούς λόγους");
     }
   }, [initialLeave, isOpen, teachers, leaveTypes]);
 
@@ -268,8 +268,9 @@ export function LeaveFormModal({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-none w-screen h-screen p-0 flex flex-col overflow-hidden bg-zinc-100/60 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 border-0 shadow-none rounded-none z-[120] !translate-x-0 !translate-y-0 !top-0 !left-0">
+    <>
+      <Dialog open={isOpen} onOpenChange={onClose}>
+        <DialogContent className="max-w-none w-screen h-screen p-0 flex flex-col overflow-hidden bg-zinc-100/60 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 border-0 shadow-none rounded-none z-[120] !translate-x-0 !translate-y-0 !top-0 !left-0">
         <DialogHeader className="p-3.5 px-6 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-row items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-900 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
@@ -562,7 +563,16 @@ export function LeaveFormModal({
                     </div>
                   </div>
 
-                  <Select value={leaveType} onValueChange={(val) => val && setLeaveType(val)}>
+                  <Select
+                    value={leaveType}
+                    onValueChange={(val) => {
+                      if (!val) return;
+                      setLeaveType(val);
+                      if (val === "regular" && (!reason || reason.trim() === "")) {
+                        setReason("για οικογενειακούς λόγους");
+                      }
+                    }}
+                  >
                     <SelectTrigger className="w-full text-xs">
                       <SelectValue>
                         {(val) => {
@@ -629,13 +639,24 @@ export function LeaveFormModal({
                 </div>
 
                 <div className="space-y-1 pt-1">
-                  <Label className="text-xs font-medium">Αιτιολογία / Δικαιολογητικά (προαιρετικό)</Label>
+                  <Label className="text-xs font-medium">
+                    {leaveType === "regular" ? "Αιτιολογία" : "Αιτιολογία / Δικαιολογητικά (προαιρετικό)"}
+                  </Label>
                   <Input
                     value={reason}
                     onChange={(e) => setReason(e.target.value)}
-                    placeholder="π.χ. Προσωπικοί λόγοι / Ιατρική γνωμάτευση Νοσοκομείου / Αιμοδοσία"
+                    placeholder={
+                      leaveType === "regular"
+                        ? "π.χ. για οικογενειακούς λόγους"
+                        : "π.χ. Προσωπικοί λόγοι / Ιατρική γνωμάτευση Νοσοκομείου / Αιμοδοσία"
+                    }
                     className="text-xs h-8"
                   />
+                  {leaveType === "regular" && (
+                    <p className="text-[10px] text-zinc-400">
+                      Προεπιλογή: «για οικογενειακούς λόγους». Συμπεριλαμβάνεται δυναμικά στην απόφαση.
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -704,14 +725,15 @@ export function LeaveFormModal({
           </div>
         </DialogFooter>
       </DialogContent>
-
-      <SignaturePadModal
-        isOpen={isSignaturePadOpen}
-        onClose={() => setIsSignaturePadOpen(false)}
-        onSave={(dataUrl) => setEditSignature(dataUrl)}
-        title="Σχεδίαση Υπογραφής Εκπαιδευτικού"
-        description={`Υπογραφή για τον/την εκπαιδευτικό ${currentTeacher ? `${currentTeacher.lastName} ${currentTeacher.firstName}` : ""}.`}
-      />
     </Dialog>
+
+    <SignaturePadModal
+      isOpen={isSignaturePadOpen}
+      onClose={() => setIsSignaturePadOpen(false)}
+      onSave={(dataUrl) => setEditSignature(dataUrl)}
+      title="Σχεδίαση Υπογραφής Εκπαιδευτικού"
+      description={`Υπογραφή για τον/την εκπαιδευτικό ${currentTeacher ? `${currentTeacher.lastName} ${currentTeacher.firstName}` : ""}.`}
+    />
+  </>
   );
 }
